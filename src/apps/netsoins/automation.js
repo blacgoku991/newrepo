@@ -3,75 +3,88 @@
 /**
  * Scénario de création de compte NetSoins (Teranga Software).
  *
- * Mode réel : renseigner dans .env
- *   NETSOINS_URL, NETSOINS_ADMIN_USER, NETSOINS_ADMIN_PASSWORD
- * puis SIMULATION_MODE=false. Ajuster les sélecteurs sur votre instance.
+ * - Mode démo (défaut) : le robot pilote la console de démonstration intégrée.
+ * - Mode production : AUTOMATION_MODE=production + NETSOINS_URL,
+ *   NETSOINS_ADMIN_USER, NETSOINS_ADMIN_PASSWORD dans l'environnement.
+ *   Les sélecteurs sont dans ./selectors.js (à calibrer, voir docs/AUTOMATISATION.md).
  */
 
-const { isSimulation, simulateSteps, launchBrowser } = require('../../automation/helpers');
+const { getMode } = require('../../automation/helpers');
+const { runScenario } = require('../../automation/engine');
+const demo = require('../../automation/demoDriver');
+const config = require('./config');
+const S = require('./selectors');
 
 const ENV = ['NETSOINS_URL', 'NETSOINS_ADMIN_USER', 'NETSOINS_ADMIN_PASSWORD'];
 
-async function createAccount(data, { log }) {
+async function createAccount(data, ctx) {
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    return demo.createAccount(config, data, ctx);
+  }
+
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
 
-  if (isSimulation(ENV)) {
-    log('MODE SIMULATION — aucun identifiant administrateur configuré');
-    await simulateSteps(log, [
-      'Ouverture du navigateur (Chromium headless)',
-      'Connexion à NetSoins avec le compte administrateur',
-      `Sélection de l'établissement "${data.etablissement}"`,
-      'Navigation vers Paramétrage > Personnel > Ajouter un membre du personnel',
-      `Saisie de l'identité : ${fullName}, né(e) le ${data.date_naissance}`,
-      `Métier : ${data.metier}${data.numero_pro ? ` (n° pro ${data.numero_pro})` : ''} — contrat ${data.type_contrat}`,
-      `Droits circuit du médicament : ${data.acces_prescriptions}`,
-      `Période d'accès : du ${data.date_debut}${data.date_fin ? ` au ${data.date_fin}` : ''}`,
-      'Enregistrement de la fiche personnel',
-      'Génération des identifiants de connexion',
-      'Vérification : le professionnel apparaît dans le planning',
-    ]);
-    return { success: true, message: `Compte NetSoins créé pour ${fullName} (simulation)` };
-  }
-
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage();
-
-    log('Connexion à NetSoins…');
-    await page.goto(process.env.NETSOINS_URL);
-    await page.fill('#username', process.env.NETSOINS_ADMIN_USER);
-    await page.fill('#password', process.env.NETSOINS_ADMIN_PASSWORD);
-    await page.click('#login-button');
-    await page.waitForLoadState('networkidle');
-
-    log(`Sélection de l'établissement ${data.etablissement}…`);
-    await page.selectOption('#etablissement-select', data.etablissement);
-
-    log('Ouverture de Paramétrage > Personnel…');
-    await page.click('nav >> text=Paramétrage');
-    await page.click('text=Personnel');
-    await page.click('button:has-text("Ajouter")');
-
-    log(`Saisie de la fiche : ${fullName}`);
-    await page.fill('input[name="nom"]', data.nom);
-    await page.fill('input[name="prenom"]', data.prenom);
-    await page.fill('input[name="email"]', data.email);
-    await page.fill('input[name="date_naissance"]', data.date_naissance);
-    await page.selectOption('select[name="metier"]', data.metier);
-    if (data.numero_pro) await page.fill('input[name="rpps"]', data.numero_pro);
-    await page.check(`input[name="contrat"][value="${data.type_contrat}"]`);
-    await page.fill('input[name="date_debut"]', data.date_debut);
-    if (data.date_fin) await page.fill('input[name="date_fin"]', data.date_fin);
-    await page.selectOption('select[name="droits_medicament"]', data.acces_prescriptions);
-
-    log('Enregistrement…');
-    await page.click('button:has-text("Enregistrer")');
-    await page.waitForSelector('.toast-success', { timeout: 15000 });
-
-    return { success: true, message: `Compte NetSoins créé pour ${fullName}` };
-  } finally {
-    await browser.close();
-  }
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    successMessage: `Compte NetSoins créé pour ${fullName}`,
+    steps: [
+      {
+        label: 'Ouverture de NetSoins',
+        run: (page) => page.goto(base),
+      },
+      {
+        label: 'Connexion avec le compte administrateur',
+        run: async (page) => {
+          await page.fill(S.login.user, process.env.NETSOINS_ADMIN_USER);
+          await page.fill(S.login.password, process.env.NETSOINS_ADMIN_PASSWORD);
+          await page.click(S.login.submit);
+          await page.waitForSelector(S.login.loggedInProof);
+        },
+      },
+      {
+        label: `Sélection de l'établissement « ${data.etablissement} »`,
+        run: (page) => page.selectOption(S.etablissementSelect, data.etablissement),
+      },
+      {
+        label: 'Ouverture de Paramétrage > Personnel > Ajouter',
+        run: async (page) => {
+          await page.click(S.menu.parametrage);
+          await page.click(S.menu.personnel);
+          await page.click(S.menu.ajouter);
+        },
+      },
+      {
+        label: `Saisie de la fiche (${fullName})`,
+        run: async (page) => {
+          await page.fill(S.form.nom, data.nom);
+          await page.fill(S.form.prenom, data.prenom);
+          await page.fill(S.form.email, data.email);
+          await page.fill(S.form.dateNaissance, data.date_naissance);
+          await page.selectOption(S.form.metier, data.metier);
+          if (data.numero_pro) await page.fill(S.form.numeroPro, data.numero_pro);
+          await page.check(S.form.contrat(data.type_contrat));
+        },
+      },
+      {
+        label: "Saisie de la période d'accès et des droits",
+        run: async (page) => {
+          await page.fill(S.form.dateDebut, data.date_debut);
+          if (data.date_fin) await page.fill(S.form.dateFin, data.date_fin);
+          await page.selectOption(S.form.droitsMedicament, data.acces_prescriptions);
+        },
+      },
+      {
+        label: 'Enregistrement et vérification',
+        run: async (page) => {
+          await page.click(S.form.save);
+          await page.waitForSelector(S.form.successProof);
+        },
+      },
+    ],
+  });
 }
 
 module.exports = { createAccount };

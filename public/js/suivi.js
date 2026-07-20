@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Suivi d'une demande par référence, avec rafraîchissement automatique
+ * Suivi d'une demande : timeline d'avancement, rafraîchie automatiquement
  * tant que la demande n'est pas dans un état final.
  */
 
@@ -29,33 +29,78 @@
     try {
       const req = await fetchJson(`/api/requests/${encodeURIComponent(reference)}`);
       render(req);
-      // Tant que le robot travaille, on rafraîchit toutes les 3 secondes.
       if (req.status === 'en_attente' || req.status === 'en_cours') {
         pollTimer = setTimeout(() => lookup(reference), 3000);
       }
     } catch (err) {
       box.innerHTML =
         err.status === 404
-          ? `<div class="alert alert-error" style="margin:0">Aucune demande trouvée pour la référence <strong>${escapeHtml(reference)}</strong>.</div>`
+          ? `<div class="alert alert-error" style="margin:0">Aucune demande trouvée pour la référence <strong>${escapeHtml(reference)}</strong>. Vérifiez la saisie.</div>`
           : `<div class="alert alert-error" style="margin:0">${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  function timelineHtml(req) {
+    const processing = req.status === 'en_cours';
+    const waiting = req.status === 'en_attente';
+    const done = req.status === 'terminee';
+    const failed = req.status === 'echec';
+
+    const items = [
+      {
+        state: 'done',
+        icon: 'inbox',
+        title: 'Demande enregistrée',
+        text: `Déposée le ${formatDate(req.createdAt)} — référence ${req.reference}`,
+      },
+      {
+        state: processing ? 'current' : waiting ? '' : done || failed ? 'done' : '',
+        icon: 'bot',
+        title: processing ? 'Le robot crée le compte…' : waiting ? 'En file d’attente' : 'Traitement par le robot',
+        text: processing
+          ? `Connexion à ${req.app} et saisie de la fiche en cours.`
+          : waiting
+            ? 'Votre demande sera prise en charge dans quelques instants.'
+            : `Le robot s'est connecté à ${req.app} et a saisi la fiche.`,
+      },
+      {
+        state: done ? 'done' : failed ? 'failed' : '',
+        icon: done ? 'check' : failed ? 'x' : 'flag',
+        title: done ? 'Compte créé' : failed ? 'Échec de la création' : 'Confirmation',
+        text: done
+          ? `${req.message || 'Le compte a été créé avec succès.'} (${formatDate(req.finishedAt)})`
+          : failed
+            ? `${req.message || 'Le robot n’a pas pu créer le compte.'} — l'équipe support peut relancer la demande.`
+            : 'Vous verrez ici la confirmation de création du compte.',
+      },
+    ];
+
+    return `<div class="timeline">
+      ${items
+        .map(
+          (item) => `
+        <div class="tl-item ${item.state}">
+          <div class="tl-marker"><span class="tl-dot">${icon(item.icon)}</span><span class="tl-line"></span></div>
+          <div class="tl-body"><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.text)}</p></div>
+        </div>`
+        )
+        .join('')}
+    </div>`;
   }
 
   function render(req) {
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <h3 style="font-size:1.1rem">Demande <span class="ref" style="font-family:ui-monospace,monospace">${escapeHtml(req.reference)}</span></h3>
+        <div>
+          <h3 style="font-size:1.12rem">Demande <span style="font-family:var(--mono)">${escapeHtml(req.reference)}</span></h3>
+          <p style="color:var(--muted);font-size:0.88rem;margin-top:2px">${escapeHtml(req.app)}</p>
+        </div>
         ${statusBadge(req.status)}
       </div>
-      <dl>
-        <dt>Application</dt><dd>${escapeHtml(req.app)}</dd>
-        <dt>Déposée le</dt><dd>${formatDate(req.createdAt)}</dd>
-        ${req.finishedAt ? `<dt>Traitée le</dt><dd>${formatDate(req.finishedAt)}</dd>` : ''}
-        ${req.message ? `<dt>Résultat</dt><dd>${escapeHtml(req.message)}</dd>` : ''}
-      </dl>
+      ${timelineHtml(req)}
       ${
         req.status === 'en_attente' || req.status === 'en_cours'
-          ? '<p style="margin-top:14px;color:var(--text-muted);font-size:0.85rem">Cette page se met à jour automatiquement…</p>'
+          ? '<p style="color:var(--faint);font-size:0.83rem">Cette page se met à jour automatiquement toutes les 3 secondes.</p>'
           : ''
       }`;
   }

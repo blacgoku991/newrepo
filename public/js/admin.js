@@ -1,7 +1,8 @@
 'use strict';
 
 /*
- * Tableau de bord : liste des demandes, détail (payload + journal du robot),
+ * Tableau de bord : recherche + filtres (statut, application), détail de
+ * chaque demande (données saisies, journal du robot, captures d'écran),
  * relance des demandes en échec. Rafraîchissement automatique toutes les 4 s.
  */
 
@@ -10,9 +11,30 @@
   const rowsEl = document.getElementById('rows');
   const backdrop = document.getElementById('modal-backdrop');
   const modal = document.getElementById('modal-content');
+  const searchInput = document.getElementById('search-input');
+  const appFilter = document.getElementById('app-filter');
+  const chips = document.getElementById('status-chips');
 
   let requests = [];
   let openId = null;
+  const filters = { text: '', app: '', status: '' };
+
+  searchInput.addEventListener('input', () => {
+    filters.text = searchInput.value.trim().toLowerCase();
+    renderRows();
+  });
+  appFilter.addEventListener('change', () => {
+    filters.app = appFilter.value;
+    renderRows();
+  });
+  chips.addEventListener('click', (event) => {
+    const chip = event.target.closest('.chip');
+    if (!chip) return;
+    for (const c of chips.querySelectorAll('.chip')) c.classList.remove('on');
+    chip.classList.add('on');
+    filters.status = chip.dataset.status;
+    renderRows();
+  });
 
   backdrop.addEventListener('click', (event) => {
     if (event.target === backdrop) closeModal();
@@ -26,6 +48,7 @@
       const data = await fetchJson('/api/admin/requests');
       requests = data.requests;
       renderStats(data.stats);
+      updateAppFilter();
       renderRows();
       if (openId != null) {
         const current = requests.find((r) => r.id === openId);
@@ -38,9 +61,9 @@
 
   function renderStats(stats) {
     const tiles = [
-      { label: 'Total', value: stats.total, color: 'var(--text)' },
+      { label: 'Demandes au total', value: stats.total, color: 'var(--ink)' },
       { label: 'En attente', value: stats.en_attente, color: 'var(--warning)' },
-      { label: 'En cours', value: stats.en_cours, color: 'var(--primary)' },
+      { label: 'En cours', value: stats.en_cours, color: 'var(--info)' },
       { label: 'Terminées', value: stats.terminee, color: 'var(--success)' },
       { label: 'Échecs', value: stats.echec, color: 'var(--danger)' },
     ];
@@ -48,31 +71,49 @@
       .map(
         (t) => `
         <div class="stat-tile">
-          <div class="value" style="color:${t.color}">${t.value}</div>
-          <div class="label">${t.label}</div>
+          <span class="value" style="color:${t.color}">${t.value}</span>
+          <span class="label">${t.label}</span>
         </div>`
       )
       .join('');
   }
 
+  function updateAppFilter() {
+    const apps = [...new Map(requests.map((r) => [r.appId, r.app])).entries()];
+    const currentValue = appFilter.value;
+    appFilter.innerHTML =
+      '<option value="">Toutes les applications</option>' +
+      apps.map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
+    appFilter.value = currentValue;
+  }
+
   function requesterName(payload) {
-    const nom = payload.nom || '';
-    const prenom = payload.prenom || '';
-    return `${prenom} ${nom}`.trim() || '—';
+    return `${payload.prenom || ''} ${payload.nom || ''}`.trim() || '—';
+  }
+
+  function matches(r) {
+    if (filters.status && r.status !== filters.status) return false;
+    if (filters.app && r.appId !== filters.app) return false;
+    if (filters.text) {
+      const haystack = `${r.reference} ${requesterName(r.payload)} ${r.payload.email || ''} ${r.app}`.toLowerCase();
+      if (!haystack.includes(filters.text)) return false;
+    }
+    return true;
   }
 
   function renderRows() {
-    if (requests.length === 0) {
-      rowsEl.innerHTML = `<tr><td colspan="6" class="loading-placeholder">Aucune demande pour le moment.</td></tr>`;
+    const visible = requests.filter(matches);
+    if (visible.length === 0) {
+      rowsEl.innerHTML = `<tr><td colspan="6" class="loading-placeholder">${requests.length === 0 ? 'Aucune demande pour le moment.' : 'Aucune demande ne correspond aux filtres.'}</td></tr>`;
       return;
     }
-    rowsEl.innerHTML = requests
+    rowsEl.innerHTML = visible
       .map(
         (r) => `
         <tr>
           <td><span class="ref">${escapeHtml(r.reference)}</span></td>
           <td>${escapeHtml(r.app)}</td>
-          <td>${escapeHtml(requesterName(r.payload))}</td>
+          <td><span class="who">${escapeHtml(requesterName(r.payload))}<small>${escapeHtml(r.payload.email || '')}</small></span></td>
           <td>${formatDate(r.createdAt)}</td>
           <td>${statusBadge(r.status)}</td>
           <td style="text-align:right;white-space:nowrap">
@@ -131,26 +172,57 @@
             .join('\n')
         : 'Aucune activité du robot pour le moment.';
 
+    const shots =
+      req.artifacts && req.artifacts.length > 0
+        ? `<h4>Captures d'écran du robot</h4>
+           <div class="shots">
+             ${req.artifacts
+               .map((file) => {
+                 const url = `/artifacts/${encodeURIComponent(req.reference)}/${encodeURIComponent(file)}`;
+                 return `<a href="${url}" target="_blank" rel="noopener">
+                   <img src="${url}" alt="${escapeHtml(file)}" loading="lazy" />
+                   <span class="cap">${escapeHtml(file)}</span>
+                 </a>`;
+               })
+               .join('')}
+           </div>`
+        : '';
+
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <h3>Demande <span class="ref">${escapeHtml(req.reference)}</span></h3>
+        <h3>Demande <span class="ref" style="font-family:var(--mono)">${escapeHtml(req.reference)}</span></h3>
         ${statusBadge(req.status)}
       </div>
-      <p style="color:var(--text-muted);font-size:0.9rem">
+      <p style="color:var(--muted);font-size:0.88rem;margin-top:4px">
         ${escapeHtml(req.app)} — déposée le ${formatDate(req.createdAt)}
         ${req.finishedAt ? ` — traitée le ${formatDate(req.finishedAt)}` : ''}
         — ${req.attempts} tentative(s)
       </p>
-      ${req.message ? `<p style="margin-top:8px"><strong>Résultat :</strong> ${escapeHtml(req.message)}</p>` : ''}
-      <h4 style="margin-top:18px">Informations saisies</h4>
+      ${req.message ? `<p style="margin-top:10px;font-size:0.92rem"><strong>Résultat :</strong> ${escapeHtml(req.message)}</p>` : ''}
+      <h4>Informations saisies</h4>
       <dl class="kv">${payloadRows}</dl>
-      <h4 style="margin-bottom:8px">Journal du robot</h4>
+      <h4>Journal du robot</h4>
       <div class="log-box">${logLines}</div>
-      <div class="form-actions" style="justify-content:flex-end">
-        <button class="btn btn-secondary" id="modal-close">Fermer</button>
+      ${shots}
+      <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;margin-top:8px">
+        ${req.status === 'echec' ? `<button class="btn btn-secondary" id="modal-retry">Relancer la demande</button>` : ''}
+        <button class="btn btn-primary" id="modal-close">Fermer</button>
       </div>`;
 
     modal.querySelector('#modal-close').addEventListener('click', closeModal);
+    const retryBtn = modal.querySelector('#modal-retry');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', async () => {
+        retryBtn.disabled = true;
+        try {
+          await fetchJson(`/api/admin/requests/${req.id}/retry`, { method: 'POST' });
+          refresh();
+        } catch (err) {
+          alert(err.message);
+          retryBtn.disabled = false;
+        }
+      });
+    }
   }
 
   refresh();

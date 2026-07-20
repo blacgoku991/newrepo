@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Portail Comptes — Demandes de création de comptes</title>
+  <title>Portail Comptes — Création automatisée de comptes applicatifs</title>
+  <meta name="description" content="Demandez la création d'un compte sur vos applications métiers : un robot le crée automatiquement et vous suivez l'avancement en temps réel." />
+  <link rel="stylesheet" href="/vendor/inter/index.css" />
   <link rel="stylesheet" href="/css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text x='50' y='71' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>P</text></svg>" />
 </head>
 <body>
   <header class="site-header">
@@ -21,43 +23,67 @@
       </div>
     </nav>
     <div class="hero">
-      <h1>Demandez la création d’un compte<br />sur vos applications métiers</h1>
-      <p>
-        Choisissez une application, remplissez le formulaire : notre robot crée le compte
-        automatiquement et vous suivez l’avancement en temps réel. Aucune inscription nécessaire.
+      <div class="hero-badge"><span class="dot"></span> Robot de création de comptes — opérationnel</div>
+      <h1>Vos comptes applicatifs,<br /><span class="accent">créés automatiquement</span></h1>
+      <p class="lede">
+        Choisissez une application métier, remplissez le formulaire dédié : notre robot se connecte
+        à l'application, crée le compte et vous tient informé en temps réel. Sans inscription, sans attente.
       </p>
+      <div class="hero-actions">
+        <a href="#applications" class="btn btn-primary">Faire une demande
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a href="/suivi.html" class="btn btn-ghost-light">Suivre une demande</a>
+      </div>
+      <div class="hero-meta">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> Traitement automatisé Playwright</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Suivi en temps réel</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Preuves d'exécution horodatées</span>
+      </div>
     </div>
   </header>
 
   <main>
-    <div class="container pull-up">
+    <div class="container pull-up" id="applications">
       <div id="cards" class="cards-grid">
         <div class="loading-placeholder">Chargement des applications…</div>
       </div>
 
-      <h2 class="section-title">Comment ça marche&nbsp;?</h2>
+      <h2 class="section-title">Comment ça marche</h2>
       <div class="steps">
         <div class="step">
           <span class="num">1</span>
-          <div><h4>Choisissez l’application</h4><p>Sélectionnez l’application métier concernée par la demande.</p></div>
+          <h4>Choisissez l'application</h4>
+          <p>Sélectionnez l'application métier concernée parmi les cartes ci-dessus.</p>
         </div>
         <div class="step">
           <span class="num">2</span>
-          <div><h4>Remplissez le formulaire</h4><p>Chaque application a son propre formulaire, adapté à ses besoins.</p></div>
+          <h4>Remplissez le formulaire</h4>
+          <p>Chaque application a son propre formulaire, étape par étape, avec récapitulatif avant envoi.</p>
         </div>
         <div class="step">
           <span class="num">3</span>
-          <div><h4>Le robot crée le compte</h4><p>Notre automate se connecte à l’application et crée le compte pour vous.</p></div>
+          <h4>Le robot crée le compte</h4>
+          <p>Il ouvre l'application, se connecte en administrateur et saisit la fiche — captures d'écran à l'appui.</p>
         </div>
         <div class="step">
           <span class="num">4</span>
-          <div><h4>Suivez votre demande</h4><p>Une référence unique vous permet de suivre l’avancement à tout moment.</p></div>
+          <h4>Suivez en temps réel</h4>
+          <p>Votre référence unique vous donne l'état d'avancement à tout moment, jusqu'à la confirmation.</p>
         </div>
       </div>
     </div>
   </main>
 
-  <footer class="site-footer">Portail Comptes — création automatisée de comptes sur les applications métiers.</footer>
+  <footer class="site-footer">
+    <div class="inner">
+      <span>© Portail Comptes — création automatisée de comptes sur les applications métiers.</span>
+      <span class="links">
+        <a href="/suivi.html">Suivi</a>
+        <a href="/admin.html">Administration</a>
+      </span>
+    </div>
+  </footer>
 
   <script src="/js/common.js"></script>
   <script src="/js/home.js"></script>

@@ -43,13 +43,14 @@ async function processOne(request) {
       ),
     ]);
 
+    const artifacts = (result && result.artifacts) || [];
     if (result && result.success) {
       log('Compte créé avec succès');
-      db.markFinished(request.id, true, result.message || 'Compte créé avec succès', logs);
+      db.markFinished(request.id, true, result.message || 'Compte créé avec succès', logs, artifacts);
     } else {
       const msg = (result && result.message) || 'Le scénario a signalé un échec';
       log(`Échec : ${msg}`);
-      db.markFinished(request.id, false, msg, logs);
+      db.markFinished(request.id, false, msg, logs, artifacts);
     }
   } catch (err) {
     log(`Erreur : ${err.message}`);

@@ -5,7 +5,8 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-fs.mkdirSync(DATA_DIR, { recursive: true });
+const ARTIFACTS_DIR = path.join(DATA_DIR, 'artifacts');
+fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, 'portail.db'));
 db.pragma('journal_mode = WAL');
@@ -19,6 +20,7 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'en_attente',
     result_message TEXT,
     logs TEXT NOT NULL DEFAULT '[]',
+    artifacts TEXT NOT NULL DEFAULT '[]',
     attempts INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     started_at TEXT,
@@ -26,7 +28,21 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
   CREATE INDEX IF NOT EXISTS idx_requests_app ON requests(app_id);
+
+  -- Comptes créés par le robot dans l'application de démonstration intégrée.
+  CREATE TABLE IF NOT EXISTS demo_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
+
+// Migration : ajoute la colonne artifacts aux bases créées avant son introduction.
+const columns = db.prepare(`PRAGMA table_info(requests)`).all().map((c) => c.name);
+if (!columns.includes('artifacts')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN artifacts TEXT NOT NULL DEFAULT '[]'`);
+}
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
 db.prepare(`UPDATE requests SET status = 'en_attente' WHERE status = 'en_cours'`).run();
@@ -39,6 +55,8 @@ function generateReference(prefix) {
 }
 
 const api = {
+  ARTIFACTS_DIR,
+
   createRequest(appId, prefix, payload) {
     const stmt = db.prepare(
       `INSERT INTO requests (reference, app_id, payload) VALUES (?, ?, ?)`
@@ -82,12 +100,12 @@ const api = {
     ).run(id);
   },
 
-  markFinished(id, success, message, logs) {
+  markFinished(id, success, message, logs, artifacts = []) {
     db.prepare(
       `UPDATE requests
-         SET status = ?, result_message = ?, logs = ?, finished_at = datetime('now')
+         SET status = ?, result_message = ?, logs = ?, artifacts = ?, finished_at = datetime('now')
        WHERE id = ?`
-    ).run(success ? 'terminee' : 'echec', message, JSON.stringify(logs), id);
+    ).run(success ? 'terminee' : 'echec', message, JSON.stringify(logs), JSON.stringify(artifacts), id);
   },
 
   requeue(id) {
@@ -111,6 +129,21 @@ const api = {
       out.total += r.n;
     }
     return out;
+  },
+
+  // --- Application de démonstration -----------------------------------------
+
+  createDemoAccount(appId, payload) {
+    const info = db
+      .prepare(`INSERT INTO demo_accounts (app_id, payload) VALUES (?, ?)`)
+      .run(appId, JSON.stringify(payload));
+    return info.lastInsertRowid;
+  },
+
+  listDemoAccounts(appId) {
+    return db
+      .prepare(`SELECT * FROM demo_accounts WHERE app_id = ? ORDER BY id DESC`)
+      .all(appId);
   },
 };
 

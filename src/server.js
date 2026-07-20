@@ -14,6 +14,18 @@ const PORT = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Police Inter servie localement (aucune dépendance à un CDN externe).
+app.use(
+  '/vendor/inter',
+  express.static(path.join(__dirname, '..', 'node_modules', '@fontsource-variable', 'inter'))
+);
+
+// Captures d'écran du robot (preuves et diagnostics), affichées dans l'admin.
+app.use('/artifacts', express.static(db.ARTIFACTS_DIR));
+
+// Console d'administration de démonstration, pilotée par le robot en mode démo.
+app.use('/demo', require('./demoApp'));
+
 // ---------------------------------------------------------------------------
 // API publique
 // ---------------------------------------------------------------------------
@@ -77,6 +89,7 @@ app.get('/api/admin/requests', (req, res) => {
       attempts: row.attempts,
       payload: JSON.parse(row.payload),
       logs: JSON.parse(row.logs),
+      artifacts: JSON.parse(row.artifacts || '[]'),
       createdAt: row.created_at,
       startedAt: row.started_at,
       finishedAt: row.finished_at,

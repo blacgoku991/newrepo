@@ -3,71 +3,82 @@
 /**
  * Scénario de création de compte ULIS.
  *
- * Mode réel : renseigner dans .env
- *   ULIS_URL, ULIS_ADMIN_USER, ULIS_ADMIN_PASSWORD
- * puis SIMULATION_MODE=false. Ajuster les sélecteurs sur votre instance.
+ * - Mode démo (défaut) : le robot pilote la console de démonstration intégrée.
+ * - Mode production : AUTOMATION_MODE=production + ULIS_URL,
+ *   ULIS_ADMIN_USER, ULIS_ADMIN_PASSWORD dans l'environnement.
+ *   Les sélecteurs sont dans ./selectors.js (à calibrer, voir docs/AUTOMATISATION.md).
  */
 
-const { isSimulation, simulateSteps, launchBrowser } = require('../../automation/helpers');
+const { getMode } = require('../../automation/helpers');
+const { runScenario } = require('../../automation/engine');
+const demo = require('../../automation/demoDriver');
+const config = require('./config');
+const S = require('./selectors');
 
 const ENV = ['ULIS_URL', 'ULIS_ADMIN_USER', 'ULIS_ADMIN_PASSWORD'];
 
-async function createAccount(data, { log }) {
+async function createAccount(data, ctx) {
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    return demo.createAccount(config, data, ctx);
+  }
+
+  const base = process.env.ULIS_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
 
-  if (isSimulation(ENV)) {
-    log('MODE SIMULATION — aucun identifiant administrateur configuré');
-    await simulateSteps(log, [
-      'Ouverture du navigateur (Chromium headless)',
-      'Connexion à ULIS avec le compte administrateur',
-      'Navigation vers Administration > Comptes utilisateurs > Créer',
-      `Saisie de l'agent : ${fullName} (matricule ${data.matricule})`,
-      `Affectation : ${data.direction} — rôle "${data.role}"`,
-      `Périmètre d'accès : ${data.perimetre.join(', ')}`,
-      `Activation du compte au ${data.date_debut} (motif : ${data.motif})`,
-      'Enregistrement du compte',
-      'Envoi des identifiants à l’agent',
-      'Vérification : connexion test réussie',
-    ]);
-    return { success: true, message: `Compte ULIS créé pour ${fullName} (simulation)` };
-  }
-
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage();
-
-    log('Connexion à ULIS…');
-    await page.goto(process.env.ULIS_URL);
-    await page.fill('input[name="username"]', process.env.ULIS_ADMIN_USER);
-    await page.fill('input[name="password"]', process.env.ULIS_ADMIN_PASSWORD);
-    await page.click('input[type="submit"]');
-    await page.waitForLoadState('networkidle');
-
-    log('Ouverture de Administration > Comptes utilisateurs…');
-    await page.click('text=Administration');
-    await page.click('text=Comptes utilisateurs');
-    await page.click('text=Créer un compte');
-
-    log(`Saisie du compte : ${fullName} (${data.matricule})`);
-    await page.fill('input[name="nom"]', data.nom);
-    await page.fill('input[name="prenom"]', data.prenom);
-    await page.fill('input[name="matricule"]', data.matricule);
-    await page.fill('input[name="email"]', data.email);
-    await page.selectOption('select[name="direction"]', data.direction);
-    await page.check(`input[name="role"][value="${data.role}"]`);
-    for (const p of data.perimetre) {
-      await page.check(`input[name="perimetre"][value="${p}"]`);
-    }
-    await page.fill('input[name="date_debut"]', data.date_debut);
-
-    log('Enregistrement…');
-    await page.click('button:has-text("Valider")');
-    await page.waitForSelector('.message-confirmation', { timeout: 15000 });
-
-    return { success: true, message: `Compte ULIS créé pour ${fullName}` };
-  } finally {
-    await browser.close();
-  }
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    successMessage: `Compte ULIS créé pour ${fullName}`,
+    steps: [
+      {
+        label: "Ouverture d'ULIS",
+        run: (page) => page.goto(base),
+      },
+      {
+        label: 'Connexion avec le compte administrateur',
+        run: async (page) => {
+          await page.fill(S.login.user, process.env.ULIS_ADMIN_USER);
+          await page.fill(S.login.password, process.env.ULIS_ADMIN_PASSWORD);
+          await page.click(S.login.submit);
+          await page.waitForSelector(S.login.loggedInProof);
+        },
+      },
+      {
+        label: 'Ouverture de Administration > Comptes utilisateurs > Créer',
+        run: async (page) => {
+          await page.click(S.menu.administration);
+          await page.click(S.menu.comptes);
+          await page.click(S.menu.creer);
+        },
+      },
+      {
+        label: `Saisie du compte (${fullName}, matricule ${data.matricule})`,
+        run: async (page) => {
+          await page.fill(S.form.nom, data.nom);
+          await page.fill(S.form.prenom, data.prenom);
+          await page.fill(S.form.matricule, data.matricule);
+          await page.fill(S.form.email, data.email);
+          await page.selectOption(S.form.direction, data.direction);
+        },
+      },
+      {
+        label: `Application du rôle « ${data.role} » et du périmètre`,
+        run: async (page) => {
+          await page.check(S.form.role(data.role));
+          for (const p of data.perimetre) await page.check(S.form.perimetre(p));
+          await page.fill(S.form.dateDebut, data.date_debut);
+        },
+      },
+      {
+        label: 'Enregistrement et vérification',
+        run: async (page) => {
+          await page.click(S.form.save);
+          await page.waitForSelector(S.form.successProof);
+        },
+      },
+    ],
+  });
 }
 
 module.exports = { createAccount };

@@ -6,25 +6,25 @@
     const apps = await fetchJson('/api/apps');
     container.innerHTML = apps
       .map((app) => {
-        const iconHtml = `<span class="icon" style="background:${escapeHtml(app.color)}">${icon(app.icon)}</span>`;
+        const iconHtml = `<span class="icon">${icon(app.icon)}</span>`;
         if (app.comingSoon) {
           return `
-            <div class="app-card disabled">
+            <div class="app-card disabled" style="--app-color:${escapeHtml(app.color)}">
               <span class="badge-soon">Bientôt disponible</span>
               ${iconHtml}
               <h3>${escapeHtml(app.name)}</h3>
-              <div class="category">${escapeHtml(app.category)}</div>
+              <div class="category" style="color:var(--muted)">${escapeHtml(app.category)}</div>
               <p>${escapeHtml(app.description)}</p>
-              <span class="cta" style="color:var(--text-muted)">Ouverture prochaine</span>
+              <span class="cta" style="color:var(--faint)">${icon('lock')} Ouverture prochaine</span>
             </div>`;
         }
         return `
-          <a class="app-card" href="/demande.html?app=${encodeURIComponent(app.id)}">
+          <a class="app-card" style="--app-color:${escapeHtml(app.color)}" href="/demande.html?app=${encodeURIComponent(app.id)}">
             ${iconHtml}
             <h3>${escapeHtml(app.name)}</h3>
             <div class="category">${escapeHtml(app.category)}</div>
             <p>${escapeHtml(app.description)}</p>
-            <span class="cta">Demander un compte →</span>
+            <span class="cta">Demander un compte ${icon('arrow')}</span>
           </a>`;
       })
       .join('');

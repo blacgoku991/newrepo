@@ -3,74 +3,87 @@
 /**
  * Scénario de création de compte BlueKanGo.
  *
- * Mode réel : renseigner dans .env
- *   BLUEKANGO_URL, BLUEKANGO_ADMIN_USER, BLUEKANGO_ADMIN_PASSWORD
- * puis SIMULATION_MODE=false.
- *
- * Les sélecteurs ci-dessous sont à ajuster sur la véritable interface
- * d'administration BlueKanGo de votre instance.
+ * - Mode démo (défaut) : le robot pilote la console de démonstration intégrée.
+ * - Mode production : AUTOMATION_MODE=production + BLUEKANGO_URL,
+ *   BLUEKANGO_ADMIN_USER, BLUEKANGO_ADMIN_PASSWORD dans l'environnement.
+ *   Les sélecteurs sont dans ./selectors.js (à calibrer, voir docs/AUTOMATISATION.md).
  */
 
-const { isSimulation, simulateSteps, launchBrowser } = require('../../automation/helpers');
+const { getMode } = require('../../automation/helpers');
+const { runScenario } = require('../../automation/engine');
+const demo = require('../../automation/demoDriver');
+const config = require('./config');
+const S = require('./selectors');
 
 const ENV = ['BLUEKANGO_URL', 'BLUEKANGO_ADMIN_USER', 'BLUEKANGO_ADMIN_PASSWORD'];
 
-async function createAccount(data, { log }) {
+async function createAccount(data, ctx) {
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    return demo.createAccount(config, data, ctx);
+  }
+
+  const base = process.env.BLUEKANGO_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
 
-  if (isSimulation(ENV)) {
-    log('MODE SIMULATION — aucun identifiant administrateur configuré');
-    await simulateSteps(log, [
-      'Ouverture du navigateur (Chromium headless)',
-      'Connexion à BlueKanGo avec le compte administrateur',
-      'Navigation vers Administration > Utilisateurs > Nouvel utilisateur',
-      `Saisie de l'identité : ${fullName} <${data.email}>`,
-      `Affectation : ${data.etablissement} / ${data.service} — ${data.fonction}`,
-      `Application du profil "${data.profil}" et activation des modules : ${data.modules.join(', ')}`,
-      'Enregistrement de la fiche utilisateur',
-      'Envoi de l’e-mail d’initialisation du mot de passe',
-      'Vérification : l’utilisateur apparaît dans la liste',
-    ]);
-    return { success: true, message: `Compte BlueKanGo créé pour ${fullName} (simulation)` };
-  }
-
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage();
-
-    log('Connexion à BlueKanGo…');
-    await page.goto(process.env.BLUEKANGO_URL);
-    await page.fill('input[name="login"]', process.env.BLUEKANGO_ADMIN_USER);
-    await page.fill('input[name="password"]', process.env.BLUEKANGO_ADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
-    await page.waitForLoadState('networkidle');
-
-    log('Ouverture du module Administration > Utilisateurs…');
-    await page.goto(`${process.env.BLUEKANGO_URL}/admin/users/new`);
-
-    log(`Saisie de la fiche utilisateur : ${fullName}`);
-    await page.selectOption('select[name="civility"]', data.civilite);
-    await page.fill('input[name="lastname"]', data.nom);
-    await page.fill('input[name="firstname"]', data.prenom);
-    await page.fill('input[name="email"]', data.email);
-    if (data.telephone) await page.fill('input[name="phone"]', data.telephone);
-    await page.selectOption('select[name="site"]', data.etablissement);
-    await page.fill('input[name="department"]', data.service);
-    await page.fill('input[name="job_title"]', data.fonction);
-    await page.check(`input[name="profile"][value="${data.profil}"]`);
-    for (const mod of data.modules) {
-      await page.check(`input[name="modules"][value="${mod}"]`);
-    }
-    await page.fill('input[name="start_date"]', data.date_debut);
-
-    log('Enregistrement…');
-    await page.click('button#save-user');
-    await page.waitForSelector('.notification-success', { timeout: 15000 });
-
-    return { success: true, message: `Compte BlueKanGo créé pour ${fullName}` };
-  } finally {
-    await browser.close();
-  }
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    successMessage: `Compte BlueKanGo créé pour ${fullName}`,
+    steps: [
+      {
+        label: 'Ouverture de BlueKanGo',
+        run: (page) => page.goto(base),
+      },
+      {
+        label: 'Connexion avec le compte administrateur',
+        run: async (page) => {
+          await page.fill(S.login.user, process.env.BLUEKANGO_ADMIN_USER);
+          await page.fill(S.login.password, process.env.BLUEKANGO_ADMIN_PASSWORD);
+          await page.click(S.login.submit);
+          await page.waitForSelector(S.login.loggedInProof);
+        },
+      },
+      {
+        label: 'Ouverture du formulaire « Nouvel utilisateur »',
+        run: (page) => page.goto(base + S.newUserPath),
+      },
+      {
+        label: `Saisie de l'identité (${fullName})`,
+        run: async (page) => {
+          await page.selectOption(S.form.civilite, data.civilite);
+          await page.fill(S.form.nom, data.nom);
+          await page.fill(S.form.prenom, data.prenom);
+          await page.fill(S.form.email, data.email);
+          if (data.telephone) await page.fill(S.form.telephone, data.telephone);
+        },
+      },
+      {
+        label: "Saisie de l'affectation",
+        run: async (page) => {
+          await page.selectOption(S.form.etablissement, data.etablissement);
+          await page.fill(S.form.service, data.service);
+          await page.fill(S.form.fonction, data.fonction);
+        },
+      },
+      {
+        label: `Application du profil « ${data.profil} » et des modules`,
+        run: async (page) => {
+          await page.check(S.form.profil(data.profil));
+          for (const mod of data.modules) await page.check(S.form.module(mod));
+          await page.fill(S.form.dateDebut, data.date_debut);
+          if (data.commentaire) await page.fill(S.form.commentaire, data.commentaire);
+        },
+      },
+      {
+        label: 'Enregistrement et vérification',
+        run: async (page) => {
+          await page.click(S.form.save);
+          await page.waitForSelector(S.form.successProof);
+        },
+      },
+    ],
+  });
 }
 
 module.exports = { createAccount };
