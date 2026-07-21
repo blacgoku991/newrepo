@@ -155,21 +155,35 @@ async function createAccount(data, ctx) {
 
           // 1. Afficher 200 résultats par page : la fonction cherchée a plus de
           //    chances d'être présente (sinon elle peut être sur une autre page).
-          await list.getByRole('listbox').first().selectOption('200').catch(() => {});
-          await page.waitForLoadState('networkidle').catch(() => {});
+          const perPage = list.getByRole('listbox').first();
+          if (await perPage.count().catch(() => 0)) {
+            await perPage.selectOption('200').catch(() => {});
+          } else {
+            await list.locator('select').last().selectOption('200').catch(() => {});
+          }
+          await page.waitForTimeout(1500).catch(() => {});
 
           // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics) pour
-          //    regrouper les mêmes fonctions et les faire remonter.
-          const header = list.getByText(/Fonctions ADEF/).first();
+          //    regrouper les mêmes fonctions et les faire remonter en tête.
+          let header = list.getByRole('columnheader', { name: /Fonctions ADEF/ }).first();
+          if (!(await header.count().catch(() => 0))) {
+            header = list.getByText(/Fonctions ADEF/).first();
+          }
           await header.click().catch(() => {});
+          await page.waitForTimeout(600).catch(() => {});
           await header.click().catch(() => {});
-          await page.waitForTimeout(500).catch(() => {});
+          await page.waitForTimeout(1000).catch(() => {});
 
-          // 3. Trouver la ligne ayant la fonction demandée (partielle, insensible
-          //    à la casse : « responsable hotelier » trouve « RESPONSABLE HOTELIER (E) »).
-          const byFunction = list.locator(S.userList.row).filter({ hasText: data.fonction });
+          // 3. Repérer la CELLULE (gridcell) contenant la fonction demandée.
+          //    Correspondance partielle et insensible à la casse :
+          //    « responsable hotelier » trouve « RESPONSABLE HOTELIER (E) ».
+          const fonctionRe = new RegExp(
+            data.fonction.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+            'i'
+          );
+          const cell = list.getByRole('gridcell', { name: fonctionRe }).first();
           try {
-            await byFunction.first().waitFor({ timeout: 20000 });
+            await cell.waitFor({ timeout: 20000 });
           } catch {
             throw new Error(
               `Aucun utilisateur avec la fonction « ${data.fonction} » : pas de modèle à ` +
@@ -177,9 +191,8 @@ async function createAccount(data, ctx) {
                 `de cette fonction manuellement.`
             );
           }
-          // Parmi elles, on privilégie celle du bon établissement.
-          const byBoth = byFunction.filter({ hasText: etabLabel });
-          const row = (await byBoth.count()) > 0 ? byBoth.first() : byFunction.first();
+          // 4. Remonter à la ligne de cette cellule et cliquer SON bouton dupliquer.
+          const row = cell.locator('xpath=ancestor::tr[1]');
           await row.locator(S.userList.duplicateButton).first().click();
         },
       },
