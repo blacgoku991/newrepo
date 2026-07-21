@@ -45,32 +45,6 @@ function generateLogin(prenom, nom) {
   return (clean(prenom).charAt(0) || '') + clean(nom);
 }
 
-/**
- * Le menu déroulant d'établissement (barre « Etablissements : » en haut à
- * droite) peut se trouver dans n'importe quelle frame de l'interface : on le
- * cherche dans toutes les frames, avec quelques essais le temps du chargement.
- */
-async function findEtabSelect(page, selector, timeout = 10000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (page.isClosed()) return null;
-    for (const frame of page.frames()) {
-      try {
-        const loc = frame.locator(selector).first();
-        if ((await loc.count()) > 0) return loc;
-      } catch {
-        /* frame en cours de navigation : on ignore */
-      }
-    }
-    try {
-      await page.waitForTimeout(400);
-    } catch {
-      return null; // page fermée pendant l'attente
-    }
-  }
-  return null;
-}
-
 async function createAccount(data, ctx) {
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
@@ -116,48 +90,34 @@ async function createAccount(data, ctx) {
         },
       },
       {
-        label: `Sélection de l'établissement « ${etabLabel} »`,
-        run: async () => {
-          // Cas 1 — ancienne interface : menu déroulant <select> d'établissement.
-          const select = await findEtabSelect(page, S.nav.etabSelect);
-          if (select) {
-            const current = await select.inputValue().catch(() => null);
-            if (current === data.etablissement) {
-              ctx.log(`Déjà positionné sur « ${etabLabel} » : aucun changement nécessaire`);
-              return;
-            }
-            await select.selectOption(data.etablissement);
-            await page.waitForLoadState('networkidle');
-            await page.getByText(S.nav.administration).first().waitFor({ timeout: 15000 }).catch(() => {});
-            return;
-          }
-
-          // Cas 2 — pas de <select> (nouvelle interface). On ne change pas
-          // d'établissement à l'aveugle : on vérifie qu'on est DÉJÀ sur le bon
-          // (son nom est affiché quelque part), sinon on échoue plutôt que de
-          // risquer de créer le compte au mauvais endroit.
-          const etabName = etabLabel.split(' - ')[0].trim(); // ex. "SIEGE", "GAUCHY"
-          const shown = await page
-            .getByText(etabName, { exact: false })
-            .count()
-            .catch(() => 0);
-          if (shown > 0) {
-            ctx.log(
-              `Établissement « ${etabLabel} » déjà actif (menu de changement non requis) : on continue`
-            );
-            return;
-          }
-          throw new Error(
-            `Impossible de confirmer l'établissement « ${etabLabel} ». Le changement d'établissement ` +
-              `de la nouvelle interface n'est pas encore automatisé : fournir un enregistrement codegen ` +
-              `du changement d'établissement sur cette interface.`
-          );
-        },
-      },
-      {
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
           await page.getByText(S.nav.administration).first().click();
+          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+        },
+      },
+      {
+        label: `Vérification de l'établissement (« ${etabLabel} »)`,
+        run: async () => {
+          // Le select d'établissement est dans l'iframe "o" de la page Utilisateurs.
+          // On le repère par son libellé, avec repli id/name.
+          let select = page.frameLocator(S.frames.etab).getByLabel(S.nav.etabSelectLabel);
+          if (!(await select.count().catch(() => 0))) {
+            select = page.frameLocator(S.frames.etab).locator(S.nav.etabSelect);
+          }
+          await select.first().waitFor({ timeout: 20000 });
+
+          const current = await select.first().inputValue().catch(() => null);
+          if (current === data.etablissement) {
+            ctx.log(`Déjà sur « ${etabLabel} » : aucun changement nécessaire`);
+            return;
+          }
+          // On bascule sur le bon établissement, puis on rouvre la liste des
+          // utilisateurs (elle se recharge pour le nouvel établissement).
+          ctx.log(`Bascule d'établissement vers « ${etabLabel} »…`);
+          await select.first().selectOption(data.etablissement);
+          await page.waitForLoadState('networkidle');
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
         },

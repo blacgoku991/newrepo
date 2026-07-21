@@ -16,6 +16,7 @@
 module.exports = {
   frames: {
     main: '[id="b"]',                          // cadre principal de l'admin
+    etab: 'iframe[name="o"]',                  // cadre de sélection d'établissement (page mode=BM)
     userList: '#FRM_iframe_userList',          // liste des utilisateurs (dans main)
     fancybox: 'iframe[name^="fancybox-frame"]',// fiche utilisateur (nom dynamique, dans main)
   },
@@ -33,9 +34,10 @@ module.exports = {
     administration: 'Administration',
     gestionRessources: 'Gestion des ressources',
     utilisateurs: 'Utilisateurs',
-    // Menu déroulant d'établissement : barre « Etablissements : XXX » toujours
-    // visible en haut à droite. Présent dans une frame de l'interface ; on le
-    // recherche dans toutes les frames. <select id="change_etab" name="change_etab">.
+    // Sur la page Utilisateurs, l'établissement se change via le select de
+    // l'iframe "o", repéré par son libellé « Établissements : » (codegen).
+    etabSelectLabel: 'Établissements :',
+    // Repères de secours du même select (id / name) au cas où le libellé varie.
     etabSelect: '#change_etab, select[name="change_etab"]',
   },
 
