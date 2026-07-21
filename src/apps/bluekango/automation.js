@@ -1,12 +1,24 @@
 'use strict';
 
 /**
- * Scénario de création de compte BlueKanGo.
+ * Scénario de création de compte BlueKanGo (instance ADEF Résidences),
+ * calibré sur un enregistrement codegen réel.
  *
- * - Mode démo (défaut) : le robot pilote la console de démonstration intégrée.
- * - Mode production : AUTOMATION_MODE=production + BLUEKANGO_URL,
- *   BLUEKANGO_ADMIN_USER, BLUEKANGO_ADMIN_PASSWORD dans l'environnement.
- *   Les sélecteurs sont dans ./selectors.js (à calibrer, voir docs/AUTOMATISATION.md).
+ * Principe : DUPLICATION d'un utilisateur existant de l'établissement ayant
+ * la même fonction (le nouveau compte hérite des mêmes droits), puis saisie
+ * de l'identité et des identifiants :
+ *   - identifiant généré : 1re lettre du prénom + nom (ex. Marie Dupont → mdupont)
+ *   - mot de passe initial : BLUEKANGO_DEFAULT_PASSWORD, avec réinitialisation
+ *     obligatoire au premier login.
+ *
+ * Mode production : AUTOMATION_MODE=production + BLUEKANGO_URL,
+ * BLUEKANGO_ADMIN_USER, BLUEKANGO_ADMIN_PASSWORD, BLUEKANGO_DEFAULT_PASSWORD.
+ * Sinon : mode démo sur la console intégrée.
+ *
+ * Cas non couvert pour l'instant : aucun utilisateur de l'établissement n'a
+ * la fonction demandée (pas de modèle à dupliquer). La demande passe alors en
+ * échec avec un message explicite — enregistrer ce parcours "création sans
+ * modèle" au codegen permettra d'ajouter la seconde variante du scénario.
  */
 
 const { getMode } = require('../../automation/helpers');
@@ -15,7 +27,23 @@ const demo = require('../../automation/demoDriver');
 const config = require('./config');
 const S = require('./selectors');
 
-const ENV = ['BLUEKANGO_URL', 'BLUEKANGO_ADMIN_USER', 'BLUEKANGO_ADMIN_PASSWORD'];
+const ENV = [
+  'BLUEKANGO_URL',
+  'BLUEKANGO_ADMIN_USER',
+  'BLUEKANGO_ADMIN_PASSWORD',
+  'BLUEKANGO_DEFAULT_PASSWORD',
+];
+
+/** "Marie" + "DUPONT-DURAND" → "mdupontdurand" (sans accents ni caractères spéciaux). */
+function generateLogin(prenom, nom) {
+  const clean = (s) =>
+    String(s)
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z]/g, '');
+  return (clean(prenom).charAt(0) || '') + clean(nom);
+}
 
 async function createAccount(data, ctx) {
   if (getMode(ENV) === 'demo') {
@@ -25,61 +53,105 @@ async function createAccount(data, ctx) {
 
   const base = process.env.BLUEKANGO_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
+  const login = generateLogin(data.prenom, data.nom);
+  const etabLabel =
+    config.formSchema.sections[1].fields[0].options.find((o) => o.value === data.etablissement)
+      ?.label || data.etablissement;
+
+  // Cadres BlueKanGo (résolus à la demande car les iframes se rechargent).
+  let page;
+  const main = () => page.frameLocator(S.frames.main);
+  const fancy = () => main().frameLocator(S.frames.fancybox);
 
   return runScenario({
     reference: ctx.reference,
     log: ctx.log,
-    successMessage: `Compte BlueKanGo créé pour ${fullName}`,
+    successMessage:
+      `Compte BlueKanGo créé pour ${fullName} — identifiant « ${login} », ` +
+      `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)`,
     steps: [
       {
         label: 'Ouverture de BlueKanGo',
-        run: (page) => page.goto(base),
+        run: (p) => {
+          page = p;
+          return page.goto(`${base}/index.php?`);
+        },
       },
       {
         label: 'Connexion avec le compte administrateur',
-        run: async (page) => {
-          await page.fill(S.login.user, process.env.BLUEKANGO_ADMIN_USER);
-          await page.fill(S.login.password, process.env.BLUEKANGO_ADMIN_PASSWORD);
-          await page.click(S.login.submit);
-          await page.waitForSelector(S.login.loggedInProof);
+        run: async () => {
+          await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
+          await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
+          await page.getByRole('button', { name: S.login.submitLabel }).click();
+          // Page de choix de profil éventuelle ("Prénom Nom SIEGE").
+          const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
+          await profile.click({ timeout: 8000 }).catch(() => {});
+          await page.getByText(S.nav.administration).first().waitFor();
         },
       },
       {
-        label: 'Ouverture du formulaire « Nouvel utilisateur »',
-        run: (page) => page.goto(base + S.newUserPath),
+        label: `Sélection de l'établissement « ${etabLabel} »`,
+        run: async () => {
+          await page.goto(`${base}${S.nav.modeBmPath}`);
+          const etabFrame = page.frameLocator(S.frames.etab);
+          await etabFrame.getByLabel(S.nav.etabSelectLabel).selectOption(data.etablissement);
+          // Le select soumet le formulaire à la sélection : on attend le rechargement.
+          await page.waitForLoadState('networkidle');
+        },
+      },
+      {
+        label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
+        run: async () => {
+          await page.getByText(S.nav.administration).first().click();
+          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+        },
+      },
+      {
+        label: `Recherche d'un utilisateur modèle avec la fonction « ${data.fonction} »`,
+        run: async () => {
+          const list = main().frameLocator(S.frames.userList);
+          const row = list.locator('tr', { hasText: data.fonction }).first();
+          try {
+            await row.waitFor({ timeout: 15000 });
+          } catch {
+            throw new Error(
+              `Aucun utilisateur avec la fonction « ${data.fonction} » dans l'établissement ${etabLabel} : ` +
+                `pas de modèle à dupliquer. Créez le premier compte de cette fonction manuellement, ou vérifiez l'orthographe de la fonction.`
+            );
+          }
+          await row.locator(S.userList.duplicateButton).first().click();
+        },
       },
       {
         label: `Saisie de l'identité (${fullName})`,
-        run: async (page) => {
-          await page.selectOption(S.form.civilite, data.civilite);
-          await page.fill(S.form.nom, data.nom);
-          await page.fill(S.form.prenom, data.prenom);
-          await page.fill(S.form.email, data.email);
-          if (data.telephone) await page.fill(S.form.telephone, data.telephone);
+        run: async () => {
+          await fancy().locator(S.form.nom).fill(data.nom.toUpperCase());
+          await fancy().locator(S.form.prenom).fill(data.prenom);
+          const cell = fancy().getByRole('cell', { name: S.form.civiliteCellPattern }).first();
+          await cell.getByRole('radio').nth(S.form.civiliteIndex[data.civilite]).check();
         },
       },
       {
-        label: "Saisie de l'affectation",
-        run: async (page) => {
-          await page.selectOption(S.form.etablissement, data.etablissement);
-          await page.fill(S.form.service, data.service);
-          await page.fill(S.form.fonction, data.fonction);
+        label: `Création des identifiants de connexion (identifiant « ${login} »)`,
+        run: async () => {
+          await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
+          await fancy().locator(S.form.loginField).fill(login);
+          await fancy().locator(S.form.password).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+          await fancy().locator(S.form.password2).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+          // L'utilisateur devra choisir son propre mot de passe au premier login.
+          await fancy().locator(S.form.reinitCheckbox).check();
         },
       },
       {
-        label: `Application du profil « ${data.profil} » et des modules`,
-        run: async (page) => {
-          await page.check(S.form.profil(data.profil));
-          for (const mod of data.modules) await page.check(S.form.module(mod));
-          await page.fill(S.form.dateDebut, data.date_debut);
-          if (data.commentaire) await page.fill(S.form.commentaire, data.commentaire);
-        },
-      },
-      {
-        label: 'Enregistrement et vérification',
-        run: async (page) => {
-          await page.click(S.form.save);
-          await page.waitForSelector(S.form.successProof);
+        label: 'Enregistrement de la fiche',
+        run: async () => {
+          await main().getByRole('button', { name: S.form.validerLabel }).click();
+          // La fenêtre de la fiche se ferme quand l'enregistrement est accepté.
+          await main()
+            .locator(S.frames.fancybox)
+            .waitFor({ state: 'detached', timeout: 20000 })
+            .catch(() => {});
         },
       },
     ],

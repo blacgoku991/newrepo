@@ -1,35 +1,57 @@
 'use strict';
 
 /**
- * Sélecteurs de l'interface d'administration BlueKanGo (mode production).
+ * Sélecteurs de l'interface d'administration BlueKanGo (instance ADEF Résidences).
+ * Calibrés à partir d'un enregistrement `npx playwright codegen` réel.
  *
- * ⚠️ À CALIBRER sur votre instance réelle : enregistrez une création de compte
- * manuelle avec `npx playwright codegen https://votre-instance.bluekango.com`
- * puis reportez ici les sélecteurs générés. Voir docs/AUTOMATISATION.md.
+ * Particularités de BlueKanGo :
+ *  - l'interface est découpée en iframes imbriquées (cadre principal "b",
+ *    cadre de sélection d'établissement "o", liste des utilisateurs
+ *    "#FRM_iframe_userList", et une fenêtre fancybox au nom dynamique
+ *    pour la fiche utilisateur) ;
+ *  - la création se fait par DUPLICATION d'un utilisateur existant
+ *    (boutons "duplicate-user-<id>" dans la liste).
  */
 
 module.exports = {
-  login: {
-    user: 'input[name="login"]',
-    password: 'input[name="password"]',
-    submit: 'button[type="submit"]',
-    loggedInProof: 'nav.main-menu', // élément visible uniquement une fois connecté
+  frames: {
+    main: '[id="b"]',                          // cadre principal de l'admin
+    etab: 'iframe[name="o"]',                  // cadre du sélecteur d'établissement
+    userList: '#FRM_iframe_userList',          // liste des utilisateurs (dans main)
+    fancybox: 'iframe[name^="fancybox-frame"]',// fiche utilisateur (nom dynamique, dans main)
   },
-  newUserPath: '/admin/users/new',
+
+  login: {
+    userLabel: 'Compte utilisateur',
+    passwordLabel: 'Mot de passe',
+    submitLabel: 'Connexion',
+    // Après connexion, BlueKanGo affiche parfois une page de choix de profil
+    // (lien "Prénom Nom SIEGE") : on clique le premier lien correspondant.
+    profileLinkPattern: /SIEGE/i,
+  },
+
+  nav: {
+    administration: 'Administration',
+    gestionRessources: 'Gestion des ressources',
+    utilisateurs: 'Utilisateurs',
+    modeBmPath: '/index.php?mode=BM',          // page où choisir l'établissement
+    etabSelectLabel: 'Établissements :',
+  },
+
+  userList: {
+    duplicateButton: '[id^="duplicate-user-"]', // bouton Dupliquer d'une ligne
+  },
+
   form: {
-    civilite: 'select[name="civility"]',
-    nom: 'input[name="lastname"]',
-    prenom: 'input[name="firstname"]',
-    email: 'input[name="email"]',
-    telephone: 'input[name="phone"]',
-    etablissement: 'select[name="site"]',
-    service: 'input[name="department"]',
-    fonction: 'input[name="job_title"]',
-    profil: (value) => `input[name="profile"][value="${value}"]`,
-    module: (value) => `input[name="modules"][value="${value}"]`,
-    dateDebut: 'input[name="start_date"]',
-    commentaire: 'textarea[name="comment"]',
-    save: 'button#save-user',
-    successProof: '.notification-success',
+    nom: '#UTL_nom',
+    prenom: '#UTL_prenom',
+    civiliteCellPattern: /M\..*Mlle.*Mme.*Sans/, // cellule contenant les 4 radios
+    civiliteIndex: { m: 0, mlle: 1, mme: 2, sans: 3 }, // position du radio dans la cellule
+    ongletAuthentification: 'Authentification',
+    loginField: '#UTL_Login',
+    password: '#UTL_pw',
+    password2: '#UTL_pw2',
+    reinitCheckbox: 'input[name="UTL_reinit"]', // réinitialisation du mdp au 1er login
+    validerLabel: 'Valider',                    // bouton dans le cadre principal
   },
 };
