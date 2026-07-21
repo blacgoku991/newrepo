@@ -1,5 +1,8 @@
 'use strict';
 
+// Charge le fichier .env AVANT tout module qui lit process.env.
+require('./loadEnv').loadEnv();
+
 const path = require('path');
 const express = require('express');
 
