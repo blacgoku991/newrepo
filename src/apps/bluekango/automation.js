@@ -155,6 +155,7 @@ async function createAccount(data, ctx) {
 
           // 1. Afficher 200 résultats par page : la fonction cherchée a plus de
           //    chances d'être présente (sinon elle peut être sur une autre page).
+          //    La grille met quelques secondes à recharger les 200 lignes.
           ctx.log('Affichage de 200 résultats par page');
           const perPage = list.getByRole('listbox').first();
           if (await perPage.count().catch(() => 0)) {
@@ -162,19 +163,20 @@ async function createAccount(data, ctx) {
           } else {
             await list.locator('select').last().selectOption('200').catch(() => {});
           }
-          await page.waitForTimeout(1500).catch(() => {});
+          await page.waitForTimeout(4000).catch(() => {});
 
-          // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics) pour
-          //    regrouper les mêmes fonctions et les faire remonter en tête.
+          // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics, avec
+          //    attente entre les deux) pour regrouper les fonctions renseignées
+          //    et les faire remonter en tête (le 1er tri met les vides en tête).
           ctx.log('Tri par la colonne « Fonctions ADEF Résidences » (2 clics)');
           let header = list.getByRole('columnheader', { name: /Fonctions ADEF/ }).first();
           if (!(await header.count().catch(() => 0))) {
             header = list.getByText(/Fonctions ADEF/).first();
           }
           await header.click().catch(() => {});
-          await page.waitForTimeout(600).catch(() => {});
+          await page.waitForTimeout(2500).catch(() => {});
           await header.click().catch(() => {});
-          await page.waitForTimeout(1000).catch(() => {});
+          await page.waitForTimeout(2500).catch(() => {});
           ctx.log(`Recherche de la cellule « ${data.fonction} » et de son bouton dupliquer`);
 
           // 3. Repérer la CELLULE (gridcell) contenant la fonction demandée.
@@ -186,7 +188,7 @@ async function createAccount(data, ctx) {
           );
           const cell = list.getByRole('gridcell', { name: fonctionRe }).first();
           try {
-            await cell.waitFor({ timeout: 20000 });
+            await cell.waitFor({ timeout: 30000 });
           } catch {
             throw new Error(
               `Aucun utilisateur avec la fonction « ${data.fonction} » : pas de modèle à ` +
