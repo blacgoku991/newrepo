@@ -186,7 +186,13 @@ async function createAccount(data, ctx) {
             data.fonction.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
             'i'
           );
-          const cell = list.getByRole('gridcell', { name: fonctionRe }).first();
+          // Deux stratégies combinées (.or) : par rôle gridcell (comme votre
+          // codegen) OU n'importe quelle cellule <td> contenant le texte de la
+          // fonction. On attend qu'au moins l'une apparaisse.
+          const cell = list
+            .getByRole('gridcell', { name: fonctionRe })
+            .or(list.locator('td').filter({ hasText: data.fonction }))
+            .first();
           try {
             await cell.waitFor({ timeout: 30000 });
           } catch {
