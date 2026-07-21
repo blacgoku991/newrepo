@@ -90,16 +90,6 @@ async function createAccount(data, ctx) {
         },
       },
       {
-        label: `Sélection de l'établissement « ${etabLabel} »`,
-        run: async () => {
-          await page.goto(`${base}${S.nav.modeBmPath}`);
-          const etabFrame = page.frameLocator(S.frames.etab);
-          await etabFrame.getByLabel(S.nav.etabSelectLabel).selectOption(data.etablissement);
-          // Le select soumet le formulaire à la sélection : on attend le rechargement.
-          await page.waitForLoadState('networkidle');
-        },
-      },
-      {
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
           await page.getByText(S.nav.administration).first().click();
@@ -108,18 +98,52 @@ async function createAccount(data, ctx) {
         },
       },
       {
-        label: `Recherche d'un utilisateur modèle avec la fonction « ${data.fonction} »`,
+        label: `Sélection de l'établissement « ${etabLabel} »`,
+        run: async () => {
+          await page.goto(`${base}${S.nav.modeBmPath}`);
+          await page.waitForLoadState('domcontentloaded');
+          // Le select d'établissement (#change_etab) est dans l'iframe "o" ; à
+          // défaut, on le cherche sur la page principale. On l'attend explicitement.
+          const inFrame = page.frameLocator(S.frames.etab).locator(S.nav.etabSelect);
+          const inMain = page.locator(S.nav.etabSelect);
+          let select = inFrame;
+          try {
+            await inFrame.waitFor({ timeout: 15000 });
+          } catch {
+            await inMain.waitFor({ timeout: 15000 });
+            select = inMain;
+          }
+          await select.selectOption(data.etablissement);
+          // Le select soumet le formulaire à la sélection : on attend le rechargement.
+          await page.waitForLoadState('networkidle');
+        },
+      },
+      {
+        label: 'Réouverture de la liste des utilisateurs',
+        run: async () => {
+          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+        },
+      },
+      {
+        label: `Duplication d'un utilisateur ayant la fonction « ${data.fonction} »`,
         run: async () => {
           const list = main().frameLocator(S.frames.userList);
-          const row = list.locator('tr', { hasText: data.fonction }).first();
+          // Lignes ayant la fonction demandée (correspondance insensible à la casse
+          // et partielle : « responsable hotelier » trouve « RESPONSABLE HOTELIER (E) »).
+          const byFunction = list.locator(S.userList.row).filter({ hasText: data.fonction });
           try {
-            await row.waitFor({ timeout: 15000 });
+            await byFunction.first().waitFor({ timeout: 20000 });
           } catch {
             throw new Error(
-              `Aucun utilisateur avec la fonction « ${data.fonction} » dans l'établissement ${etabLabel} : ` +
-                `pas de modèle à dupliquer. Créez le premier compte de cette fonction manuellement, ou vérifiez l'orthographe de la fonction.`
+              `Aucun utilisateur avec la fonction « ${data.fonction} » : pas de modèle à ` +
+                `dupliquer. Vérifiez l'orthographe de la fonction, ou créez le premier compte ` +
+                `de cette fonction manuellement.`
             );
           }
+          // Parmi elles, on privilégie celle du bon établissement.
+          const byBoth = byFunction.filter({ hasText: etabLabel });
+          const row = (await byBoth.count()) > 0 ? byBoth.first() : byFunction.first();
           await row.locator(S.userList.duplicateButton).first().click();
         },
       },

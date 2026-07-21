@@ -35,10 +35,11 @@ module.exports = {
     gestionRessources: 'Gestion des ressources',
     utilisateurs: 'Utilisateurs',
     modeBmPath: '/index.php?mode=BM',          // page où choisir l'établissement
-    etabSelectLabel: 'Établissements :',
+    etabSelect: '#change_etab',                // <select name="change_etab" id="change_etab">
   },
 
   userList: {
+    row: 'tr',                                  // lignes du tableau des utilisateurs
     duplicateButton: '[id^="duplicate-user-"]', // bouton Dupliquer d'une ligne
   },
 
