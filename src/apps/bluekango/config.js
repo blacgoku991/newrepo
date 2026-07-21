@@ -142,7 +142,18 @@ module.exports = {
             label: 'Fonction',
             type: 'text',
             required: true,
-            placeholder: 'IDE, Directeur, Responsable qualité…',
+            placeholder: 'Choisissez ou saisissez la fonction',
+            // Liste commune à tous les établissements (à COMPLÉTER avec l'export
+            // Excel des fonctions ADEF). L'utilisateur peut choisir dans la liste
+            // ou saisir une fonction absente. La correspondance avec BlueKanGo est
+            // partielle et insensible à la casse lors de la duplication.
+            suggestions: [
+              'RESPONSABLE HOTELIER (E)',
+              'AGENT D\'ADMISSION FACTURATION',
+              'REFERENT COMPTABLE ADEF R',
+              'MEDECIN COORDONNATEUR(RICE)',
+              'PSYCHOLOGUE',
+            ],
             help: 'Telle qu’elle apparaît dans BlueKanGo. Le robot duplique un utilisateur de l’établissement ayant cette fonction : le nouveau compte hérite des mêmes droits.',
           },
           {

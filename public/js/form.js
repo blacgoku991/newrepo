@@ -178,8 +178,18 @@
       case 'textarea':
         control = `<textarea name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>`;
         break;
-      default:
-        control = `<input type="${field.type}" name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}" />`;
+      default: {
+        // Champ texte, avec liste de suggestions (datalist) si `suggestions` fourni :
+        // l'utilisateur choisit dans la liste OU saisit une valeur libre.
+        const hasList = Array.isArray(field.suggestions) && field.suggestions.length > 0;
+        const listId = `dl-${field.name}`;
+        const datalist = hasList
+          ? `<datalist id="${listId}">${field.suggestions
+              .map((s) => `<option value="${escapeHtml(s)}"></option>`)
+              .join('')}</datalist>`
+          : '';
+        control = `<input type="${field.type}" name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}"${hasList ? ` list="${listId}" autocomplete="off"` : ''} />${datalist}`;
+      }
     }
 
     return `

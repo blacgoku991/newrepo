@@ -155,6 +155,7 @@ async function createAccount(data, ctx) {
 
           // 1. Afficher 200 résultats par page : la fonction cherchée a plus de
           //    chances d'être présente (sinon elle peut être sur une autre page).
+          ctx.log('Affichage de 200 résultats par page');
           const perPage = list.getByRole('listbox').first();
           if (await perPage.count().catch(() => 0)) {
             await perPage.selectOption('200').catch(() => {});
@@ -165,6 +166,7 @@ async function createAccount(data, ctx) {
 
           // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics) pour
           //    regrouper les mêmes fonctions et les faire remonter en tête.
+          ctx.log('Tri par la colonne « Fonctions ADEF Résidences » (2 clics)');
           let header = list.getByRole('columnheader', { name: /Fonctions ADEF/ }).first();
           if (!(await header.count().catch(() => 0))) {
             header = list.getByText(/Fonctions ADEF/).first();
@@ -173,6 +175,7 @@ async function createAccount(data, ctx) {
           await page.waitForTimeout(600).catch(() => {});
           await header.click().catch(() => {});
           await page.waitForTimeout(1000).catch(() => {});
+          ctx.log(`Recherche de la cellule « ${data.fonction} » et de son bouton dupliquer`);
 
           // 3. Repérer la CELLULE (gridcell) contenant la fonction demandée.
           //    Correspondance partielle et insensible à la casse :
