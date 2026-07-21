@@ -101,13 +101,22 @@ async function createAccount(data, ctx) {
         label: `Sélection de l'établissement « ${etabLabel} »`,
         run: async () => {
           await page.goto(`${base}${S.nav.modeBmPath}`);
-          await page.waitForLoadState('domcontentloaded');
-          // Le select d'établissement est dans l'iframe "o", repéré par son
-          // libellé « Établissements : » (sélecteur confirmé par l'enregistrement).
-          // Pas de repli sur un autre élément : se tromper d'établissement créerait
-          // le compte au mauvais endroit — mieux vaut échouer clairement.
-          const select = page.frameLocator(S.frames.etab).getByLabel(S.nav.etabSelectLabel);
-          await select.waitFor({ timeout: 20000 });
+          await page.waitForLoadState('networkidle');
+          const oFrame = page.frameLocator(S.frames.etab);
+          // On attend d'abord qu'un select soit présent dans l'iframe "o" :
+          // preuve que la page de sélection d'établissement est bien chargée.
+          await oFrame.locator('select').first().waitFor({ timeout: 20000 });
+          // On repère le select d'établissement, du plus fiable au plus tolérant.
+          // Tout reste scopé à l'iframe "o" : jamais un select de la page
+          // principale, pour ne pas risquer le mauvais établissement.
+          const byId = oFrame.locator(S.nav.etabSelectId);
+          const byName = oFrame.locator(S.nav.etabSelectName);
+          const byLabel = oFrame.getByLabel(S.nav.etabSelectLabel);
+          let select;
+          if ((await byId.count()) > 0) select = byId.first();
+          else if ((await byName.count()) > 0) select = byName.first();
+          else if ((await byLabel.count()) > 0) select = byLabel.first();
+          else select = oFrame.locator('select').first(); // ultime repli, dans l'iframe "o"
           await select.selectOption(data.etablissement);
           // Le select soumet le formulaire à la sélection : on attend le rechargement.
           await page.waitForLoadState('networkidle');

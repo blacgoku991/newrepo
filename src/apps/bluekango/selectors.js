@@ -35,7 +35,11 @@ module.exports = {
     gestionRessources: 'Gestion des ressources',
     utilisateurs: 'Utilisateurs',
     modeBmPath: '/index.php?mode=BM',          // page où choisir l'établissement
-    etabSelectLabel: 'Établissements :',       // libellé du select dans l'iframe "o"
+    // Select d'établissement dans l'iframe "o" : plusieurs repères pour la
+    // robustesse (id > name > libellé, dont l'espace peut être insécable).
+    etabSelectId: '#change_etab',              // <select id="change_etab">
+    etabSelectName: 'select[name="change_etab"]',
+    etabSelectLabel: /Établissements/,         // libellé (regex : tolère l'espace insécable)
   },
 
   userList: {
