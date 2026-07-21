@@ -52,8 +52,21 @@ Pages :
 | `/` | Accueil — cartes des applications |
 | `/demande.html?app=<id>` | Formulaire multi-étapes d'une application |
 | `/suivi.html` | Suivi d'une demande par référence (timeline, mise à jour auto) |
-| `/admin.html` | Tableau de bord : filtres, journal du robot, captures, relance |
+| `/login.html` | Connexion à l'espace d'administration (session sécurisée) |
+| `/admin.html` | Tableau de bord **protégé** : statistiques, graphiques, demandes, journal du robot, captures, relance |
 | `/demo/<app>/login` | Console d'administration de démonstration (cible du robot) |
+
+### Espace d'administration sécurisé
+
+`/admin.html` et les API `/api/admin/*` sont protégés par une **connexion**
+(session par cookie httpOnly, mots de passe hachés en scrypt). Le compte
+administrateur initial est créé au premier démarrage à partir de
+`ADMIN_USERNAME` / `ADMIN_PASSWORD` (voir `.env.example`). Sans mot de passe
+défini, un compte `admin` / `admin` est créé — **à changer immédiatement**.
+
+Le tableau de bord affiche : comptes créés, taux de réussite, activité sur
+14 jours, répartition par application / établissement / fonction, et
+**qui a demandé chaque compte** (le formulaire capture le demandeur).
 
 ## Modes du robot
 

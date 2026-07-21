@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connexion — Espace Administration</title>
+  <link rel="stylesheet" href="/css/fonts.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%230f5f4d'/><text x='50' y='70' font-size='56' text-anchor='middle' fill='%23eef4f0' font-family='Georgia,serif'>P</text></svg>" />
+</head>
+<body class="auth">
+  <form class="login" id="login-form" novalidate>
+    <div class="lmark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <h1>Espace administration</h1>
+    <p class="sub">Connectez-vous pour accéder au tableau de bord des demandes.</p>
+
+    <div class="alert alert-err err-box" id="err"></div>
+
+    <div class="field">
+      <label for="username">Identifiant</label>
+      <input type="text" id="username" name="username" autocomplete="username" required autofocus />
+    </div>
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required />
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block" id="submit" style="margin-top:8px">Se connecter</button>
+
+    <p class="foot">Portail Comptes — accès réservé au personnel autorisé.</p>
+  </form>
+
+  <script src="/js/common.js"></script>
+  <script>
+    (function () {
+      const form = document.getElementById('login-form');
+      const err = document.getElementById('err');
+      const btn = document.getElementById('submit');
+      const next = new URLSearchParams(location.search).get('next') || '/admin.html';
+
+      // Déjà connecté ? on file au tableau de bord.
+      fetch('/api/auth/me').then((r) => { if (r.ok) location.href = next; });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.classList.remove('show');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Connexion…';
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: document.getElementById('username').value,
+              password: document.getElementById('password').value,
+            }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error || 'Connexion impossible');
+          location.href = next;
+        } catch (ex) {
+          err.textContent = ex.message;
+          err.classList.add('show');
+          btn.disabled = false;
+          btn.textContent = 'Se connecter';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

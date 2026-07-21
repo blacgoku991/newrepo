@@ -26,7 +26,6 @@
   }
 
   document.title = `${app.name} — Demande de compte`;
-  document.getElementById('page-title').textContent = `Demande de compte ${app.name}`;
 
   const sections = app.schema.sections;
   const stepCount = sections.length + 1; // + récapitulatif
@@ -63,15 +62,15 @@
   function render() {
     const isRecap = current === sections.length;
     content.innerHTML = `
-      <div class="form-card">
-        <div class="form-header">
-          <span class="icon" style="background:${escapeHtml(app.color)}">${icon(app.icon)}</span>
+      <div class="panel form-card">
+        <div class="form-head">
+          <span class="tile" style="background:${escapeHtml(app.color)}">${icon(app.icon)}</span>
           <div>
             <h2>${escapeHtml(app.name)}</h2>
-            <div class="category">${escapeHtml(app.category)}</div>
+            <div class="cat">${escapeHtml(app.category)}</div>
           </div>
         </div>
-        ${current === 0 && app.schema.intro ? `<div class="form-intro">${escapeHtml(app.schema.intro)}</div>` : ''}
+        ${current === 0 && app.schema.intro ? `<div class="intro">${escapeHtml(app.schema.intro)}</div>` : ''}
         ${stepperHtml()}
         <form id="step-form" novalidate>
           <div class="step-panel">
@@ -79,12 +78,12 @@
           </div>
           <div class="form-nav">
             <div>
-              ${current > 0 ? `<button type="button" class="btn btn-secondary" id="prev-btn">← Précédent</button>` : `<a href="/" class="btn btn-secondary">Annuler</a>`}
+              ${current > 0 ? `<button type="button" class="btn btn-ghost" id="prev-btn">← Précédent</button>` : `<a href="/" class="btn btn-ghost">Annuler</a>`}
             </div>
             <div>
               ${
                 isRecap
-                  ? `<button type="submit" class="btn btn-primary" id="submit-btn">${icon('zap')} Envoyer la demande</button>`
+                  ? `<button type="submit" class="btn btn-primary" id="submit-btn">Envoyer la demande</button>`
                   : `<button type="submit" class="btn btn-primary">Continuer ${icon('arrow')}</button>`
               }
             </div>
@@ -129,8 +128,8 @@
 
   function sectionHtml(section) {
     return `
-      <h3 class="step-heading">${escapeHtml(section.title)}</h3>
-      <div class="fields-grid">${section.fields.map(fieldHtml).join('')}</div>`;
+      <h3 class="sh">${escapeHtml(section.title)}</h3>
+      <div class="grid2">${section.fields.map(fieldHtml).join('')}</div>`;
   }
 
   function fieldHtml(field) {
@@ -149,7 +148,7 @@
         break;
       case 'radio':
         control = `
-          <div class="choice-group">
+          <div class="choices">
             ${field.options
               .map(
                 (o) => `
@@ -163,7 +162,7 @@
         break;
       case 'checkboxes':
         control = `
-          <div class="choice-group">
+          <div class="choices">
             ${field.options
               .map(
                 (o) => `
@@ -197,7 +196,7 @@
         <label>${escapeHtml(field.label)}${req}</label>
         ${control}
         ${help}
-        <span class="error-msg"></span>
+        <span class="err"></span>
       </div>`;
   }
 
@@ -262,7 +261,7 @@
       const wrapper = content.querySelector(`.field[data-field="${name}"]`);
       if (!wrapper) continue;
       wrapper.classList.add('invalid');
-      wrapper.querySelector('.error-msg').textContent = message;
+      wrapper.querySelector('.err').textContent = message;
     }
     const first = content.querySelector('.field.invalid');
     if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -289,13 +288,13 @@
 
   function recapHtml() {
     return `
-      <h3 class="step-heading">Vérifiez votre demande</h3>
+      <h3 class="sh">Vérifiez votre demande</h3>
       <div class="recap-note">Relisez attentivement : ces informations seront saisies telles quelles par le robot dans ${escapeHtml(app.name)}.</div>
       ${sections
         .map(
           (section, i) => `
-        <div class="recap-section">
-          <div class="rs-head">
+        <div class="recap-block">
+          <div class="rh">
             <span>${escapeHtml(section.title)}</span>
             <button type="button" data-goto="${i}">Modifier</button>
           </div>
@@ -341,21 +340,21 @@
   }
 
   function showConfirmation(reference) {
-    document.getElementById('page-title').textContent = 'Demande envoyée';
+    document.title = 'Demande envoyée — Portail Comptes';
     content.innerHTML = `
-      <div class="result-card">
-        <div class="big-icon ok">${icon('check')}</div>
+      <div class="panel result">
+        <div class="big">${icon('check')}</div>
         <h2>Demande enregistrée&nbsp;!</h2>
         <p>Votre demande de compte <strong>${escapeHtml(app.name)}</strong> est dans la file de traitement.<br/>
         Le robot va la prendre en charge dans quelques instants.</p>
-        <div class="reference-box">
+        <div class="refbox">
           <span>${escapeHtml(reference)}</span>
           <button type="button" id="copy-ref">Copier</button>
         </div>
         <p>Conservez cette référence : elle permet de suivre l'avancement de votre demande.</p>
         <div class="form-nav" style="justify-content:center;border:none;padding-top:10px">
           <a class="btn btn-primary" href="/suivi.html?ref=${encodeURIComponent(reference)}">Suivre ma demande ${icon('arrow')}</a>
-          <a class="btn btn-secondary" href="/">Retour à l'accueil</a>
+          <a class="btn btn-ghost" href="/">Retour à l'accueil</a>
         </div>
       </div>`;
     document.getElementById('copy-ref').addEventListener('click', async (event) => {

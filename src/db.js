@@ -17,6 +17,7 @@ db.exec(`
     reference TEXT NOT NULL UNIQUE,
     app_id TEXT NOT NULL,
     payload TEXT NOT NULL,
+    demandeur TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'en_attente',
     result_message TEXT,
     logs TEXT NOT NULL DEFAULT '[]',
@@ -36,12 +37,35 @@ db.exec(`
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Comptes d'administration du portail (accès au tableau de bord sécurisé).
+  CREATE TABLE IF NOT EXISTS admin_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL DEFAULT '',
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login TEXT
+  );
+
+  -- Sessions d'administration (cookie -> utilisateur).
+  CREATE TABLE IF NOT EXISTS admin_sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES admin_users(id) ON DELETE CASCADE
+  );
 `);
 
-// Migration : ajoute la colonne artifacts aux bases créées avant son introduction.
+// Migration : ajoute les colonnes récentes aux bases créées avant leur introduction.
 const columns = db.prepare(`PRAGMA table_info(requests)`).all().map((c) => c.name);
 if (!columns.includes('artifacts')) {
   db.exec(`ALTER TABLE requests ADD COLUMN artifacts TEXT NOT NULL DEFAULT '[]'`);
+}
+if (!columns.includes('demandeur')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN demandeur TEXT NOT NULL DEFAULT ''`);
 }
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
@@ -57,15 +81,15 @@ function generateReference(prefix) {
 const api = {
   ARTIFACTS_DIR,
 
-  createRequest(appId, prefix, payload) {
+  createRequest(appId, prefix, payload, demandeur = '') {
     const stmt = db.prepare(
-      `INSERT INTO requests (reference, app_id, payload) VALUES (?, ?, ?)`
+      `INSERT INTO requests (reference, app_id, payload, demandeur) VALUES (?, ?, ?, ?)`
     );
     // La référence est aléatoire : on réessaie en cas de collision (extrêmement rare).
     for (let i = 0; i < 5; i++) {
       const reference = generateReference(prefix);
       try {
-        stmt.run(reference, appId, JSON.stringify(payload));
+        stmt.run(reference, appId, JSON.stringify(payload), demandeur);
         return reference;
       } catch (err) {
         if (!String(err.message).includes('UNIQUE')) throw err;
@@ -129,6 +153,79 @@ const api = {
       out.total += r.n;
     }
     return out;
+  },
+
+  // --- Statistiques détaillées (tableau de bord) ----------------------------
+
+  /** Toutes les demandes, forme légère pour l'agrégation côté serveur. */
+  allForStats() {
+    return db
+      .prepare(
+        `SELECT app_id, demandeur, status, payload, created_at, finished_at FROM requests`
+      )
+      .all();
+  },
+
+  // --- Administration : utilisateurs & sessions -----------------------------
+
+  countAdmins() {
+    return db.prepare(`SELECT COUNT(*) AS n FROM admin_users`).get().n;
+  },
+
+  createAdmin(username, displayName, passwordHash, role = 'admin') {
+    const info = db
+      .prepare(
+        `INSERT INTO admin_users (username, display_name, password_hash, role)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(username, displayName, passwordHash, role);
+    return info.lastInsertRowid;
+  },
+
+  getAdminByUsername(username) {
+    return db.prepare(`SELECT * FROM admin_users WHERE username = ?`).get(username);
+  },
+
+  getAdminById(id) {
+    return db.prepare(`SELECT * FROM admin_users WHERE id = ?`).get(id);
+  },
+
+  listAdmins() {
+    return db
+      .prepare(`SELECT id, username, display_name, role, created_at, last_login FROM admin_users ORDER BY id ASC`)
+      .all();
+  },
+
+  touchAdminLogin(id) {
+    db.prepare(`UPDATE admin_users SET last_login = datetime('now') WHERE id = ?`).run(id);
+  },
+
+  setAdminPassword(id, passwordHash) {
+    db.prepare(`UPDATE admin_users SET password_hash = ? WHERE id = ?`).run(passwordHash, id);
+  },
+
+  createSession(token, userId, expiresAt) {
+    db.prepare(
+      `INSERT INTO admin_sessions (token, user_id, expires_at) VALUES (?, ?, ?)`
+    ).run(token, userId, expiresAt);
+  },
+
+  getSession(token) {
+    return db
+      .prepare(
+        `SELECT s.token, s.user_id, s.expires_at, u.username, u.display_name, u.role
+           FROM admin_sessions s JOIN admin_users u ON u.id = s.user_id
+          WHERE s.token = ? AND s.expires_at > datetime('now')`
+      )
+      .get(token);
+  },
+
+  deleteSession(token) {
+    db.prepare(`DELETE FROM admin_sessions WHERE token = ?`).run(token);
+  },
+
+  purgeExpiredSessions() {
+    db.prepare(`DELETE FROM admin_sessions WHERE expires_at <= datetime('now')`).run();
   },
 
   // --- Application de démonstration -----------------------------------------

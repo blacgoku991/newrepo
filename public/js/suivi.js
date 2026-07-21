@@ -25,7 +25,7 @@
 
   async function lookup(reference) {
     clearTimeout(pollTimer);
-    box.classList.add('visible');
+    box.classList.add('show');
     try {
       const req = await fetchJson(`/api/requests/${encodeURIComponent(reference)}`);
       render(req);
@@ -79,9 +79,9 @@
       ${items
         .map(
           (item) => `
-        <div class="tl-item ${item.state}">
-          <div class="tl-marker"><span class="tl-dot">${icon(item.icon)}</span><span class="tl-line"></span></div>
-          <div class="tl-body"><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.text)}</p></div>
+        <div class="tl ${item.state}">
+          <div class="m"><span class="dot">${icon(item.icon)}</span><span class="line"></span></div>
+          <div class="body"><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.text)}</p></div>
         </div>`
         )
         .join('')}
@@ -92,7 +92,7 @@
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div>
-          <h3 style="font-size:1.12rem">Demande <span style="font-family:var(--mono)">${escapeHtml(req.reference)}</span></h3>
+          <h3 style="font-family:var(--ui);font-size:1.12rem;font-weight:650">Demande <span style="font-family:var(--mono)">${escapeHtml(req.reference)}</span></h3>
           <p style="color:var(--muted);font-size:0.88rem;margin-top:2px">${escapeHtml(req.app)}</p>
         </div>
         ${statusBadge(req.status)}

@@ -3,84 +3,110 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Administration — Portail Comptes</title>
-  <link rel="stylesheet" href="/vendor/inter/index.css" />
+  <title>Tableau de bord — Portail Comptes</title>
+  <link rel="stylesheet" href="/css/fonts.css" />
   <link rel="stylesheet" href="/css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text x='50' y='71' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>P</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%230f5f4d'/><text x='50' y='70' font-size='56' text-anchor='middle' fill='%23eef4f0' font-family='Georgia,serif'>P</text></svg>" />
 </head>
-<body>
-  <header class="site-header">
-    <nav class="nav">
-      <a class="brand" href="/">
-        <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-        Portail Comptes
-      </a>
-      <div class="nav-links">
-        <a href="/">Applications</a>
-        <a href="/suivi.html">Suivre une demande</a>
-        <a href="/admin.html" class="active">Administration</a>
+<body class="admin">
+  <div class="shell">
+    <aside class="side">
+      <div class="head">
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="nm"><b>Portail</b> <span>·</span> Admin</span>
       </div>
-    </nav>
-    <div class="hero compact">
-      <h1 style="font-size:clamp(1.5rem,3vw,2.1rem)">Tableau de bord des demandes</h1>
-      <p class="lede" style="font-size:0.98rem">Suivi du traitement, journaux du robot et preuves d'exécution.</p>
-    </div>
-  </header>
+      <nav>
+        <span class="sep">Pilotage</span>
+        <a href="#overview" data-view="overview" class="active" id="nav-overview"></a>
+        <a href="#requests" data-view="requests" id="nav-requests"></a>
+        <span class="sep">Site</span>
+        <a href="/" target="_blank"></a>
+      </nav>
+      <div class="who" id="who">
+        <div class="av" id="who-av">—</div>
+        <div class="meta"><b id="who-name">…</b><span id="who-role">Administrateur</span></div>
+        <button id="logout" title="Se déconnecter"></button>
+      </div>
+    </aside>
 
-  <main>
-    <div class="container pull-up">
-      <div class="stats-row" id="stats"></div>
-
-      <div class="toolbar">
-        <div class="search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <input type="text" id="search-input" placeholder="Rechercher une référence, un nom, un e-mail…" />
+    <div class="content">
+      <div class="abar">
+        <div>
+          <h1 id="page-h1">Vue d'ensemble</h1>
+          <div class="sub" id="page-sub">Statistiques de création de comptes</div>
         </div>
-        <select id="app-filter"><option value="">Toutes les applications</option></select>
-        <div class="chips" id="status-chips">
-          <button class="chip on" data-status="">Toutes</button>
-          <button class="chip" data-status="en_attente">En attente</button>
-          <button class="chip" data-status="en_cours">En cours</button>
-          <button class="chip" data-status="terminee">Terminées</button>
-          <button class="chip" data-status="echec">Échecs</button>
-        </div>
+        <span class="live"><span class="d"></span> Mise à jour automatique</span>
       </div>
 
-      <div class="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Référence</th>
-              <th>Application</th>
-              <th>Demandeur</th>
-              <th>Déposée le</th>
-              <th>Statut</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr><td colspan="6" class="loading-placeholder">Chargement…</td></tr>
-          </tbody>
-        </table>
+      <div class="apage">
+        <!-- Vue : Vue d'ensemble -->
+        <section class="view on" id="view-overview">
+          <div class="kpis" id="kpis"></div>
+          <div class="cols">
+            <div class="card">
+              <div class="ch"><h3>Activité — 14 derniers jours</h3><span class="hint">demandes vs comptes créés</span></div>
+              <div class="cb" id="chart-serie"></div>
+            </div>
+            <div class="card">
+              <div class="ch"><h3>Par application</h3></div>
+              <div class="cb" id="chart-apps"></div>
+            </div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <div class="ch"><h3>Qui a créé des comptes</h3><span class="hint">comptes créés par demandeur</span></div>
+              <div class="cb" id="chart-demandeur"></div>
+            </div>
+            <div class="card">
+              <div class="ch"><h3>Par établissement</h3></div>
+              <div class="cb" id="chart-etab"></div>
+            </div>
+          </div>
+          <div class="cols even">
+            <div class="card">
+              <div class="ch"><h3>Par fonction</h3></div>
+              <div class="cb" id="chart-fonction"></div>
+            </div>
+            <div class="card">
+              <div class="ch"><h3>Dernières demandes</h3></div>
+              <div class="cb" id="recent"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Vue : Demandes -->
+        <section class="view" id="view-requests">
+          <div class="toolbar">
+            <label class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input type="text" id="search" placeholder="Référence, nom, e-mail, demandeur…" />
+            </label>
+            <select id="app-filter" class="chip" style="border-radius:10px"></select>
+            <div class="chips" id="chips">
+              <button class="chip on" data-status="">Toutes</button>
+              <button class="chip" data-status="en_attente">En attente</button>
+              <button class="chip" data-status="en_cours">En cours</button>
+              <button class="chip" data-status="terminee">Terminées</button>
+              <button class="chip" data-status="echec">Échecs</button>
+            </div>
+          </div>
+          <div class="tablecard">
+            <table>
+              <thead>
+                <tr><th>Référence</th><th>Application</th><th>Bénéficiaire</th><th>Demandeur</th><th>Déposée le</th><th>Statut</th><th></th></tr>
+              </thead>
+              <tbody id="rows"><tr><td colspan="7" class="loading">Chargement…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
-  </main>
-
-  <div class="modal-backdrop" id="modal-backdrop">
-    <div class="modal" id="modal-content"></div>
   </div>
 
-  <footer class="site-footer">
-    <div class="inner">
-      <span>© Portail Comptes — création automatisée de comptes sur les applications métiers.</span>
-      <span class="links">
-        <a href="/">Applications</a>
-        <a href="/suivi.html">Suivi</a>
-      </span>
-    </div>
-  </footer>
+  <div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
 
   <script src="/js/common.js"></script>
+  <script src="/js/charts.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

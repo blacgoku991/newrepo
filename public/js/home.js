@@ -4,31 +4,37 @@
   const container = document.getElementById('cards');
   try {
     const apps = await fetchJson('/api/apps');
+    const available = apps.filter((a) => !a.comingSoon).length;
+    const el = document.getElementById('stat-apps');
+    if (el) el.textContent = String(available);
+
+    let n = 0;
     container.innerHTML = apps
       .map((app) => {
-        const iconHtml = `<span class="icon">${icon(app.icon)}</span>`;
+        n++;
+        const num = String(n).padStart(2, '0');
+        const tile = `<span class="tile" style="background:${escapeHtml(app.color)}">${icon(app.icon)}</span>`;
         if (app.comingSoon) {
           return `
-            <div class="app-card disabled" style="--app-color:${escapeHtml(app.color)}">
-              <span class="badge-soon">Bientôt disponible</span>
-              ${iconHtml}
+            <div class="app-card soon" style="--c:${escapeHtml(app.color)}">
+              <div class="top">${tile}<span class="tag-soon">Bientôt</span></div>
               <h3>${escapeHtml(app.name)}</h3>
-              <div class="category" style="color:var(--muted)">${escapeHtml(app.category)}</div>
+              <div class="cat">${escapeHtml(app.category)}</div>
               <p>${escapeHtml(app.description)}</p>
-              <span class="cta" style="color:var(--faint)">${icon('lock')} Ouverture prochaine</span>
+              <span class="go" style="color:var(--faint)">${icon('lock')} Ouverture prochaine</span>
             </div>`;
         }
         return `
-          <a class="app-card" style="--app-color:${escapeHtml(app.color)}" href="/demande.html?app=${encodeURIComponent(app.id)}">
-            ${iconHtml}
+          <a class="app-card" style="--c:${escapeHtml(app.color)}" href="/demande.html?app=${encodeURIComponent(app.id)}">
+            <div class="top">${tile}<span class="num">${num}</span></div>
             <h3>${escapeHtml(app.name)}</h3>
-            <div class="category">${escapeHtml(app.category)}</div>
+            <div class="cat">${escapeHtml(app.category)}</div>
             <p>${escapeHtml(app.description)}</p>
-            <span class="cta">Demander un compte ${icon('arrow')}</span>
+            <span class="go">Demander un compte ${icon('arrow')}</span>
           </a>`;
       })
       .join('');
   } catch (err) {
-    container.innerHTML = `<div class="alert alert-error">Impossible de charger les applications : ${escapeHtml(err.message)}</div>`;
+    container.innerHTML = `<div class="alert alert-err">Impossible de charger les applications : ${escapeHtml(err.message)}</div>`;
   }
 })();

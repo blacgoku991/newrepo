@@ -4,49 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Suivi de demande — Portail Comptes</title>
-  <link rel="stylesheet" href="/vendor/inter/index.css" />
+  <link rel="stylesheet" href="/css/fonts.css" />
   <link rel="stylesheet" href="/css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text x='50' y='71' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>P</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%230f5f4d'/><text x='50' y='70' font-size='56' text-anchor='middle' fill='%23eef4f0' font-family='Georgia,serif'>P</text></svg>" />
 </head>
-<body>
-  <header class="site-header">
-    <nav class="nav">
+<body class="public">
+  <header class="topbar">
+    <div class="inner">
       <a class="brand" href="/">
-        <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-        Portail Comptes
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="name"><b>Portail</b> <span>Comptes</span></span>
       </a>
-      <div class="nav-links">
+      <nav class="topnav">
         <a href="/">Applications</a>
         <a href="/suivi.html" class="active">Suivre une demande</a>
-        <a href="/admin.html">Administration</a>
-      </div>
-    </nav>
-    <div class="hero compact">
-      <h1 style="font-size:clamp(1.5rem,3vw,2.1rem)">Suivre une demande</h1>
-      <p class="lede" style="font-size:0.98rem">Saisissez la référence reçue lors de l'envoi de votre demande.</p>
+        <a href="/admin.html" class="admin-link">Administration</a>
+      </nav>
     </div>
   </header>
 
   <main>
-    <div class="container narrow pull-up">
+    <div class="wrap narrow" style="padding-top:44px;padding-bottom:60px">
+      <div class="section-head" style="margin-top:0">
+        <h2>Suivre une demande</h2>
+        <p>Saisissez votre référence de suivi.</p>
+      </div>
       <form class="track-form" id="track-form">
-        <input type="text" id="ref-input" placeholder="Ex. BKG-260720-AB12" autocomplete="off" spellcheck="false" />
-        <button type="submit" class="btn btn-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          Rechercher
-        </button>
+        <input type="text" id="ref-input" placeholder="Ex. BKG-260721-AB12" autocomplete="off" spellcheck="false" />
+        <button type="submit" class="btn btn-primary">Rechercher</button>
       </form>
-      <div id="track-result" class="track-result"></div>
+      <div id="track-result" class="panel track-result"></div>
     </div>
   </main>
 
-  <footer class="site-footer">
+  <footer class="footer">
     <div class="inner">
       <span>© Portail Comptes — création automatisée de comptes sur les applications métiers.</span>
-      <span class="links">
-        <a href="/">Applications</a>
-        <a href="/admin.html">Administration</a>
-      </span>
+      <span><a href="/">Applications</a> · <a href="/admin.html">Administration</a></span>
     </div>
   </footer>
 

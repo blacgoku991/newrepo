@@ -1,0 +1,6 @@
+/* Polices servies localement (Inter pour l'UI, Fraunces pour les titres). */
+@import url("/vendor/inter/index.css");
+@import url("/vendor/fraunces/latin-400.css");
+@import url("/vendor/fraunces/latin-500.css");
+@import url("/vendor/fraunces/latin-600.css");
+@import url("/vendor/fraunces/latin-400-italic.css");
