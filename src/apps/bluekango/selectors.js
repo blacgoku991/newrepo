@@ -16,7 +16,6 @@
 module.exports = {
   frames: {
     main: '[id="b"]',                          // cadre principal de l'admin
-    etab: 'iframe[name="o"]',                  // cadre du sélecteur d'établissement
     userList: '#FRM_iframe_userList',          // liste des utilisateurs (dans main)
     fancybox: 'iframe[name^="fancybox-frame"]',// fiche utilisateur (nom dynamique, dans main)
   },
@@ -34,12 +33,10 @@ module.exports = {
     administration: 'Administration',
     gestionRessources: 'Gestion des ressources',
     utilisateurs: 'Utilisateurs',
-    modeBmPath: '/index.php?mode=BM',          // page où choisir l'établissement
-    // Select d'établissement dans l'iframe "o" : plusieurs repères pour la
-    // robustesse (id > name > libellé, dont l'espace peut être insécable).
-    etabSelectId: '#change_etab',              // <select id="change_etab">
-    etabSelectName: 'select[name="change_etab"]',
-    etabSelectLabel: /Établissements/,         // libellé (regex : tolère l'espace insécable)
+    // Menu déroulant d'établissement : barre « Etablissements : XXX » toujours
+    // visible en haut à droite. Présent dans une frame de l'interface ; on le
+    // recherche dans toutes les frames. <select id="change_etab" name="change_etab">.
+    etabSelect: '#change_etab, select[name="change_etab"]',
   },
 
   userList: {

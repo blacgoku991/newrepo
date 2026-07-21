@@ -45,6 +45,27 @@ function generateLogin(prenom, nom) {
   return (clean(prenom).charAt(0) || '') + clean(nom);
 }
 
+/**
+ * Le menu déroulant d'établissement (barre « Etablissements : » en haut à
+ * droite) peut se trouver dans n'importe quelle frame de l'interface : on le
+ * cherche dans toutes les frames, avec quelques essais le temps du chargement.
+ */
+async function findEtabSelect(page, selector, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      try {
+        const loc = frame.locator(selector).first();
+        if ((await loc.count()) > 0) return loc;
+      } catch {
+        /* frame en cours de navigation : on ignore */
+      }
+    }
+    await page.waitForTimeout(500);
+  }
+  return null;
+}
+
 async function createAccount(data, ctx) {
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
@@ -90,41 +111,30 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        label: `Sélection de l'établissement « ${etabLabel} »`,
+        run: async () => {
+          // Menu déroulant « Etablissements : » toujours présent en haut à droite.
+          const select = await findEtabSelect(page, S.nav.etabSelect);
+          if (!select) {
+            throw new Error(
+              "Menu déroulant d'établissement introuvable (barre « Etablissements : » en haut à droite). Voir la capture."
+            );
+          }
+          const current = await select.inputValue().catch(() => null);
+          if (current === data.etablissement) {
+            ctx.log(`Déjà positionné sur « ${etabLabel} » : aucun changement nécessaire`);
+            return;
+          }
+          // Changer l'établissement soumet le formulaire et recharge l'interface.
+          await select.selectOption(data.etablissement);
+          await page.waitForLoadState('networkidle');
+          await page.getByText(S.nav.administration).first().waitFor({ timeout: 15000 }).catch(() => {});
+        },
+      },
+      {
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
           await page.getByText(S.nav.administration).first().click();
-          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
-          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
-        },
-      },
-      {
-        label: `Sélection de l'établissement « ${etabLabel} »`,
-        run: async () => {
-          await page.goto(`${base}${S.nav.modeBmPath}`);
-          await page.waitForLoadState('networkidle');
-          const oFrame = page.frameLocator(S.frames.etab);
-          // On attend d'abord qu'un select soit présent dans l'iframe "o" :
-          // preuve que la page de sélection d'établissement est bien chargée.
-          await oFrame.locator('select').first().waitFor({ timeout: 20000 });
-          // On repère le select d'établissement, du plus fiable au plus tolérant.
-          // Tout reste scopé à l'iframe "o" : jamais un select de la page
-          // principale, pour ne pas risquer le mauvais établissement.
-          const byId = oFrame.locator(S.nav.etabSelectId);
-          const byName = oFrame.locator(S.nav.etabSelectName);
-          const byLabel = oFrame.getByLabel(S.nav.etabSelectLabel);
-          let select;
-          if ((await byId.count()) > 0) select = byId.first();
-          else if ((await byName.count()) > 0) select = byName.first();
-          else if ((await byLabel.count()) > 0) select = byLabel.first();
-          else select = oFrame.locator('select').first(); // ultime repli, dans l'iframe "o"
-          await select.selectOption(data.etablissement);
-          // Le select soumet le formulaire à la sélection : on attend le rechargement.
-          await page.waitForLoadState('networkidle');
-        },
-      },
-      {
-        label: 'Réouverture de la liste des utilisateurs',
-        run: async () => {
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
         },
