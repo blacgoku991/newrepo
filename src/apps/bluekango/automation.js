@@ -45,6 +45,32 @@ function generateLogin(prenom, nom) {
   return (clean(prenom).charAt(0) || '') + clean(nom);
 }
 
+/**
+ * Recherche le select d'établissement (« Etablissements : XXX » en haut à
+ * droite) dans TOUTES les frames de la page. BlueKanGo classique utilise
+ * d'anciens <frame> (frameset), pas des <iframe> : on itère donc sur
+ * page.frames() plutôt que sur un frameLocator ciblant "iframe".
+ * On tente d'abord l'id/name (#change_etab), puis le libellé.
+ */
+async function findEtabSelect(page, timeout = 20000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) return null;
+    for (const frame of page.frames()) {
+      try {
+        let loc = frame.locator('#change_etab, select[name="change_etab"]').first();
+        if (await loc.count()) return loc;
+        loc = frame.getByLabel(/Établissements/).first();
+        if (await loc.count()) return loc;
+      } catch {
+        /* frame en cours de navigation : on ignore */
+      }
+    }
+    await page.waitForTimeout(500).catch(() => {});
+  }
+  return null;
+}
+
 async function createAccount(data, ctx) {
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
@@ -100,15 +126,15 @@ async function createAccount(data, ctx) {
       {
         label: `Vérification de l'établissement (« ${etabLabel} »)`,
         run: async () => {
-          // Le select d'établissement est dans l'iframe "o" de la page Utilisateurs.
-          // On le repère par son libellé, avec repli id/name.
-          let select = page.frameLocator(S.frames.etab).getByLabel(S.nav.etabSelectLabel);
-          if (!(await select.count().catch(() => 0))) {
-            select = page.frameLocator(S.frames.etab).locator(S.nav.etabSelect);
+          // Le select d'établissement (« Etablissements : XXX ») vit dans une
+          // frame de l'interface classique : on le cherche dans toutes les frames.
+          const select = await findEtabSelect(page);
+          if (!select) {
+            throw new Error(
+              `Sélecteur d'établissement introuvable dans les frames de la page. Voir la capture.`
+            );
           }
-          await select.first().waitFor({ timeout: 20000 });
-
-          const current = await select.first().inputValue().catch(() => null);
+          const current = await select.inputValue().catch(() => null);
           if (current === data.etablissement) {
             ctx.log(`Déjà sur « ${etabLabel} » : aucun changement nécessaire`);
             return;
@@ -116,7 +142,7 @@ async function createAccount(data, ctx) {
           // On bascule sur le bon établissement, puis on rouvre la liste des
           // utilisateurs (elle se recharge pour le nouvel établissement).
           ctx.log(`Bascule d'établissement vers « ${etabLabel} »…`);
-          await select.first().selectOption(data.etablissement);
+          await select.selectOption(data.etablissement);
           await page.waitForLoadState('networkidle');
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
@@ -126,8 +152,21 @@ async function createAccount(data, ctx) {
         label: `Duplication d'un utilisateur ayant la fonction « ${data.fonction} »`,
         run: async () => {
           const list = main().frameLocator(S.frames.userList);
-          // Lignes ayant la fonction demandée (correspondance insensible à la casse
-          // et partielle : « responsable hotelier » trouve « RESPONSABLE HOTELIER (E) »).
+
+          // 1. Afficher 200 résultats par page : la fonction cherchée a plus de
+          //    chances d'être présente (sinon elle peut être sur une autre page).
+          await list.getByRole('listbox').first().selectOption('200').catch(() => {});
+          await page.waitForLoadState('networkidle').catch(() => {});
+
+          // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics) pour
+          //    regrouper les mêmes fonctions et les faire remonter.
+          const header = list.getByText(/Fonctions ADEF/).first();
+          await header.click().catch(() => {});
+          await header.click().catch(() => {});
+          await page.waitForTimeout(500).catch(() => {});
+
+          // 3. Trouver la ligne ayant la fonction demandée (partielle, insensible
+          //    à la casse : « responsable hotelier » trouve « RESPONSABLE HOTELIER (E) »).
           const byFunction = list.locator(S.userList.row).filter({ hasText: data.fonction });
           try {
             await byFunction.first().waitFor({ timeout: 20000 });

@@ -16,7 +16,6 @@
 module.exports = {
   frames: {
     main: '[id="b"]',                          // cadre principal de l'admin
-    etab: 'iframe[name="o"]',                  // cadre de sélection d'établissement (page mode=BM)
     userList: '#FRM_iframe_userList',          // liste des utilisateurs (dans main)
     fancybox: 'iframe[name^="fancybox-frame"]',// fiche utilisateur (nom dynamique, dans main)
   },
@@ -34,16 +33,16 @@ module.exports = {
     administration: 'Administration',
     gestionRessources: 'Gestion des ressources',
     utilisateurs: 'Utilisateurs',
-    // Sur la page Utilisateurs, l'établissement se change via le select de
-    // l'iframe "o", repéré par son libellé « Établissements : » (codegen).
-    etabSelectLabel: 'Établissements :',
-    // Repères de secours du même select (id / name) au cas où le libellé varie.
-    etabSelect: '#change_etab, select[name="change_etab"]',
+    // Le select d'établissement (« Etablissements : XXX ») est recherché dans
+    // toutes les frames par findEtabSelect() : id #change_etab, ou libellé
+    // « Établissements : ». BlueKanGo classique utilise des <frame> (frameset).
   },
 
   userList: {
     row: 'tr',                                  // lignes du tableau des utilisateurs
     duplicateButton: '[id^="duplicate-user-"]', // bouton Dupliquer d'une ligne
+    // Affichage de 200 résultats/page (role listbox) + tri par la colonne
+    // « Fonctions ADEF Résidences » pour retrouver la fonction à dupliquer.
   },
 
   form: {
