@@ -76,16 +76,25 @@ function parseCookies(req) {
 }
 
 function currentSession(req) {
-  const token = parseCookies(req)[COOKIE];
+  // Cookie (même origine) OU en-tête « Authorization: Bearer <token> »
+  // (pratique pour un frontend hébergé sur un autre domaine, ex. Lovable).
+  let token = parseCookies(req)[COOKIE];
+  const authz = req.headers.authorization || '';
+  if (!token && authz.startsWith('Bearer ')) token = authz.slice(7).trim();
   if (!token) return null;
   return db.getSession(token) || null;
 }
 
 function setSessionCookie(res, token) {
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+  // Pour un frontend cross-domaine, mettre ADMIN_COOKIE_SAMESITE=None et
+  // ADMIN_COOKIE_SECURE=true (nécessite HTTPS) — sinon le cookie n'est pas
+  // envoyé entre deux domaines. Sinon, préférer le jeton Bearer.
+  const sameSite = process.env.ADMIN_COOKIE_SAMESITE || 'Lax';
+  const secure = process.env.ADMIN_COOKIE_SECURE === 'true' ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
-    `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`
+    `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=${sameSite}${secure}; Max-Age=${maxAge}`
   );
 }
 

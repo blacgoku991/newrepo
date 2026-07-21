@@ -20,6 +20,26 @@ const PORT = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false }));
 
+// CORS — autorise un frontend hébergé ailleurs (ex. Lovable) à appeler l'API.
+// Renseigner ALLOWED_ORIGINS dans .env (liste séparée par des virgules), ou '*'
+// pour tout autoriser (déconseillé en production avec authentification).
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // Compte administrateur initial + purge des sessions expirées au démarrage.
 auth.ensureSeedAdmin();
 db.purgeExpiredSessions();
@@ -106,7 +126,10 @@ app.post('/api/auth/login', (req, res) => {
   const result = auth.login(String(username).trim(), String(password));
   if (!result) return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
   auth.setSessionCookie(res, result.token);
+  // Le jeton est aussi renvoyé pour un frontend cross-domaine, qui pourra le
+  // stocker et l'envoyer via l'en-tête « Authorization: Bearer <token> ».
   res.json({
+    token: result.token,
     user: {
       username: result.user.username,
       displayName: result.user.display_name || result.user.username,
