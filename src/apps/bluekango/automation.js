@@ -50,9 +50,10 @@ function generateLogin(prenom, nom) {
  * droite) peut se trouver dans n'importe quelle frame de l'interface : on le
  * cherche dans toutes les frames, avec quelques essais le temps du chargement.
  */
-async function findEtabSelect(page, selector, timeout = 15000) {
+async function findEtabSelect(page, selector, timeout = 10000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
+    if (page.isClosed()) return null;
     for (const frame of page.frames()) {
       try {
         const loc = frame.locator(selector).first();
@@ -61,7 +62,11 @@ async function findEtabSelect(page, selector, timeout = 15000) {
         /* frame en cours de navigation : on ignore */
       }
     }
-    await page.waitForTimeout(500);
+    try {
+      await page.waitForTimeout(400);
+    } catch {
+      return null; // page fermée pendant l'attente
+    }
   }
   return null;
 }
@@ -113,22 +118,40 @@ async function createAccount(data, ctx) {
       {
         label: `Sélection de l'établissement « ${etabLabel} »`,
         run: async () => {
-          // Menu déroulant « Etablissements : » toujours présent en haut à droite.
+          // Cas 1 — ancienne interface : menu déroulant <select> d'établissement.
           const select = await findEtabSelect(page, S.nav.etabSelect);
-          if (!select) {
-            throw new Error(
-              "Menu déroulant d'établissement introuvable (barre « Etablissements : » en haut à droite). Voir la capture."
-            );
-          }
-          const current = await select.inputValue().catch(() => null);
-          if (current === data.etablissement) {
-            ctx.log(`Déjà positionné sur « ${etabLabel} » : aucun changement nécessaire`);
+          if (select) {
+            const current = await select.inputValue().catch(() => null);
+            if (current === data.etablissement) {
+              ctx.log(`Déjà positionné sur « ${etabLabel} » : aucun changement nécessaire`);
+              return;
+            }
+            await select.selectOption(data.etablissement);
+            await page.waitForLoadState('networkidle');
+            await page.getByText(S.nav.administration).first().waitFor({ timeout: 15000 }).catch(() => {});
             return;
           }
-          // Changer l'établissement soumet le formulaire et recharge l'interface.
-          await select.selectOption(data.etablissement);
-          await page.waitForLoadState('networkidle');
-          await page.getByText(S.nav.administration).first().waitFor({ timeout: 15000 }).catch(() => {});
+
+          // Cas 2 — pas de <select> (nouvelle interface). On ne change pas
+          // d'établissement à l'aveugle : on vérifie qu'on est DÉJÀ sur le bon
+          // (son nom est affiché quelque part), sinon on échoue plutôt que de
+          // risquer de créer le compte au mauvais endroit.
+          const etabName = etabLabel.split(' - ')[0].trim(); // ex. "SIEGE", "GAUCHY"
+          const shown = await page
+            .getByText(etabName, { exact: false })
+            .count()
+            .catch(() => 0);
+          if (shown > 0) {
+            ctx.log(
+              `Établissement « ${etabLabel} » déjà actif (menu de changement non requis) : on continue`
+            );
+            return;
+          }
+          throw new Error(
+            `Impossible de confirmer l'établissement « ${etabLabel} ». Le changement d'établissement ` +
+              `de la nouvelle interface n'est pas encore automatisé : fournir un enregistrement codegen ` +
+              `du changement d'établissement sur cette interface.`
+          );
         },
       },
       {
