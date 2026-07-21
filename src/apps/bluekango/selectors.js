@@ -35,7 +35,7 @@ module.exports = {
     gestionRessources: 'Gestion des ressources',
     utilisateurs: 'Utilisateurs',
     modeBmPath: '/index.php?mode=BM',          // page où choisir l'établissement
-    etabSelect: '#change_etab',                // <select name="change_etab" id="change_etab">
+    etabSelectLabel: 'Établissements :',       // libellé du select dans l'iframe "o"
   },
 
   userList: {

@@ -102,17 +102,12 @@ async function createAccount(data, ctx) {
         run: async () => {
           await page.goto(`${base}${S.nav.modeBmPath}`);
           await page.waitForLoadState('domcontentloaded');
-          // Le select d'établissement (#change_etab) est dans l'iframe "o" ; à
-          // défaut, on le cherche sur la page principale. On l'attend explicitement.
-          const inFrame = page.frameLocator(S.frames.etab).locator(S.nav.etabSelect);
-          const inMain = page.locator(S.nav.etabSelect);
-          let select = inFrame;
-          try {
-            await inFrame.waitFor({ timeout: 15000 });
-          } catch {
-            await inMain.waitFor({ timeout: 15000 });
-            select = inMain;
-          }
+          // Le select d'établissement est dans l'iframe "o", repéré par son
+          // libellé « Établissements : » (sélecteur confirmé par l'enregistrement).
+          // Pas de repli sur un autre élément : se tromper d'établissement créerait
+          // le compte au mauvais endroit — mieux vaut échouer clairement.
+          const select = page.frameLocator(S.frames.etab).getByLabel(S.nav.etabSelectLabel);
+          await select.waitFor({ timeout: 20000 });
           await select.selectOption(data.etablissement);
           // Le select soumet le formulaire à la sélection : on attend le rechargement.
           await page.waitForLoadState('networkidle');
