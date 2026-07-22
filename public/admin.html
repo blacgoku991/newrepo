@@ -3,110 +3,125 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tableau de bord — Portail Comptes</title>
-  <link rel="stylesheet" href="/css/fonts.css" />
+  <title>Administration — Algonis Compte</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
   <link rel="stylesheet" href="/css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%230f5f4d'/><text x='50' y='70' font-size='56' text-anchor='middle' fill='%23eef4f0' font-family='Georgia,serif'>P</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233b6dff'/><stop offset='.5' stop-color='%238a5cff'/><stop offset='1' stop-color='%2322d3ee'/></linearGradient></defs><rect width='100' height='100' rx='24' fill='url(%23g)'/><text x='50' y='70' font-size='58' text-anchor='middle' fill='white' font-family='Space Grotesk,sans-serif' font-weight='700'>A</text></svg>" />
 </head>
-<body class="admin">
-  <div class="shell">
-    <aside class="side">
-      <div class="head">
-        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-        <span class="nm"><b>Portail</b> <span>·</span> Admin</span>
-      </div>
-      <nav>
-        <span class="sep">Pilotage</span>
-        <a href="#overview" data-view="overview" class="active" id="nav-overview"></a>
-        <a href="#requests" data-view="requests" id="nav-requests"></a>
-        <span class="sep">Site</span>
-        <a href="/" target="_blank"></a>
+<body>
+  <div class="page-veil"></div>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="inner">
+      <a class="brand" href="/">
+        <span class="mark">A</span>
+        <span class="name"><b>Algonis</b> <span>Compte</span> · Admin</span>
+      </a>
+      <nav class="topnav">
+        <a href="/">Portail</a>
+        <a href="#overview" id="nav-overview" class="active">Vue d'ensemble</a>
+        <a href="#requests" id="nav-requests">Demandes</a>
+        <a href="#" id="logout-link">Déconnexion (<span id="who">…</span>)</a>
       </nav>
-      <div class="who" id="who">
-        <div class="av" id="who-av">—</div>
-        <div class="meta"><b id="who-name">…</b><span id="who-role">Administrateur</span></div>
-        <button id="logout" title="Se déconnecter"></button>
-      </div>
-    </aside>
-
-    <div class="content">
-      <div class="abar">
-        <div>
-          <h1 id="page-h1">Vue d'ensemble</h1>
-          <div class="sub" id="page-sub">Statistiques de création de comptes</div>
-        </div>
-        <span class="live"><span class="d"></span> Mise à jour automatique</span>
-      </div>
-
-      <div class="apage">
-        <!-- Vue : Vue d'ensemble -->
-        <section class="view on" id="view-overview">
-          <div class="kpis" id="kpis"></div>
-          <div class="cols">
-            <div class="card">
-              <div class="ch"><h3>Activité — 14 derniers jours</h3><span class="hint">demandes vs comptes créés</span></div>
-              <div class="cb" id="chart-serie"></div>
-            </div>
-            <div class="card">
-              <div class="ch"><h3>Par application</h3></div>
-              <div class="cb" id="chart-apps"></div>
-            </div>
-          </div>
-          <div class="cols">
-            <div class="card">
-              <div class="ch"><h3>Qui a créé des comptes</h3><span class="hint">comptes créés par demandeur</span></div>
-              <div class="cb" id="chart-demandeur"></div>
-            </div>
-            <div class="card">
-              <div class="ch"><h3>Par établissement</h3></div>
-              <div class="cb" id="chart-etab"></div>
-            </div>
-          </div>
-          <div class="cols even">
-            <div class="card">
-              <div class="ch"><h3>Par fonction</h3></div>
-              <div class="cb" id="chart-fonction"></div>
-            </div>
-            <div class="card">
-              <div class="ch"><h3>Dernières demandes</h3></div>
-              <div class="cb" id="recent"></div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Vue : Demandes -->
-        <section class="view" id="view-requests">
-          <div class="toolbar">
-            <label class="search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <input type="text" id="search" placeholder="Référence, nom, e-mail, demandeur…" />
-            </label>
-            <select id="app-filter" class="chip" style="border-radius:10px"></select>
-            <div class="chips" id="chips">
-              <button class="chip on" data-status="">Toutes</button>
-              <button class="chip" data-status="en_attente">En attente</button>
-              <button class="chip" data-status="en_cours">En cours</button>
-              <button class="chip" data-status="terminee">Terminées</button>
-              <button class="chip" data-status="echec">Échecs</button>
-            </div>
-          </div>
-          <div class="tablecard">
-            <table>
-              <thead>
-                <tr><th>Référence</th><th>Application</th><th>Bénéficiaire</th><th>Demandeur</th><th>Déposée le</th><th>Statut</th><th></th></tr>
-              </thead>
-              <tbody id="rows"><tr><td colspan="7" class="loading">Chargement…</td></tr></tbody>
-            </table>
-          </div>
-        </section>
-      </div>
     </div>
-  </div>
+  </header>
 
-  <div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
+  <main class="admin-shell">
+    <div class="admin-head">
+      <div>
+        <span class="eyebrow">Administration</span>
+        <h1 id="page-h1" style="font-size:clamp(1.9rem,3.4vw,2.8rem)">Vue d'ensemble</h1>
+        <p id="page-sub">Statistiques de création de comptes — qui, combien, où.</p>
+      </div>
+      <span class="live-dot"><span class="d"></span> Mise à jour auto</span>
+    </div>
+
+    <!-- Vue : Vue d'ensemble -->
+    <section id="view-overview">
+      <div class="kpis" id="kpis"></div>
+      <div class="cols">
+        <div class="dcard">
+          <div class="ch"><h3>Activité — 14 derniers jours</h3><span class="hint">demandes vs créés</span></div>
+          <div class="cb" id="chart-serie"></div>
+        </div>
+        <div class="dcard">
+          <div class="ch"><h3>Par application</h3></div>
+          <div class="cb" id="chart-apps"></div>
+        </div>
+      </div>
+      <div class="cols">
+        <div class="dcard">
+          <div class="ch"><h3>Qui a créé des comptes</h3><span class="hint">par demandeur</span></div>
+          <div class="cb" id="chart-demandeur"></div>
+        </div>
+        <div class="dcard">
+          <div class="ch"><h3>Par établissement</h3></div>
+          <div class="cb" id="chart-etab"></div>
+        </div>
+      </div>
+      <div class="cols even">
+        <div class="dcard">
+          <div class="ch"><h3>Par fonction</h3></div>
+          <div class="cb" id="chart-fonction"></div>
+        </div>
+        <div class="dcard">
+          <div class="ch"><h3>Dernières demandes</h3></div>
+          <div class="cb" id="recent"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vue : Demandes -->
+    <section id="view-requests" style="display:none">
+      <div class="toolbar">
+        <label class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="search" placeholder="Référence, nom, e-mail, demandeur…" />
+        </label>
+        <select id="app-filter"></select>
+        <div class="chips" id="chips">
+          <button class="chip on" data-status="">Toutes</button>
+          <button class="chip" data-status="en_attente">En attente</button>
+          <button class="chip" data-status="en_cours">En cours</button>
+          <button class="chip" data-status="terminee">Terminées</button>
+          <button class="chip" data-status="echec">Échecs</button>
+        </div>
+      </div>
+      <div class="table-wrap" style="overflow-x:auto">
+        <table class="data">
+          <thead>
+            <tr><th>Référence</th><th>Application</th><th>Bénéficiaire</th><th>Demandeur</th><th>Déposée le</th><th>Statut</th><th></th></tr>
+          </thead>
+          <tbody id="rows"><tr><td colspan="7" class="loading">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="backdrop2" id="backdrop"><div class="modal" id="modal"></div></div>
+
+  <footer class="footer">
+    <div class="inner">
+      <div class="col">
+        <div class="brand-foot"><span class="mark">A</span> Algonis Compte</div>
+        <p>Portail interne de création automatisée de comptes sur les applications métiers.</p>
+      </div>
+      <div class="col"><h5>Portail</h5><a href="/">Applications</a><a href="/suivi.html">Suivre une demande</a></div>
+      <div class="col"><h5>Admin</h5><a href="#overview">Vue d'ensemble</a><a href="#requests">Demandes</a></div>
+    </div>
+    <div class="bottom">
+      <span>© Algonis — Création automatisée de comptes.</span>
+      <a href="/" class="admin-link">← Retour au portail</a>
+    </div>
+  </footer>
 
   <script src="/js/common.js"></script>
+  <script src="/js/bg.js" type="module"></script>
   <script src="/js/charts.js"></script>
   <script src="/js/admin.js"></script>
+  <script src="/js/fx.js"></script>
 </body>
 </html>

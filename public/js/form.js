@@ -25,6 +25,8 @@
     return;
   }
 
+  // Le schéma vient de l'API (source unique de vérité : le backend inclut
+  // déjà la section « demandeur »). Aucun schéma local dupliqué.
   document.title = `${app.name} — Demande de compte`;
 
   const sections = app.schema.sections;

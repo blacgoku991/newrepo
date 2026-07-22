@@ -78,6 +78,11 @@ function formatDate(iso) {
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+/*
+ * Appels API STRICTS : aucune donnée simulée. Une erreur du serveur
+ * (validation 422, session expirée 401, panne) remonte telle quelle à
+ * l'interface — jamais de faux succès.
+ */
 async function fetchJson(url, options) {
   const res = await fetch(url, options);
   const body = await res.json().catch(() => ({}));

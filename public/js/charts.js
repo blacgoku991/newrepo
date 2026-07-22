@@ -2,17 +2,17 @@
 
 /*
  * Petits graphiques en SVG inline — aucune dépendance externe.
- * Palette cohérente avec le système de design (vert-sapin + terracotta).
+ * Palette néon cohérente avec le design Algonis (cyan / violet / magenta).
  */
 
 const CHART = {
-  pine: '#0f5f4d',
-  terra: '#bd5a39',
-  gold: '#b0812f',
-  info: '#2b5f8a',
-  line: '#e4ddce',
-  muted: '#7c7566',
-  ink: '#1a1712',
+  pine: '#22d3ee',   /* série principale : cyan */
+  terra: '#ff5ec4',  /* série secondaire : magenta */
+  gold: '#ffb865',   /* accent : ambre */
+  info: '#6a95ff',
+  line: 'rgba(148,180,255,0.14)',
+  muted: '#5f6698',
+  ink: '#eef1ff',
 };
 
 function chartEmpty(msg) {
