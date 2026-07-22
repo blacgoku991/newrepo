@@ -56,13 +56,19 @@ const STATUS_LABELS = {
   echec: 'Échec',
 };
 
-function icon(name) {
-  return ICONS[name] || ICONS.folder;
-}
+function icon(name) { return ICONS[name] || ICONS.folder; }
 
 function statusBadge(status) {
   const label = STATUS_LABELS[status] || status;
   return `<span class="badge st-${status}">${label}</span>`;
+}
+
+/* Visuel d'une application : logo réel si disponible, sinon pastille (initiale + couleur). */
+function appVisual(app, cls) {
+  if (app.logo) {
+    return `<img class="logo ${cls || ''}" src="${escapeHtml(app.logo)}" alt="${escapeHtml(app.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'logo-fallback ${cls||''}',textContent:'${escapeHtml((app.name||'?').charAt(0))}',style:'background:${escapeHtml(app.color||'#2f5fda')}'}))" />`;
+  }
+  return `<span class="logo-fallback ${cls || ''}" style="background:${escapeHtml(app.color || '#2f5fda')}">${escapeHtml((app.name || '?').charAt(0))}</span>`;
 }
 
 function escapeHtml(value) {
@@ -78,11 +84,7 @@ function formatDate(iso) {
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-/*
- * Appels API STRICTS : aucune donnée simulée. Une erreur du serveur
- * (validation 422, session expirée 401, panne) remonte telle quelle à
- * l'interface — jamais de faux succès.
- */
+/* Appels API stricts : toute erreur serveur remonte telle quelle (jamais de faux succès). */
 async function fetchJson(url, options) {
   const res = await fetch(url, options);
   const body = await res.json().catch(() => ({}));

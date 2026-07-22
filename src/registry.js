@@ -47,6 +47,7 @@ function publicList() {
       category: config.category,
       description: config.description,
       icon: config.icon,
+      logo: config.logo || null,
       color: config.color,
       comingSoon: !!config.comingSoon,
       order: config.order ?? 99,

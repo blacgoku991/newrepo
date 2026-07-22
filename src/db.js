@@ -57,6 +57,47 @@ db.exec(`
     expires_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES admin_users(id) ON DELETE CASCADE
   );
+
+  -- Surcharges des formulaires, éditées depuis le panel admin.
+  -- data (JSON) : { patches:{champ:{...}}, hidden:[champ], added:[{section,field}], order:{section:[champs]} }
+  CREATE TABLE IF NOT EXISTS form_overrides (
+    app_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT NOT NULL DEFAULT ''
+  );
+
+  -- Surcharges des scénarios du robot, éditées depuis le panel admin.
+  -- data (JSON) : { disabled:[stepId], selectors:{chemin:valeur}, custom:[{id,after,label,action,selector,value,sourceField}] }
+  CREATE TABLE IF NOT EXISTS scenario_overrides (
+    app_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT NOT NULL DEFAULT ''
+  );
+
+  -- Journal des modifications faites dans l'admin (qui, quand, quoi).
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT NOT NULL DEFAULT '',
+    details TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Boîte d'envoi des e-mails d'identifiants.
+  CREATE TABLE IF NOT EXISTS outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL,
+    to_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body_text TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'a_envoyer',  -- a_envoyer | envoye | erreur
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_at TEXT
+  );
 `);
 
 // Migration : ajoute les colonnes récentes aux bases créées avant leur introduction.
@@ -66,6 +107,10 @@ if (!columns.includes('artifacts')) {
 }
 if (!columns.includes('demandeur')) {
   db.exec(`ALTER TABLE requests ADD COLUMN demandeur TEXT NOT NULL DEFAULT ''`);
+}
+const adminCols = db.prepare(`PRAGMA table_info(admin_users)`).all().map((c) => c.name);
+if (!adminCols.includes('disabled')) {
+  db.exec(`ALTER TABLE admin_users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0`);
 }
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
@@ -226,6 +271,84 @@ const api = {
 
   purgeExpiredSessions() {
     db.prepare(`DELETE FROM admin_sessions WHERE expires_at <= datetime('now')`).run();
+  },
+
+  // --- Surcharges (éditeurs du panel admin) ---------------------------------
+
+  getFormOverrides(appId) {
+    const row = db.prepare(`SELECT data FROM form_overrides WHERE app_id = ?`).get(appId);
+    try { return row ? JSON.parse(row.data) : {}; } catch { return {}; }
+  },
+
+  setFormOverrides(appId, data, admin) {
+    db.prepare(
+      `INSERT INTO form_overrides (app_id, data, updated_at, updated_by)
+       VALUES (?, ?, datetime('now'), ?)
+       ON CONFLICT(app_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at, updated_by=excluded.updated_by`
+    ).run(appId, JSON.stringify(data), admin);
+  },
+
+  getScenarioOverrides(appId) {
+    const row = db.prepare(`SELECT data FROM scenario_overrides WHERE app_id = ?`).get(appId);
+    try { return row ? JSON.parse(row.data) : {}; } catch { return {}; }
+  },
+
+  setScenarioOverrides(appId, data, admin) {
+    db.prepare(
+      `INSERT INTO scenario_overrides (app_id, data, updated_at, updated_by)
+       VALUES (?, ?, datetime('now'), ?)
+       ON CONFLICT(app_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at, updated_by=excluded.updated_by`
+    ).run(appId, JSON.stringify(data), admin);
+  },
+
+  audit(admin, action, target = '', details = '') {
+    db.prepare(`INSERT INTO audit_log (admin, action, target, details) VALUES (?, ?, ?, ?)`)
+      .run(admin, action, target, typeof details === 'string' ? details : JSON.stringify(details));
+  },
+
+  listAudit(limit = 50) {
+    return db.prepare(`SELECT * FROM audit_log ORDER BY id DESC LIMIT ?`).all(limit);
+  },
+
+  // --- Boîte d'envoi des e-mails --------------------------------------------
+
+  createOutbox(requestId, toEmail, subject, bodyText) {
+    const info = db
+      .prepare(`INSERT INTO outbox (request_id, to_email, subject, body_text) VALUES (?, ?, ?, ?)`)
+      .run(requestId, toEmail, subject, bodyText);
+    return info.lastInsertRowid;
+  },
+
+  getOutbox(id) {
+    return db.prepare(`SELECT * FROM outbox WHERE id = ?`).get(id);
+  },
+
+  listOutbox() {
+    return db
+      .prepare(
+        `SELECT o.*, r.reference FROM outbox o LEFT JOIN requests r ON r.id = o.request_id ORDER BY o.id DESC LIMIT 200`
+      )
+      .all();
+  },
+
+  outboxForRequest(requestId) {
+    return db.prepare(`SELECT * FROM outbox WHERE request_id = ? ORDER BY id DESC`).all(requestId);
+  },
+
+  setOutboxStatus(id, status, error = null) {
+    db.prepare(
+      `UPDATE outbox SET status = ?, error = ?, sent_at = CASE WHEN ? = 'envoye' THEN datetime('now') ELSE sent_at END WHERE id = ?`
+    ).run(status, error, status, id);
+  },
+
+  // --- Comptes admin (gestion) ----------------------------------------------
+
+  setAdminDisabled(id, disabled) {
+    db.prepare(`UPDATE admin_users SET disabled = ? WHERE id = ?`).run(disabled ? 1 : 0, id);
+  },
+
+  countActiveAdmins() {
+    return db.prepare(`SELECT COUNT(*) AS n FROM admin_users WHERE disabled = 0`).get().n;
   },
 
   // --- Application de démonstration -----------------------------------------

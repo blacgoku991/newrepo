@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64" role="img" aria-label="BlueKanGo">
+  <rect x="4" y="10" width="44" height="44" rx="10" fill="#1d6fe0"/>
+  <text x="26" y="41" font-family="Arial,Helvetica,sans-serif" font-size="24" font-weight="700" fill="#fff" text-anchor="middle">B</text>
+  <text x="58" y="41" font-family="Arial,Helvetica,sans-serif" font-size="24" font-weight="700" fill="#1d3557">Blue<tspan fill="#1d6fe0">KanGo</tspan></text>
+</svg>

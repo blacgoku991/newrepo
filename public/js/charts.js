@@ -2,17 +2,17 @@
 
 /*
  * Petits graphiques en SVG inline — aucune dépendance externe.
- * Palette néon cohérente avec le design Algonis (cyan / violet / magenta).
+ * Palette claire cohérente avec le design du portail (bleu / ambre / violet).
  */
 
 const CHART = {
-  pine: '#22d3ee',   /* série principale : cyan */
-  terra: '#ff5ec4',  /* série secondaire : magenta */
-  gold: '#ffb865',   /* accent : ambre */
-  info: '#6a95ff',
-  line: 'rgba(148,180,255,0.14)',
-  muted: '#5f6698',
-  ink: '#eef1ff',
+  pine: '#2f5fda',   /* série principale : bleu accent */
+  terra: '#b54708',  /* série secondaire : ambre foncé */
+  gold: '#7a5af8',   /* accent : violet doux */
+  info: '#175cd3',
+  line: '#e4e7ec',
+  muted: '#667085',
+  ink: '#101828',
 };
 
 function chartEmpty(msg) {

@@ -11,11 +11,23 @@
 
 const { getMode } = require('../../automation/helpers');
 const { runScenario } = require('../../automation/engine');
+const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
 const demo = require('../../automation/demoDriver');
 const config = require('./config');
-const S = require('./selectors');
+const BASE_SELECTORS = require('./selectors');
 
 const ENV = ['NETSOINS_URL', 'NETSOINS_ADMIN_USER', 'NETSOINS_ADMIN_PASSWORD'];
+
+/** Métadonnées des étapes pour l'éditeur de scénario (toutes critiques : sélecteurs modifiables, étapes personnalisées insérables). */
+const STEPS_META = [
+  { id: 'ouverture', label: 'Ouverture de NetSoins', critical: true, selectorKeys: [] },
+  { id: 'connexion', label: 'Connexion administrateur', critical: true, selectorKeys: ['login.user', 'login.password', 'login.submit'] },
+  { id: 'etablissement', label: "Sélection de l'établissement", critical: true, selectorKeys: ['etablissementSelect'] },
+  { id: 'menu', label: 'Paramétrage > Personnel > Ajouter', critical: true, selectorKeys: [] },
+  { id: 'fiche', label: 'Saisie de la fiche', critical: true, selectorKeys: ['form.nom', 'form.prenom', 'form.email'] },
+  { id: 'acces', label: "Période d'accès et droits", critical: true, selectorKeys: ['form.dateDebut', 'form.droitsMedicament'] },
+  { id: 'enregistrement', label: 'Enregistrement et vérification', critical: true, selectorKeys: ['form.save', 'form.successProof'] },
+];
 
 async function createAccount(data, ctx) {
   if (getMode(ENV) === 'demo') {
@@ -23,6 +35,7 @@ async function createAccount(data, ctx) {
     return demo.createAccount(config, data, ctx);
   }
 
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
   const base = process.env.NETSOINS_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
 
@@ -30,12 +43,16 @@ async function createAccount(data, ctx) {
     reference: ctx.reference,
     log: ctx.log,
     successMessage: `Compte NetSoins créé pour ${fullName}`,
-    steps: [
+    steps: composeSteps(config.id, [
       {
+        id: 'ouverture',
+        critical: true,
         label: 'Ouverture de NetSoins',
         run: (page) => page.goto(base),
       },
       {
+        id: 'connexion',
+        critical: true,
         label: 'Connexion avec le compte administrateur',
         run: async (page) => {
           await page.fill(S.login.user, process.env.NETSOINS_ADMIN_USER);
@@ -45,10 +62,14 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'etablissement',
+        critical: true,
         label: `Sélection de l'établissement « ${data.etablissement} »`,
         run: (page) => page.selectOption(S.etablissementSelect, data.etablissement),
       },
       {
+        id: 'menu',
+        critical: true,
         label: 'Ouverture de Paramétrage > Personnel > Ajouter',
         run: async (page) => {
           await page.click(S.menu.parametrage);
@@ -57,6 +78,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'fiche',
+        critical: true,
         label: `Saisie de la fiche (${fullName})`,
         run: async (page) => {
           await page.fill(S.form.nom, data.nom);
@@ -69,6 +92,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'acces',
+        critical: true,
         label: "Saisie de la période d'accès et des droits",
         run: async (page) => {
           await page.fill(S.form.dateDebut, data.date_debut);
@@ -77,14 +102,16 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'enregistrement',
+        critical: true,
         label: 'Enregistrement et vérification',
         run: async (page) => {
           await page.click(S.form.save);
           await page.waitForSelector(S.form.successProof);
         },
       },
-    ],
+    ], data, ctx.log),
   });
 }
 
-module.exports = { createAccount };
+module.exports = { createAccount, STEPS_META };

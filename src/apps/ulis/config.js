@@ -10,6 +10,8 @@ module.exports = {
   color: '#7c3aed',
   order: 3,
   referencePrefix: 'ULS',
+  // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
+  robotFields: ['nom', 'prenom', 'matricule', 'email', 'direction', 'role', 'perimetre', 'date_debut'],
 
   formSchema: {
     intro:

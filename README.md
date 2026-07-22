@@ -68,6 +68,27 @@ Le tableau de bord affiche : comptes créés, taux de réussite, activité sur
 14 jours, répartition par application / établissement / fonction, et
 **qui a demandé chaque compte** (le formulaire capture le demandeur).
 
+Le panel d'administration permet aussi, sans toucher au code :
+
+- **Éditeur de formulaires** : modifier libellés/aide/placeholder, rendre un
+  champ obligatoire ou non, masquer un champ, **ajouter ses propres champs**
+  (surcharges en base, table `form_overrides`). Les champs saisis par le robot
+  (`config.robotFields`) sont verrouillés (non supprimables/masquables).
+- **Éditeur de scénarios** : voir les étapes du robot par application,
+  **modifier un sélecteur** si l'interface cible a changé, **désactiver** une
+  étape non critique, **insérer une étape personnalisée** (`scenario_overrides`).
+  Les étapes critiques (connexion, enregistrement…) ne sont jamais désactivables.
+- **Comptes admin** : créer, changer le mot de passe, activer/désactiver.
+- **E-mails d'identifiants** : après création réussie, un e-mail
+  (application, identifiant généré, mot de passe initial, référence) est envoyé
+  au bénéficiaire/demandeur via SMTP (variables `SMTP_*`), ou déposé dans une
+  **boîte d'envoi** consultable dans l'admin si SMTP n'est pas configuré.
+  Le mot de passe initial n'est jamais stocké en base — uniquement dans l'e-mail.
+- **Réglages** : mode du robot (démo/production), état SMTP, et pour chaque
+  application l'état « configuré / non configuré » de ses variables d'environnement.
+
+Toutes les modifications de l'admin sont journalisées (`audit_log`).
+
 ## Modes du robot
 
 | Mode | Cible | Activation |

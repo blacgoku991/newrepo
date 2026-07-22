@@ -3,96 +3,62 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Connexion administration — Algonis Compte</title>
+  <title>Connexion — Administration</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%232f5fda'/><text x='50' y='70' font-size='54' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>P</text></svg>" />
 </head>
-<body>
-  <div class="page-veil"></div>
-  <canvas id="bg-canvas" aria-hidden="true"></canvas>
-  <div class="grain" aria-hidden="true"></div>
-  <header class="topbar">
-    <div class="inner">
-      <a class="brand" href="/">
-        <span class="mark">A</span>
-        <span class="name"><b>Algonis</b> <span>Compte</span></span>
-      </a>
-      <nav class="topnav">
-        <a href="/">Applications</a>
-        <a href="/suivi.html">Suivre une demande</a>
-      </nav>
+<body class="auth">
+  <form class="login" id="login-form" novalidate>
+    <div class="lmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+    <h1>Espace administration</h1>
+    <p class="sub">Connectez-vous pour accéder au tableau de bord.</p>
+    <div class="alert alert-err" id="err" style="display:none;margin-bottom:15px"></div>
+    <div class="field">
+      <label for="username">Identifiant</label>
+      <input type="text" id="username" autocomplete="username" required autofocus />
     </div>
-  </header>
-
-  <main class="auth-shell">
-    <div class="auth-card">
-      <span class="eyebrow" style="display:flex;justify-content:center;margin-bottom:12px;">Administration</span>
-      <h1>Connexion</h1>
-      <p class="sub">Gestion des demandes, applications et traitements.</p>
-      <form id="login-form">
-        <div class="field">
-          <label for="username">Identifiant</label>
-          <input id="username" name="username" type="text" required autocomplete="username" autofocus />
-        </div>
-        <div class="field">
-          <label for="password">Mot de passe</label>
-          <input id="password" name="password" type="password" required autocomplete="current-password" />
-        </div>
-        <div id="login-error"></div>
-        <div class="form-actions" style="justify-content:stretch;">
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;" id="login-btn">Se connecter</button>
-        </div>
-      </form>
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" autocomplete="current-password" required />
     </div>
-  </main>
-
-  <footer class="footer">
-    <div class="inner">
-      <div class="col">
-        <div class="brand-foot"><span class="mark">A</span> Algonis Compte</div>
-        <p>Portail interne de création automatisée de comptes sur les applications métiers.</p>
-      </div>
-      <div class="col"><h5>Portail</h5><a href="/">Applications</a><a href="/suivi.html">Suivre une demande</a></div>
-      <div class="col"><h5>Ressources</h5><a href="#">Documentation</a><a href="#">Nous contacter</a></div>
-    </div>
-    <div class="bottom">
-      <span>© Algonis — Création automatisée de comptes.</span>
-      <a href="/" class="admin-link">← Retour au portail</a>
-    </div>
-  </footer>
+    <button type="submit" class="btn btn-primary btn-block" id="login-btn" style="margin-top:8px">Se connecter</button>
+    <p class="foot">Portail Comptes — accès réservé au personnel autorisé.</p>
+  </form>
 
   <script src="/js/common.js"></script>
-  <script src="/js/bg.js" type="module"></script>
-  <script src="/js/fx.js"></script>
   <script>
-    // Déjà connecté ? direction le tableau de bord.
-    fetchJson('/api/auth/me').then(() => { window.location.href = '/admin.html'; }).catch(() => {});
-
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const errBox = document.getElementById('login-error');
+    (function () {
+      const form = document.getElementById('login-form');
+      const err = document.getElementById('err');
       const btn = document.getElementById('login-btn');
-      errBox.innerHTML = '';
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Connexion…';
-      try {
-        await fetchJson('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: document.getElementById('username').value,
-            password: document.getElementById('password').value,
-          }),
-        });
-        window.location.href = '/admin.html';
-      } catch (err) {
-        errBox.innerHTML = `<div class="alert alert-err">${escapeHtml(err.message)}</div>`;
-        btn.disabled = false;
-        btn.textContent = 'Se connecter';
-      }
-    });
+      const next = new URLSearchParams(location.search).get('next') || '/admin.html';
+      fetchJson('/api/auth/me').then(() => { location.href = next; }).catch(() => {});
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.style.display = 'none';
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Connexion…';
+        try {
+          await fetchJson('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: document.getElementById('username').value,
+              password: document.getElementById('password').value,
+            }),
+          });
+          location.href = next;
+        } catch (ex) {
+          err.textContent = ex.message;
+          err.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Se connecter';
+        }
+      });
+    })();
   </script>
 </body>
 </html>

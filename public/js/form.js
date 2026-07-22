@@ -66,7 +66,7 @@
     content.innerHTML = `
       <div class="panel form-card">
         <div class="form-head">
-          <span class="tile" style="background:${escapeHtml(app.color)}">${icon(app.icon)}</span>
+          ${appVisual(app)}
           <div>
             <h2>${escapeHtml(app.name)}</h2>
             <div class="cat">${escapeHtml(app.category)}</div>

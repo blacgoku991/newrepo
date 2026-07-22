@@ -1,0 +1,105 @@
+'use strict';
+
+/**
+ * Envoi des e-mails d'identifiants après création réussie d'un compte.
+ *
+ * - Si SMTP est configuré (SMTP_HOST + SMTP_USER + SMTP_PASS), on envoie
+ *   réellement via nodemailer.
+ * - Sinon, l'e-mail est simplement déposé dans la boîte d'envoi (table outbox,
+ *   visible dans le panel admin) avec le statut « à envoyer » : l'admin peut
+ *   copier le message et le transmettre à la main.
+ *
+ * Le mot de passe initial n'est JAMAIS stocké dans la table requests : il ne
+ * vit que dans le corps de l'e-mail (outbox / SMTP).
+ */
+
+const db = require('./db');
+const registry = require('./registry');
+const { generateLogin } = require('./automation/identifiants');
+
+function smtpConfigured() {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+function buildMessage(appName, data, reference) {
+  const login = data.prenom && data.nom ? generateLogin(data.prenom, data.nom) : null;
+  // Le mot de passe initial dépend de l'application (BlueKanGo pour l'instant).
+  const initialPassword = process.env.BLUEKANGO_DEFAULT_PASSWORD || null;
+  const beneficiaire = `${data.prenom || ''} ${data.nom || ''}`.trim();
+
+  const lines = [
+    `Bonjour${beneficiaire ? ' ' + beneficiaire : ''},`,
+    '',
+    `Votre compte ${appName} a été créé.`,
+    '',
+    `Application    : ${appName}`,
+  ];
+  if (login) lines.push(`Identifiant    : ${login}`);
+  if (initialPassword) lines.push(`Mot de passe   : ${initialPassword}`);
+  lines.push(`Référence      : ${reference}`);
+  lines.push('');
+  if (initialPassword) {
+    lines.push('⚠ Ce mot de passe est provisoire : il vous sera demandé de le');
+    lines.push('  changer lors de votre première connexion.');
+    lines.push('');
+  }
+  lines.push('Cet e-mail est généré automatiquement par le portail de création de comptes.');
+
+  return {
+    subject: `Votre compte ${appName} — identifiants de connexion`,
+    text: lines.join('\n'),
+  };
+}
+
+/** Destinataire : bénéficiaire en priorité, sinon demandeur. */
+function pickRecipient(data) {
+  return (data.email || '').trim() || (data._demandeur_email || '').trim() || '';
+}
+
+/**
+ * Prépare et tente l'envoi de l'e-mail d'identifiants pour une demande terminée.
+ * Retourne { queuedId, sent } ou null si aucun destinataire.
+ */
+async function sendCredentials(request) {
+  const data = JSON.parse(request.payload);
+  const to = pickRecipient(data);
+  if (!to) return null;
+
+  const appEntry = registry.get(request.app_id);
+  const appName = appEntry ? appEntry.config.name : request.app_id;
+  const { subject, text } = buildMessage(appName, data, request.reference);
+
+  const outboxId = db.createOutbox(request.id, to, subject, text);
+  await deliver(outboxId);
+  return { queuedId: outboxId, sent: smtpConfigured() };
+}
+
+/** Tente l'envoi SMTP d'un e-mail de la boîte d'envoi (met à jour son statut). */
+async function deliver(outboxId) {
+  const mail = db.getOutbox(outboxId);
+  if (!mail) return;
+  if (!smtpConfigured()) {
+    // Pas de SMTP : reste « à envoyer » pour traitement manuel dans l'admin.
+    return;
+  }
+  try {
+    const nodemailer = require('nodemailer');
+    const transport = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: String(process.env.SMTP_SECURE || 'false') === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+    await transport.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      to: mail.to_email,
+      subject: mail.subject,
+      text: mail.body_text,
+    });
+    db.setOutboxStatus(outboxId, 'envoye');
+  } catch (err) {
+    db.setOutboxStatus(outboxId, 'erreur', String(err.message).slice(0, 300));
+  }
+}
+
+module.exports = { sendCredentials, deliver, smtpConfigured };

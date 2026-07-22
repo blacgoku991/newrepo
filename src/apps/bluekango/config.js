@@ -21,7 +21,10 @@ module.exports = {
   icon: 'shield',
   color: '#2563eb',
   order: 1,
+  logo: '/img/bluekango',
   referencePrefix: 'BKG',
+  // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
+  robotFields: ['civilite', 'nom', 'prenom', 'etablissement', 'fonction'],
 
   formSchema: {
     intro:

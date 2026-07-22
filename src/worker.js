@@ -47,6 +47,18 @@ async function processOne(request) {
     if (result && result.success) {
       log('Compte créé avec succès');
       db.markFinished(request.id, true, result.message || 'Compte créé avec succès', logs, artifacts);
+      // Envoi (ou mise en boîte d'envoi) de l'e-mail d'identifiants.
+      try {
+        const mailer = require('./mailer');
+        const outcome = await mailer.sendCredentials(db.getById(request.id));
+        if (outcome) {
+          log(outcome.sent ? 'E-mail d’identifiants envoyé' : 'E-mail d’identifiants mis en boîte d’envoi (SMTP non configuré)');
+        } else {
+          log('Aucun destinataire e-mail : pas d’envoi d’identifiants');
+        }
+      } catch (mailErr) {
+        log(`Envoi e-mail impossible : ${mailErr.message}`);
+      }
     } else {
       const msg = (result && result.message) || 'Le scénario a signalé un échec';
       log(`Échec : ${msg}`);

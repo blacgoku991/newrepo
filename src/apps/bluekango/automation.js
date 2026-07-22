@@ -23,9 +23,11 @@
 
 const { getMode } = require('../../automation/helpers');
 const { runScenario } = require('../../automation/engine');
+const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
+const { generateLogin } = require('../../automation/identifiants');
 const demo = require('../../automation/demoDriver');
 const config = require('./config');
-const S = require('./selectors');
+const BASE_SELECTORS = require('./selectors');
 
 const ENV = [
   'BLUEKANGO_URL',
@@ -34,16 +36,21 @@ const ENV = [
   'BLUEKANGO_DEFAULT_PASSWORD',
 ];
 
-/** "Marie" + "DUPONT-DURAND" → "mdupontdurand" (sans accents ni caractères spéciaux). */
-function generateLogin(prenom, nom) {
-  const clean = (s) =>
-    String(s)
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z]/g, '');
-  return (clean(prenom).charAt(0) || '') + clean(nom);
-}
+/**
+ * Métadonnées des étapes natives, affichées dans l'éditeur de scénario du
+ * panel admin. `critical: true` = jamais désactivable. `selectorKeys` = chemins
+ * de sélecteurs (dans selectors.js) modifiables depuis l'admin.
+ */
+const STEPS_META = [
+  { id: 'ouverture', label: 'Ouverture de BlueKanGo', critical: true, selectorKeys: [] },
+  { id: 'connexion', label: 'Connexion avec le compte administrateur', critical: true, selectorKeys: [] },
+  { id: 'menu-utilisateurs', label: 'Administration > Gestion des ressources > Utilisateurs', critical: true, selectorKeys: [] },
+  { id: 'etablissement', label: "Vérification / bascule de l'établissement", critical: true, selectorKeys: [] },
+  { id: 'duplication', label: 'Duplication d’un utilisateur ayant la fonction demandée', critical: true, selectorKeys: ['userList.duplicateButton'] },
+  { id: 'identite', label: 'Saisie de l’identité (nom, prénom, civilité)', critical: true, selectorKeys: ['form.nom', 'form.prenom'] },
+  { id: 'identifiants', label: 'Création des identifiants de connexion', critical: true, selectorKeys: ['form.loginField', 'form.password', 'form.password2', 'form.reinitCheckbox'] },
+  { id: 'enregistrement', label: 'Enregistrement de la fiche (Valider)', critical: true, selectorKeys: [] },
+];
 
 /**
  * Recherche le select d'établissement (« Etablissements : XXX » en haut à
@@ -84,19 +91,18 @@ async function createAccount(data, ctx) {
     config.formSchema.sections[1].fields[0].options.find((o) => o.value === data.etablissement)
       ?.label || data.etablissement;
 
+  // Sélecteurs : base du code + remplacements édités dans le panel admin.
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+
   // Cadres BlueKanGo (résolus à la demande car les iframes se rechargent).
   let page;
   const main = () => page.frameLocator(S.frames.main);
   const fancy = () => main().frameLocator(S.frames.fancybox);
 
-  return runScenario({
-    reference: ctx.reference,
-    log: ctx.log,
-    successMessage:
-      `Compte BlueKanGo créé pour ${fullName} — identifiant « ${login} », ` +
-      `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)`,
-    steps: [
+  const nativeSteps = [
       {
+        id: 'ouverture',
+        critical: true,
         label: 'Ouverture de BlueKanGo',
         run: (p) => {
           page = p;
@@ -104,6 +110,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'connexion',
+        critical: true,
         label: 'Connexion avec le compte administrateur',
         run: async () => {
           await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
@@ -116,6 +124,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'menu-utilisateurs',
+        critical: true,
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
           await page.getByText(S.nav.administration).first().click();
@@ -124,6 +134,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'etablissement',
+        critical: true,
         label: `Vérification de l'établissement (« ${etabLabel} »)`,
         run: async () => {
           // Le select d'établissement (« Etablissements : XXX ») vit dans une
@@ -149,6 +161,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'duplication',
+        critical: true,
         label: `Duplication d'un utilisateur ayant la fonction « ${data.fonction} »`,
         run: async () => {
           const list = main().frameLocator(S.frames.userList);
@@ -208,6 +222,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'identite',
+        critical: true,
         label: `Saisie de l'identité (${fullName})`,
         run: async () => {
           await fancy().locator(S.form.nom).fill(data.nom.toUpperCase());
@@ -217,6 +233,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'identifiants',
+        critical: true,
         label: `Création des identifiants de connexion (identifiant « ${login} »)`,
         run: async () => {
           await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
@@ -228,6 +246,8 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'enregistrement',
+        critical: true,
         label: 'Enregistrement de la fiche',
         run: async () => {
           await main().getByRole('button', { name: S.form.validerLabel }).click();
@@ -238,8 +258,16 @@ async function createAccount(data, ctx) {
             .catch(() => {});
         },
       },
-    ],
+  ];
+
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    successMessage:
+      `Compte BlueKanGo créé pour ${fullName} — identifiant « ${login} », ` +
+      `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)`,
+    steps: composeSteps(config.id, nativeSteps, data, ctx.log),
   });
 }
 
-module.exports = { createAccount };
+module.exports = { createAccount, STEPS_META };
