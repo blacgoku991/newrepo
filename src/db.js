@@ -86,6 +86,19 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Comptes réellement créés par le robot (pour l'unicité des identifiants
+  -- et la visibilité côté admin). L'identifiant est unique par application.
+  CREATE TABLE IF NOT EXISTS created_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id TEXT NOT NULL,
+    login TEXT NOT NULL,
+    nom TEXT NOT NULL DEFAULT '',
+    prenom TEXT NOT NULL DEFAULT '',
+    reference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (app_id, login)
+  );
+
   -- Boîte d'envoi des e-mails d'identifiants.
   CREATE TABLE IF NOT EXISTS outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +124,9 @@ if (!columns.includes('demandeur')) {
 const adminCols = db.prepare(`PRAGMA table_info(admin_users)`).all().map((c) => c.name);
 if (!adminCols.includes('disabled')) {
   db.exec(`ALTER TABLE admin_users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0`);
+}
+if (!columns.includes('generated_login')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN generated_login TEXT NOT NULL DEFAULT ''`);
 }
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
@@ -198,6 +214,28 @@ const api = {
       out.total += r.n;
     }
     return out;
+  },
+
+  // --- Comptes créés & identifiants uniques ---------------------------------
+
+  loginExists(appId, login) {
+    return !!db
+      .prepare(`SELECT 1 FROM created_accounts WHERE app_id = ? AND login = ?`)
+      .get(appId, login);
+  },
+
+  recordAccount(appId, login, nom, prenom, reference) {
+    db.prepare(
+      `INSERT OR IGNORE INTO created_accounts (app_id, login, nom, prenom, reference) VALUES (?, ?, ?, ?, ?)`
+    ).run(appId, login, nom || '', prenom || '', reference || '');
+  },
+
+  setRequestLogin(id, login) {
+    db.prepare(`UPDATE requests SET generated_login = ? WHERE id = ?`).run(login || '', id);
+  },
+
+  listCreatedAccounts(limit = 200) {
+    return db.prepare(`SELECT * FROM created_accounts ORDER BY id DESC LIMIT ?`).all(limit);
   },
 
   // --- Statistiques détaillées (tableau de bord) ----------------------------

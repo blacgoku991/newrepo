@@ -35,11 +35,13 @@
   const NAV = {
     overview: { ic: 'grid', label: "Vue d'ensemble", h1: "Vue d'ensemble", sub: 'Statistiques de création de comptes' },
     requests: { ic: 'list', label: 'Demandes', h1: 'Demandes', sub: 'Toutes les demandes et leur traitement' },
+    accounts: { ic: 'users', label: 'Comptes créés', h1: 'Comptes créés', sub: 'Identifiants attribués par le robot' },
     emails: { ic: 'inbox', label: 'E-mails', h1: "E-mails d'identifiants", sub: "Boîte d'envoi des identifiants de connexion" },
     forms: { ic: 'briefcase', label: 'Formulaires', h1: 'Éditeur de formulaires', sub: 'Champs demandés pour chaque application' },
     scenarios: { ic: 'bot', label: 'Scénarios robot', h1: 'Éditeur de scénarios', sub: 'Étapes du robot pour chaque application' },
     users: { ic: 'users', label: 'Comptes admin', h1: 'Comptes administrateurs', sub: 'Accès à cet espace' },
     settings: { ic: 'lock', label: 'Réglages', h1: 'Réglages', sub: 'Mode du robot, e-mail, configuration' },
+    journal: { ic: 'list', label: "Journal d'activité", h1: "Journal d'activité", sub: 'Toutes les modifications faites dans l\'admin' },
   };
 
   function setup() {
@@ -81,11 +83,54 @@
 
     clearInterval(refreshTimer);
     if (view === 'overview' || view === 'requests') { refreshDashboard(); refreshTimer = setInterval(refreshDashboard, 5000); }
+    else if (view === 'accounts') loadAccounts();
     else if (view === 'emails') loadEmails();
     else if (view === 'forms') loadFormsEditor();
     else if (view === 'scenarios') loadScenariosEditor();
     else if (view === 'users') loadUsers();
     else if (view === 'settings') loadSettings();
+    else if (view === 'journal') loadJournal();
+  }
+
+  // ========================================================================
+  // Comptes créés
+  // ========================================================================
+  let accountsData = [];
+  async function loadAccounts() {
+    try { accountsData = (await fetchJson('/api/admin/accounts')).accounts; } catch (e) { el('accounts-rows').innerHTML = `<tr><td colspan="5" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
+    el('acc-search').oninput = renderAccounts;
+    renderAccounts();
+  }
+  function renderAccounts() {
+    const q = el('acc-search').value.trim().toLowerCase();
+    const rows = accountsData.filter((a) => !q || `${a.login} ${a.prenom} ${a.nom} ${a.reference}`.toLowerCase().includes(q));
+    el('accounts-rows').innerHTML = rows.length ? rows.map((a) => `<tr>
+      <td><span class="ref">${escapeHtml(a.login)}</span></td>
+      <td>${escapeHtml(`${a.prenom} ${a.nom}`.trim() || '—')}</td>
+      <td>${escapeHtml(a.app)}</td>
+      <td>${escapeHtml(a.reference || '—')}</td>
+      <td>${formatDate(a.createdAt)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="loading">Aucun compte créé pour le moment.</td></tr>';
+  }
+
+  // ========================================================================
+  // Journal d'activité
+  // ========================================================================
+  const AUDIT_LABELS = {
+    maj_formulaire: 'Formulaire modifié', maj_scenario: 'Scénario modifié',
+    relance_demande: 'Demande relancée', creation_admin: 'Compte admin créé',
+    maj_mdp_admin: 'Mot de passe modifié', desactivation_admin: 'Compte désactivé',
+    reactivation_admin: 'Compte réactivé', renvoi_email: 'E-mail renvoyé', email_marque_envoye: 'E-mail marqué envoyé',
+  };
+  async function loadJournal() {
+    let data;
+    try { data = await fetchJson('/api/admin/audit'); } catch (e) { el('journal-rows').innerHTML = `<tr><td colspan="4" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
+    el('journal-rows').innerHTML = data.entries.length ? data.entries.map((e) => `<tr>
+      <td>${formatDate(e.created_at)}</td>
+      <td><b>${escapeHtml(e.admin)}</b></td>
+      <td>${escapeHtml(AUDIT_LABELS[e.action] || e.action)}</td>
+      <td>${escapeHtml(e.target || '—')}</td>
+    </tr>`).join('') : '<tr><td colspan="4" class="loading">Aucune activité enregistrée.</td></tr>';
   }
 
   // ========================================================================
@@ -180,7 +225,8 @@
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>Demande <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
-      ${r.message ? `<p style="margin-top:10px;font-size:.9rem"><strong>Résultat :</strong> ${escapeHtml(r.message)}</p>` : ''}
+      ${r.login ? `<p style="margin-top:8px;font-size:.9rem">Identifiant attribué : <span class="ref" style="font-size:.9rem">${escapeHtml(r.login)}</span></p>` : ''}
+      ${r.message ? `<p style="margin-top:8px;font-size:.9rem"><strong>Résultat :</strong> ${escapeHtml(r.message)}</p>` : ''}
       <h4>Informations saisies</h4><dl class="kv">${payloadRows}</dl>
       ${emails}
       <h4>Journal du robot</h4><div class="logbox">${logs}</div>${shots}

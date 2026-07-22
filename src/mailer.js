@@ -21,8 +21,10 @@ function smtpConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-function buildMessage(appName, data, reference) {
-  const login = data.prenom && data.nom ? generateLogin(data.prenom, data.nom) : null;
+function buildMessage(appName, data, reference, storedLogin) {
+  // On privilégie l'identifiant RÉELLEMENT attribué par le robot (unique) ;
+  // à défaut on recalcule la forme de base.
+  const login = storedLogin || (data.prenom && data.nom ? generateLogin(data.prenom, data.nom) : null);
   // Le mot de passe initial dépend de l'application (BlueKanGo pour l'instant).
   const initialPassword = process.env.BLUEKANGO_DEFAULT_PASSWORD || null;
   const beneficiaire = `${data.prenom || ''} ${data.nom || ''}`.trim();
@@ -67,7 +69,7 @@ async function sendCredentials(request) {
 
   const appEntry = registry.get(request.app_id);
   const appName = appEntry ? appEntry.config.name : request.app_id;
-  const { subject, text } = buildMessage(appName, data, request.reference);
+  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login);
 
   const outboxId = db.createOutbox(request.id, to, subject, text);
   await deliver(outboxId);

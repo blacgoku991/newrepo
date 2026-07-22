@@ -21,10 +21,11 @@
  * modèle" au codegen permettra d'ajouter la seconde variante du scénario.
  */
 
+const db = require('../../db');
 const { getMode } = require('../../automation/helpers');
 const { runScenario } = require('../../automation/engine');
 const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
-const { generateLogin } = require('../../automation/identifiants');
+const { pickUniqueLogin } = require('../../automation/identifiants');
 const demo = require('../../automation/demoDriver');
 const config = require('./config');
 const BASE_SELECTORS = require('./selectors');
@@ -79,14 +80,24 @@ async function findEtabSelect(page, timeout = 20000) {
 }
 
 async function createAccount(data, ctx) {
+  // Identifiant unique : 1re lettre du prénom + nom, en ajoutant des lettres du
+  // prénom si l'identifiant est déjà pris (voir identifiants.js).
+  const login = pickUniqueLogin(data.prenom, data.nom, (l) => db.loginExists(config.id, l));
+  ctx.log(`Identifiant retenu : « ${login} »`);
+  const account = { login, prenom: data.prenom, nom: data.nom };
+
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
-    return demo.createAccount(config, data, ctx);
+    const result = await demo.createAccount(config, data, ctx);
+    if (result.success) {
+      result.account = account;
+      result.message = `${result.message} — identifiant « ${login} »`;
+    }
+    return result;
   }
 
   const base = process.env.BLUEKANGO_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
-  const login = generateLogin(data.prenom, data.nom);
   const etabLabel =
     config.formSchema.sections[1].fields[0].options.find((o) => o.value === data.etablissement)
       ?.label || data.etablissement;
@@ -260,7 +271,7 @@ async function createAccount(data, ctx) {
       },
   ];
 
-  return runScenario({
+  const result = await runScenario({
     reference: ctx.reference,
     log: ctx.log,
     successMessage:
@@ -268,6 +279,8 @@ async function createAccount(data, ctx) {
       `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)`,
     steps: composeSteps(config.id, nativeSteps, data, ctx.log),
   });
+  if (result.success) result.account = account;
+  return result;
 }
 
 module.exports = { createAccount, STEPS_META };

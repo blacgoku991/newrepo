@@ -191,6 +191,7 @@ app.get('/api/admin/requests', auth.requireApi, (req, res) => {
       message: row.result_message,
       attempts: row.attempts,
       demandeur: row.demandeur,
+      login: row.generated_login || null,
       payload: JSON.parse(row.payload),
       logs: JSON.parse(row.logs),
       artifacts: JSON.parse(row.artifacts || '[]'),
@@ -360,7 +361,23 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
 });
 
 app.get('/api/admin/audit', auth.requireApi, (req, res) => {
-  res.json({ entries: db.listAudit(80) });
+  res.json({ entries: db.listAudit(120) });
+});
+
+app.get('/api/admin/accounts', auth.requireApi, (req, res) => {
+  const accounts = db.listCreatedAccounts(300).map((a) => {
+    const appEntry = registry.get(a.app_id);
+    return {
+      id: a.id,
+      app: appEntry ? appEntry.config.name : a.app_id,
+      login: a.login,
+      nom: a.nom,
+      prenom: a.prenom,
+      reference: a.reference,
+      createdAt: a.created_at,
+    };
+  });
+  res.json({ accounts });
 });
 
 // ---------------------------------------------------------------------------

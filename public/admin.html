@@ -21,12 +21,14 @@
         <span class="sep">Pilotage</span>
         <a data-view="overview" class="active" id="nav-overview"></a>
         <a data-view="requests" id="nav-requests"></a>
+        <a data-view="accounts" id="nav-accounts"></a>
         <a data-view="emails" id="nav-emails"></a>
         <span class="sep">Configuration</span>
         <a data-view="forms" id="nav-forms"></a>
         <a data-view="scenarios" id="nav-scenarios"></a>
         <a data-view="users" id="nav-users"></a>
         <a data-view="settings" id="nav-settings"></a>
+        <a data-view="journal" id="nav-journal"></a>
         <span class="sep">Site</span>
         <a href="/" target="_blank" id="nav-site"></a>
       </nav>
@@ -72,6 +74,15 @@
             </div>
           </div>
           <div class="tablecard"><table class="data"><thead><tr><th>Référence</th><th>Application</th><th>Bénéficiaire</th><th>Demandeur</th><th>Déposée le</th><th>Statut</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="loading">Chargement…</td></tr></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-accounts">
+          <div class="toolbar"><label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input type="text" id="acc-search" placeholder="Rechercher un identifiant, un nom…" /></label></div>
+          <div class="tablecard"><table class="data"><thead><tr><th>Identifiant</th><th>Bénéficiaire</th><th>Application</th><th>Référence</th><th>Créé le</th></tr></thead><tbody id="accounts-rows"><tr><td colspan="5" class="loading">Chargement…</td></tr></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-journal">
+          <div class="tablecard"><table class="data"><thead><tr><th>Date</th><th>Administrateur</th><th>Action</th><th>Cible</th></tr></thead><tbody id="journal-rows"><tr><td colspan="4" class="loading">Chargement…</td></tr></tbody></table></div>
         </section>
 
         <section class="view" id="view-emails">

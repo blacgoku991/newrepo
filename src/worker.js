@@ -47,6 +47,17 @@ async function processOne(request) {
     if (result && result.success) {
       log('Compte créé avec succès');
       db.markFinished(request.id, true, result.message || 'Compte créé avec succès', logs, artifacts);
+      // Mémorise l'identifiant généré (unicité future + affichage admin + e-mail).
+      if (result.account && result.account.login) {
+        db.setRequestLogin(request.id, result.account.login);
+        db.recordAccount(
+          request.app_id,
+          result.account.login,
+          result.account.nom,
+          result.account.prenom,
+          request.reference
+        );
+      }
       // Envoi (ou mise en boîte d'envoi) de l'e-mail d'identifiants.
       try {
         const mailer = require('./mailer');
