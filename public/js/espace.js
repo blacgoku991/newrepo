@@ -76,75 +76,110 @@
 
       <div class="esp-section-head">
         <h2>Comptes existants</h2>
-        <span class="hint">${data.accounts.length} compte${data.accounts.length > 1 ? 's' : ''}</span>
+        <span class="hint" id="acc-count"></span>
       </div>
-      ${data.accounts.length > 12 ? `<label class="esp-search"><input type="text" id="acc-search" placeholder="Rechercher un identifiant, un nom, une fonction…" autocomplete="off" /></label>` : ''}
+      <div class="acc-toolbar">
+        <div class="acc-tabs" id="acc-tabs"></div>
+        <label class="esp-search"><input type="text" id="acc-search" placeholder="Rechercher un identifiant, un nom, une fonction…" autocomplete="off" /></label>
+      </div>
       <div id="accounts"></div>
 
       <div class="esp-section-head"><h2>Activité récente</h2></div>
       <div id="activity"></div>`;
 
-    renderAccounts(data.accounts);
+    setupAccounts(data.accounts);
     renderActivity(data.activity || []);
+  }
+
+  const ACC_CAP = 100; // nombre max de lignes affichées (le reste via la recherche)
+  const accState = { all: [], app: '', query: '' };
+
+  // Applications présentes dans les comptes, pour les onglets de filtre.
+  function appsOf(accounts) {
+    const seen = new Map();
+    for (const a of accounts) if (!seen.has(a.appId)) seen.set(a.appId, a.app);
+    return [...seen.entries()].map(([appId, app]) => ({ appId, app }));
+  }
+
+  function setupAccounts(accounts) {
+    accState.all = accounts;
+    const apps = appsOf(accounts);
+    // Onglet par défaut : « Toutes » s'il y a plusieurs applications, sinon l'unique.
+    accState.app = apps.length > 1 ? '' : (apps[0] ? apps[0].appId : '');
+    accState.query = '';
+
+    const tabsBox = document.getElementById('acc-tabs');
+    const tabs = (apps.length > 1 ? [{ appId: '', app: 'Toutes' }] : []).concat(apps);
+    tabsBox.innerHTML = tabs
+      .map((t) => `<button class="acc-tab" data-app="${escapeHtml(t.appId)}">${escapeHtml(t.app)}</button>`)
+      .join('');
+    tabsBox.querySelectorAll('.acc-tab').forEach((btn) => {
+      btn.addEventListener('click', () => { accState.app = btn.dataset.app; drawAccounts(); });
+    });
 
     const search = document.getElementById('acc-search');
-    if (search) {
-      search.addEventListener('input', () => {
-        const q = search.value.trim().toLowerCase();
-        const filtered = !q
-          ? data.accounts
-          : data.accounts.filter((a) =>
-              [a.login, a.nom, a.prenom, a.fonction, a.etablissementLabel]
-                .some((v) => (v || '').toLowerCase().includes(q)));
-        renderAccounts(filtered, q);
-      });
-    }
+    search.addEventListener('input', () => { accState.query = search.value.trim().toLowerCase(); drawAccounts(); });
+
+    drawAccounts();
   }
 
-  const ACC_CAP = 100; // évite d'afficher des milliers de cartes d'un coup
+  function filteredAccounts() {
+    const q = accState.query;
+    return accState.all.filter((a) => {
+      if (accState.app && a.appId !== accState.app) return false;
+      if (!q) return true;
+      return [a.login, a.nom, a.prenom, a.fonction, a.etablissementLabel]
+        .some((v) => (v || '').toLowerCase().includes(q));
+    });
+  }
 
-  function accCard(a) {
-    const who = `${a.prenom} ${a.nom}`.trim() || a.login;
+  function accRow(a) {
+    const who = `${a.prenom} ${a.nom}`.trim() || '—';
     const resetUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=reset&identifiant=${encodeURIComponent(a.login)}&etablissement=${encodeURIComponent(a.etablissement)}`;
     const extUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=extension&identifiant=${encodeURIComponent(a.login)}`;
-    const srcBadge = a.source === 'portail'
+    const src = a.source === 'portail'
       ? '<span class="badge st-terminee acc-src">Créé ici</span>'
       : '<span class="badge st-en_attente acc-src">Existant</span>';
-    const inactif = a.actif === false ? '<span class="badge st-echec acc-src">Inactif</span>' : '';
-    return `
-      <div class="acc-card">
-        <div class="top">
-          <div>
-            <div class="who">${escapeHtml(who)}</div>
-            <div class="acc-login">${escapeHtml(a.login)}</div>
-          </div>
-          <span class="badge st-terminee">${escapeHtml(a.app)}</span>
-        </div>
-        <div class="meta">
-          ${a.etablissementLabel ? `<div>${icon('building')} <b>${escapeHtml(a.etablissementLabel)}</b></div>` : ''}
-          ${a.fonction ? `<div>Fonction : ${escapeHtml(a.fonction)}</div>` : ''}
-          <div class="acc-tags">${srcBadge}${inactif}</div>
-        </div>
-        <div class="actions">
-          <a class="btn btn-ghost btn-sm" href="${resetUrl}">${icon('lock')} Réinitialiser</a>
-          <a class="btn btn-ghost btn-sm" href="${extUrl}">${icon('building')} Ajouter un étab.</a>
-        </div>
-      </div>`;
+    const inactif = a.actif === false ? ' <span class="badge st-echec acc-src">Inactif</span>' : '';
+    return `<tr>
+      <td>${escapeHtml(who)}</td>
+      <td><span class="ref">${escapeHtml(a.login)}</span></td>
+      <td>${escapeHtml(a.app)}</td>
+      <td>${escapeHtml(a.etablissementLabel || '—')}</td>
+      <td>${escapeHtml(a.fonction || '—')}</td>
+      <td>${src}${inactif}</td>
+      <td class="acc-row-actions">
+        <a class="btn btn-ghost btn-sm" href="${resetUrl}" title="Réinitialiser le mot de passe">${icon('lock')}<span>Réinit.</span></a>
+        <a class="btn btn-ghost btn-sm" href="${extUrl}" title="Ajouter un établissement">${icon('building')}<span>Étab.</span></a>
+      </td>
+    </tr>`;
   }
 
-  function renderAccounts(accounts, query) {
+  function drawAccounts() {
     const box = document.getElementById('accounts');
-    if (!accounts.length) {
-      box.innerHTML = query
-        ? `<div class="empty-box">Aucun compte ne correspond à « ${escapeHtml(query)} ».</div>`
-        : `<div class="empty-box">Aucun compte pour vos établissements pour l'instant.
-           <br />Les comptes apparaîtront ici après une création ou un import.</div>`;
+    const countEl = document.getElementById('acc-count');
+    const list = filteredAccounts();
+
+    // Onglet actif.
+    document.querySelectorAll('#acc-tabs .acc-tab').forEach((b) => {
+      b.classList.toggle('on', b.dataset.app === accState.app);
+    });
+    countEl.textContent = `${list.length} compte${list.length > 1 ? 's' : ''}`;
+
+    if (!list.length) {
+      box.innerHTML = accState.query
+        ? `<div class="empty-box">Aucun compte ne correspond à « ${escapeHtml(accState.query)} ».</div>`
+        : `<div class="empty-box">Aucun compte pour cette sélection.
+           <br />Les comptes apparaissent après une création ou un import.</div>`;
       return;
     }
-    const shown = accounts.slice(0, ACC_CAP);
-    const more = accounts.length - shown.length;
+    const shown = list.slice(0, ACC_CAP);
+    const more = list.length - shown.length;
     box.innerHTML =
-      '<div class="acc-grid">' + shown.map(accCard).join('') + '</div>' +
+      `<div class="tablecard"><table class="data acc-table">
+        <thead><tr><th>Bénéficiaire</th><th>Identifiant</th><th>Application</th><th>Établissement</th><th>Fonction</th><th>État</th><th></th></tr></thead>
+        <tbody>${shown.map(accRow).join('')}</tbody>
+      </table></div>` +
       (more > 0
         ? `<div class="empty-box" style="margin-top:12px">${more} autre${more > 1 ? 's' : ''} compte${more > 1 ? 's' : ''} — affinez la recherche pour les voir.</div>`
         : '');

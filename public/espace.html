@@ -48,6 +48,20 @@
     .esp-search input { width: 100%; padding: 11px 14px; font-size: .92rem; color: var(--text); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius); }
     .esp-search input:focus { outline: none; border-color: var(--gold-bright); box-shadow: 0 0 0 3px var(--gold-soft); }
     .esp-search input::placeholder { color: var(--faint); }
+    /* Barre d'outils comptes : onglets par application + recherche. */
+    .acc-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 4px 0 14px; }
+    .acc-toolbar .esp-search { flex: 1; min-width: 220px; margin: 0; }
+    .acc-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .acc-tab { padding: 7px 15px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); font-size: .85rem; font-weight: 600; cursor: pointer; }
+    .acc-tab:hover { color: var(--text); border-color: var(--gold-line); }
+    .acc-tab.on { background: var(--gold-soft); color: var(--gold-bright); border-color: var(--gold-line); }
+    .acc-src { font-size: .68rem; }
+    .acc-table td { vertical-align: middle; }
+    .acc-table .ref { font-size: .86rem; }
+    .acc-row-actions { display: flex; gap: 6px; white-space: nowrap; justify-content: flex-end; }
+    .acc-row-actions .btn { gap: 5px; padding: 6px 11px; }
+    .acc-row-actions .btn svg { width: 14px; height: 14px; }
+    @media (max-width: 760px) { .acc-row-actions .btn span { display: none; } }
     .empty-box { background: var(--surface); border: 1px dashed var(--line-2); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; color: var(--muted); }
     .notauth { max-width: 620px; margin: 60px auto; text-align: center; }
     .notauth .ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; margin: 0 auto 18px; background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }
