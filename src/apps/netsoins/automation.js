@@ -153,7 +153,13 @@ async function cocherEtablissement(page, S, ctx, value) {
   const label = etabLabel(value);
   const nom = label.split(' - ')[0].trim();
 
-  const chercherLigne = () => L(page, S.compte.etabRow).filter({ hasText: nom }).first();
+  // Le libellé NetSoins vaut « ADEF RESIDENCES - <TYPE> - <notre libellé> » :
+  // chercher le libellé COMPLET est donc plus sûr que le seul nom, et écarte
+  // d'emblée les lignes « Tous les établissements du groupe ».
+  const chercherLigne = () => {
+    const lignes = L(page, S.compte.etabRow).filter({ hasNotText: S.compte.etabToutCocher });
+    return lignes.filter({ hasText: label }).or(lignes.filter({ hasText: nom })).first();
+  };
   const ligneVisible = async () =>
     (await chercherLigne().isVisible().catch(() => false));
 

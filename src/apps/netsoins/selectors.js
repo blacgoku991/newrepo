@@ -73,10 +73,15 @@ module.exports = {
     // la case à cocher du groupe, elle, sélectionnerait tout d'un coup.
     etabGroupe: 'text="ADEF RESIDENCES"',
     // Ligne d'un établissement dans la liste. Le libellé affiché est préfixé
-    // par la hiérarchie (« ADEF RESIDENCES - EHPAD - <nom> - <code postal ville> ») :
-    // on repère donc la ligne par le NOM de l'établissement, pas par le libellé
-    // complet du portail.
-    etabRow: 'label.bloc_option, label:has(> .checkbox), .bloc_option, .filter_choose_line',
+    // par la hiérarchie : « ADEF RESIDENCES - EHPAD - <nom> - <code postal ville> ».
+    // `:visible` est indispensable : le widget conserve des copies masquées de
+    // la liste (conteneur de résultats de recherche), sur lesquelles un clic
+    // n'aurait aucun effet.
+    etabRow:
+      'label.bloc_option:visible, label:has(> .checkbox):visible, .bloc_option:visible, .filter_choose_line:visible',
+    // Lignes « Tous les établissements du groupe / du sous-groupe » : à ne
+    // JAMAIS cocher, elles rattacheraient l'intervenant à tout le groupe.
+    etabToutCocher: /tous les établissements/i,
   },
 
   // Onglet « Informations » : état civil et catégorie professionnelle.
