@@ -211,10 +211,30 @@
     switch (field.type) {
       case 'select': {
         const locked = lockedFields.has(field.name) ? ' disabled title="Rempli automatiquement"' : '';
+        const optHtml = (o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`;
+        // Si des options portent un « group », on les répartit en <optgroup> (en
+        // conservant l'ordre d'apparition des groupes) ; sinon liste simple.
+        let optionsHtml;
+        if (field.options.some((o) => o.group)) {
+          const groups = [];
+          const byGroup = new Map();
+          for (const o of field.options) {
+            const g = o.group || '';
+            if (!byGroup.has(g)) { byGroup.set(g, []); groups.push(g); }
+            byGroup.get(g).push(o);
+          }
+          optionsHtml = groups
+            .map((g) => (g
+              ? `<optgroup label="${escapeHtml(g)}">${byGroup.get(g).map(optHtml).join('')}</optgroup>`
+              : byGroup.get(g).map(optHtml).join('')))
+            .join('');
+        } else {
+          optionsHtml = field.options.map(optHtml).join('');
+        }
         control = `
           <select name="${escapeHtml(field.name)}"${locked}>
             <option value="">— Sélectionner —</option>
-            ${field.options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+            ${optionsHtml}
           </select>`;
         break;
       }
