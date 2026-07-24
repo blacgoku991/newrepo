@@ -100,7 +100,7 @@ function renderFooter() {
     <div class="ft-inner">
       <div class="ft-top">
         <div class="ft-brand">
-          ${logoImg('https://algonis.net/wp-content/uploads/2022/10/cropped-LogoAlgonis-1.png', 'Algonis', 'ft-logo')}
+          <span class="ft-secret" id="ft-secret" role="button" tabindex="0" title="Algonis" aria-label="Algonis">${logoImg('https://algonis.net/wp-content/uploads/2022/10/cropped-LogoAlgonis-1.png', 'Algonis', 'ft-logo')}</span>
           <p>Portail interne d'ADEF Résidences pour la création automatisée des comptes sur les applications métiers, avec suivi et remise sécurisée des identifiants.</p>
         </div>
         <div>
@@ -129,6 +129,23 @@ function renderFooter() {
         </span>
       </div>
     </div>`;
+
+  // Accès discret à l'administration : 3 clics sur le logo Algonis du pied de
+  // page mènent à l'espace d'administration (qui a sa propre authentification).
+  const secret = host.querySelector('#ft-secret');
+  if (secret) {
+    let clicks = 0;
+    let timer = null;
+    const trigger = () => {
+      clicks += 1;
+      clearTimeout(timer);
+      timer = setTimeout(() => { clicks = 0; }, 800);
+      if (clicks >= 3) { clicks = 0; location.href = '/admin.html'; }
+    };
+    secret.style.cursor = 'pointer';
+    secret.addEventListener('click', trigger);
+    secret.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); trigger(); } });
+  }
 }
 
 /* Repli texte pour toute image marquée data-fallback (logos éditeurs, logo

@@ -136,6 +136,15 @@ app.get('/espace', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'espace.html'));
 });
 
+// Page d'accueil désactivée : quand le SSO est actif, l'arrivée sur le site
+// mène directement à l'espace personnel (dashboard référent, ou message
+// « non habilité » pour les autres comptes). En mode démo/local (sans SSO),
+// la page d'accueil classique reste servie pour le développement.
+app.get('/', (req, res, next) => {
+  if (sso.required()) return res.redirect('/espace');
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // Récupération sécurisée des identifiants (lien à usage unique).
 // La page et l'API sont derrière la porte SSO globale comme tout le site.

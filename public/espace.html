@@ -19,6 +19,14 @@
     .etab-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
                  background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); font-size: .84rem; font-weight: 600; }
     .etab-chip svg { width: 15px; height: 15px; }
+    .esp-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .esp-act { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid transparent; border-radius: var(--radius-lg); padding: 18px 20px; color: inherit; transition: border-color .16s, background .16s, transform .16s; }
+    .esp-act:hover { border-left-color: var(--gold); border-color: var(--line-2); background: var(--surface-3); transform: translateX(2px); text-decoration: none; }
+    .esp-act .ic { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }
+    .esp-act .ic svg { width: 21px; height: 21px; }
+    .esp-act b { display: block; color: #fff; font-size: 1rem; }
+    .esp-act > span:last-child > span { color: var(--muted); font-size: .84rem; }
+    @media (max-width: 820px) { .esp-actions { grid-template-columns: 1fr; } }
     .esp-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 34px 0 14px; }
     .esp-section-head h2 { font-size: 1.18rem; color: #fff; }
     .esp-section-head .hint { color: var(--faint); font-size: .84rem; }

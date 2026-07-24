@@ -35,13 +35,10 @@
     root.innerHTML = `
       <div class="notauth">
         <div class="ic">${icon('lock')}</div>
-        <h1>Accès référent non activé</h1>
-        <p>${who ? `Bonjour ${who}. ` : ''}Votre compte n'est pas encore habilité comme référent d'un établissement.
-        L'espace personnel est réservé aux référents désignés.</p>
-        <p>Pour être ajouté, contactez votre administrateur Algonis.</p>
-        <div class="hero-actions" style="justify-content:center;margin-top:22px">
-          <a href="/" class="btn btn-ghost">Retour à l'accueil</a>
-        </div>
+        <h1>Accès non autorisé</h1>
+        <p>${who ? `Bonjour ${who}. ` : ''}Votre compte n'est pas habilité à déposer des demandes sur ce portail.
+        Seuls les <strong>référents désignés</strong> de chaque établissement peuvent créer un compte, réinitialiser un mot de passe ou ajouter un établissement.</p>
+        <p>Pour toute demande, <strong>rapprochez-vous du référent de votre établissement</strong>. Si vous pensez devoir être référent, contactez votre administrateur.</p>
       </div>`;
   }
 
@@ -57,8 +54,24 @@
     root.innerHTML = `
       <div class="esp-head">
         <h1>Bonjour${prenom ? ' ' + escapeHtml(prenom) : ''}</h1>
-        <p>Voici les comptes des établissements dont vous êtes référent. Vous pouvez réinitialiser un mot de passe ou ajouter un établissement à un compte existant en un clic.</p>
+        <p>Voici les comptes des établissements dont vous êtes référent. Lancez une nouvelle démarche ou agissez sur un compte existant en un clic.</p>
         ${chips}
+      </div>
+
+      <div class="esp-section-head"><h2>Faire une demande</h2></div>
+      <div class="esp-actions">
+        <a class="esp-act" href="/demande.html?app=bluekango">
+          <span class="ic">${icon('users')}</span>
+          <span><b>Créer un compte</b><span>Nouveau compte BlueKanGo pour un agent</span></span>
+        </a>
+        <a class="esp-act" href="/demande.html?app=bluekango&type=extension">
+          <span class="ic">${icon('building')}</span>
+          <span><b>Ajouter un établissement</b><span>Rattacher un établissement à un compte existant</span></span>
+        </a>
+        <a class="esp-act" href="/demande.html?app=bluekango&type=reset">
+          <span class="ic">${icon('lock')}</span>
+          <span><b>Mot de passe oublié</b><span>Réinitialiser le mot de passe d'un compte</span></span>
+        </a>
       </div>
 
       <div class="esp-section-head">
@@ -67,10 +80,7 @@
       </div>
       <div id="accounts"></div>
 
-      <div class="esp-section-head">
-        <h2>Activité récente</h2>
-        <a href="/demarches.html" class="btn btn-primary btn-sm">Nouvelle démarche ${icon('arrow')}</a>
-      </div>
+      <div class="esp-section-head"><h2>Activité récente</h2></div>
       <div id="activity"></div>`;
 
     renderAccounts(data.accounts);
