@@ -56,6 +56,27 @@ function chooseStrategy(data) {
     : { mode: 'form' };
 }
 
+/** Étapes de la réinitialisation de mot de passe (éditeur de scénario). */
+const RESET_STEPS_META = [
+  { id: 'ouverture', label: 'Ouverture de NetSoins', critical: true, selectorKeys: [] },
+  { id: 'connexion', label: 'Connexion administrateur', critical: true, selectorKeys: ['login.user', 'login.password', 'login.submit'] },
+  { id: 'otp', label: 'Double authentification (code par e-mail)', critical: true, selectorKeys: ['login.otpInput', 'login.otpSubmit', 'closePopup'] },
+  { id: 'liste', label: 'Ouverture de la liste des intervenants', critical: true, selectorKeys: ['menu.administratif', 'menu.intervenant', 'menu.intervenantsListe'] },
+  { id: 'etablissement', label: "Bascule sur l'etablissement", critical: true, selectorKeys: ['liste.etablissementOpen'] },
+  { id: 'recherche', label: "Recherche de l'intervenant", critical: true, selectorKeys: ['liste.search', 'liste.ficheIntervenant'] },
+  { id: 'motdepasse', label: 'Saisie du nouveau mot de passe', critical: true, selectorKeys: ['motDePasse.modeOpen', 'motDePasse.modeDefinir', 'motDePasse.password', 'motDePasse.passwordConfirm'] },
+  { id: 'enregistrement', label: 'Enregistrement de la fiche', critical: true, selectorKeys: ['save'] },
+];
+
+/**
+ * Mot de passe provisoire aléatoire posé lors d'une réinitialisation : il est
+ * remis au bénéficiaire par lien sécurisé, puis changé à la première connexion.
+ */
+function randomProvisionalPassword() {
+  const crypto = require('node:crypto');
+  return `Adefhabitat${crypto.randomInt(1000, 9999)}.`;
+}
+
 /** Date ISO (2026-08-25) → format NetSoins (25/08/2026). */
 function frDate(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
@@ -74,49 +95,17 @@ function etabLabel(value) {
   return found ? found.label : String(value);
 }
 
-async function createAccount(data, ctx) {
-  // Identifiant NetSoins : « NOM PRÉNOM » en majuscules, unique.
-  const login = pickUniqueLogin(data.nom, data.prenom, (l) => db.loginExists(config.id, l));
-  const account = { login, prenom: data.prenom, nom: data.nom };
-  ctx.log(`Identifiant retenu : « ${login} »`);
-
-  const strategy = chooseStrategy(data);
-  if (strategy.mode === 'duplicate') {
-    // La duplication reste à calibrer sur l'instance (parcours non relevé) :
-    // on crée par le formulaire, qui produit le même résultat.
-    ctx.log(`Un compte de même établissement et même profil existe (« ${strategy.templateLogin} ») — création par le formulaire.`);
-  } else {
-    ctx.log('Aucun compte modèle : création par le formulaire.');
-  }
-
-  if (getMode(ENV) === 'demo') {
-    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
-    const result = await demo.createAccount(config, data, ctx);
-    if (result.success) {
-      result.account = account;
-      result.message = `${result.message} — identifiant « ${login} »`;
-    }
-    return result;
-  }
-
-  // Mot de passe initial des comptes créés : uniquement via l'environnement.
-  const initialPassword = process.env.NETSOINS_DEFAULT_PASSWORD || '';
-  if (!initialPassword) {
-    throw new Error('NETSOINS_DEFAULT_PASSWORD absent de la configuration : impossible de créer le compte');
-  }
-  account.password = initialPassword;
-
-  const S = applySelectorPatches(BASE_SELECTORS, config.id);
-  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
-  const fullName = `${data.prenom} ${data.nom}`;
+/**
+ * Étapes de connexion, communes à toutes les démarches NetSoins :
+ * ouverture, identification dans l'iframe, code OTP, sortie de l'iframe.
+ */
+function buildLoginSteps({ S, ctx, base }) {
+  // La page de CONNEXION est rendue dans une iframe ; une fois connecté,
+  // l'application occupe la page de premier niveau.
+  const F = (page) => page.frameLocator(S.frame);
   let otpSince = new Date();
 
-  // La page de CONNEXION de NetSoins est rendue dans une iframe ; une fois
-  // connecté, l'application occupe la page de premier niveau.
-  const F = (page) => page.frameLocator(S.frame);
-
-
-  const steps = [
+  return [
     {
       id: 'ouverture',
       critical: true,
@@ -186,6 +175,45 @@ async function createAccount(data, ctx) {
       },
     },
   ];
+}
+
+async function createAccount(data, ctx) {
+  // Identifiant NetSoins : « NOM PRÉNOM » en majuscules, unique.
+  const login = pickUniqueLogin(data.nom, data.prenom, (l) => db.loginExists(config.id, l));
+  const account = { login, prenom: data.prenom, nom: data.nom };
+  ctx.log(`Identifiant retenu : « ${login} »`);
+
+  const strategy = chooseStrategy(data);
+  if (strategy.mode === 'duplicate') {
+    // La duplication reste à calibrer sur l'instance (parcours non relevé) :
+    // on crée par le formulaire, qui produit le même résultat.
+    ctx.log(`Un compte de même établissement et même profil existe (« ${strategy.templateLogin} ») — création par le formulaire.`);
+  } else {
+    ctx.log('Aucun compte modèle : création par le formulaire.');
+  }
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const result = await demo.createAccount(config, data, ctx);
+    if (result.success) {
+      result.account = account;
+      result.message = `${result.message} — identifiant « ${login} »`;
+    }
+    return result;
+  }
+
+  // Mot de passe initial des comptes créés : uniquement via l'environnement.
+  const initialPassword = process.env.NETSOINS_DEFAULT_PASSWORD || '';
+  if (!initialPassword) {
+    throw new Error('NETSOINS_DEFAULT_PASSWORD absent de la configuration : impossible de créer le compte');
+  }
+  account.password = initialPassword;
+
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
+  const fullName = `${data.prenom} ${data.nom}`;
+
+  const steps = buildLoginSteps({ S, ctx, base });
 
   // Établissements à autoriser : le principal, plus les éventuels autres cochés
   // dans le formulaire (sans doublon).
@@ -329,4 +357,154 @@ async function createAccount(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, STEPS_META, chooseStrategy };
+/**
+ * Réinitialisation du mot de passe d'un intervenant existant.
+ *
+ * Parcours : Administratif > Intervenant > Intervenants (la liste) → filtre sur
+ * l'établissement → recherche de l'intervenant → Fiche intervenant →
+ * « Ne pas modifier » bascule sur « Définir un mot de passe » → nouveau mot de
+ * passe provisoire → Enregistrer.
+ *
+ * Le mot de passe posé est ALÉATOIRE et remis au bénéficiaire par lien
+ * sécurisé : il n'est ni choisi par le demandeur, ni journalisé.
+ */
+async function resetPassword(data, ctx) {
+  const identifiant = String(data.identifiant || '').trim();
+  const newPassword = randomProvisionalPassword();
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const total = 6;
+    let done = 0;
+    for (const label of [
+      'Connexion au compte administrateur',
+      'Double authentification',
+      `Bascule sur l'établissement`,
+      `Recherche de l'intervenant « ${identifiant} »`,
+      'Nouveau mot de passe provisoire saisi',
+      'Fiche enregistrée',
+    ]) {
+      ctx.log(`Étape ${++done}/${total} — ${label}`);
+      if (ctx.progress) ctx.progress(done, total, label);
+    }
+    return {
+      success: true,
+      message: `Mot de passe réinitialisé pour « ${identifiant} » (environnement de démonstration)`,
+      account: { login: identifiant, password: newPassword, prenom: '', nom: '' },
+      artifacts: [],
+    };
+  }
+
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
+  const steps = buildLoginSteps({ S, ctx, base });
+
+  steps.push(
+    {
+      id: 'liste',
+      critical: true,
+      label: 'Ouverture de la liste des intervenants',
+      run: async (page) => {
+        await page.locator(S.menu.administratif).first().click();
+        await page.locator(S.menu.intervenant).first().click();
+        await page.locator(S.menu.intervenantsListe).first().click();
+        ctx.log('Liste des intervenants ouverte.');
+      },
+    },
+    {
+      id: 'etablissement',
+      critical: true,
+      label: `Bascule sur l'établissement ${etabLabel(data.etablissement)}`,
+      run: async (page) => {
+        await page.locator(S.liste.etablissementOpen).first().click();
+        const option = page.locator(S.liste.etablissementOption(data.etablissement)).first();
+        try {
+          await option.waitFor({ timeout: 5000 });
+        } catch {
+          throw new Error(`Établissement « ${etabLabel(data.etablissement)} » absent de la liste — le compte administrateur y a-t-il accès ?`);
+        }
+        await option.click();
+        ctx.log(`Établissement sélectionné : ${etabLabel(data.etablissement)}.`);
+      },
+    },
+    {
+      id: 'recherche',
+      critical: true,
+      label: `Recherche de l'intervenant « ${identifiant} »`,
+      run: async (page) => {
+        // Champ de recherche s'il existe : réduit la liste avant de cliquer.
+        const search = page.locator(S.liste.search).first();
+        try {
+          await search.waitFor({ timeout: 3000 });
+          await search.fill(identifiant);
+          await page.waitForTimeout(1200);
+          ctx.log('Recherche filtrée sur l’identifiant.');
+        } catch {
+          ctx.log('Pas de champ de recherche — repérage direct dans la liste.');
+        }
+
+        // On clique la ligne portant l'identifiant, puis sa fiche.
+        const ligne = page.locator(S.liste.resultat(identifiant)).last();
+        try {
+          await ligne.waitFor({ timeout: 8000 });
+        } catch {
+          throw new Error(`Intervenant « ${identifiant} » introuvable dans ${etabLabel(data.etablissement)} — vérifiez l'identifiant et l'établissement`);
+        }
+        await ligne.click();
+        await page.locator(S.liste.ficheIntervenant).first().click();
+        ctx.log('Fiche intervenant ouverte.');
+      },
+    },
+    {
+      id: 'motdepasse',
+      critical: true,
+      label: 'Saisie du nouveau mot de passe provisoire',
+      run: async (page) => {
+        // La fiche est sur « Ne pas modifier » : on bascule sur « Définir un
+        // mot de passe » pour rendre les champs saisissables.
+        await page.locator(S.motDePasse.modeOpen).first().click();
+        await page.locator(S.motDePasse.modeDefinir).first().click();
+        ctx.log('Mode « Définir un mot de passe » activé.');
+
+        const pw = page.locator(S.motDePasse.password).first();
+        await pw.click();
+        await pw.fill(newPassword);
+        const pwc = page.locator(S.motDePasse.passwordConfirm).first();
+        await pwc.click();
+        await pwc.fill(newPassword);
+        ctx.log('Nouveau mot de passe provisoire saisi (non journalisé).');
+      },
+    },
+    {
+      id: 'enregistrement',
+      critical: true,
+      label: 'Enregistrement de la fiche',
+      run: async (page) => {
+        const save = page.locator(S.save).first();
+        try {
+          await save.waitFor({ timeout: 5000 });
+        } catch {
+          throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
+        }
+        await save.click();
+        await page.waitForTimeout(2500);
+        ctx.log('Fiche enregistrée.');
+      },
+    }
+  );
+
+  const result = await runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    onProgress: ctx.progress,
+    successMessage: `Mot de passe réinitialisé pour « ${identifiant} »`,
+    steps: composeSteps(config.id, steps, data, ctx.log),
+  });
+  // Le mot de passe provisoire est remis par lien sécurisé (jamais par e-mail).
+  if (result.success) {
+    result.account = { login: identifiant, password: newPassword, prenom: '', nom: '' };
+  }
+  return result;
+}
+
+module.exports = { createAccount, resetPassword, STEPS_META, RESET_STEPS_META, chooseStrategy };

@@ -32,6 +32,30 @@ module.exports = {
   menu: {
     administratif: '#menu-links >> text=Administratif',
     intervenant: 'text="Intervenant"',
+    // Sous-entrée « Intervenants » : la LISTE (la création se fait via
+    // « Intervenant », au singulier).
+    intervenantsListe: 'role=link[name="Intervenants"]',
+  },
+
+  // Liste des intervenants (parcours de réinitialisation de mot de passe).
+  liste: {
+    // Filtre d'établissement : chaque ligne porte l'identifiant interne en
+    // attribut `value` — on cible par cet identifiant, jamais par le libellé.
+    etablissementOpen: '#change_id_etablissement',
+    etablissementOption: (value) => `.filter_choose_line[value="${value}"]`,
+    search: 'input[type="search"]',
+    resultat: (texte) => `text=${JSON.stringify(texte)}`,
+    ficheIntervenant: 'text="Fiche intervenant"',
+  },
+
+  // Fiche d'un intervenant existant : changement de mot de passe.
+  motDePasse: {
+    // Par défaut la fiche est sur « Ne pas modifier » : il faut basculer sur
+    // « Définir un mot de passe » pour que les champs deviennent saisissables.
+    modeOpen: 'role=link[name="Ne pas modifier"]',
+    modeDefinir: 'text="Définir un mot de passe"',
+    password: 'role=textbox[name="Mot de passe"]',
+    passwordConfirm: 'role=textbox[name="Confirmation"]',
   },
 
   // Onglet « Compte » : identifiants, accès, droits, établissements.
