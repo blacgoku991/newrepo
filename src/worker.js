@@ -47,6 +47,7 @@ async function processOne(request) {
     if (result && result.success) {
       log('Compte créé avec succès');
       db.markFinished(request.id, true, result.message || 'Compte créé avec succès', logs, artifacts);
+      db.audit('robot', 'creation_compte', request.reference, result.message || '');
       // Mémorise l'identifiant généré (unicité future + affichage admin + e-mail).
       if (result.account && result.account.login) {
         db.setRequestLogin(request.id, result.account.login);
@@ -74,10 +75,12 @@ async function processOne(request) {
       const msg = (result && result.message) || 'Le scénario a signalé un échec';
       log(`Échec : ${msg}`);
       db.markFinished(request.id, false, msg, logs, artifacts);
+      db.audit('robot', 'echec_creation', request.reference, msg);
     }
   } catch (err) {
     log(`Erreur : ${err.message}`);
     db.markFinished(request.id, false, `Erreur pendant l'automatisation : ${err.message}`, logs);
+    db.audit('robot', 'echec_creation', request.reference, String(err.message));
   }
 }
 

@@ -38,6 +38,12 @@ function buildMessage(appName, data, reference, storedLogin) {
   ];
   if (login) lines.push(`Identifiant    : ${login}`);
   if (initialPassword) lines.push(`Mot de passe   : ${initialPassword}`);
+  const frDate = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+  };
+  if (frDate(data.date_debut)) lines.push(`Valide du      : ${frDate(data.date_debut)}`);
+  if (frDate(data.date_fin)) lines.push(`Valide jusqu'au: ${frDate(data.date_fin)}`);
   lines.push(`Référence      : ${reference}`);
   lines.push('');
   if (initialPassword) {
@@ -73,6 +79,7 @@ async function sendCredentials(request) {
 
   const outboxId = db.createOutbox(request.id, to, subject, text);
   await deliver(outboxId);
+  db.audit('robot', smtpConfigured() ? 'email_identifiants_envoye' : 'email_identifiants_en_attente', request.reference, to);
   return { queuedId: outboxId, sent: smtpConfigured() };
 }
 

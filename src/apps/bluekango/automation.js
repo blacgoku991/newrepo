@@ -50,8 +50,15 @@ const STEPS_META = [
   { id: 'duplication', label: 'Duplication d’un utilisateur ayant la fonction demandée', critical: true, selectorKeys: ['userList.duplicateButton'] },
   { id: 'identite', label: 'Saisie de l’identité (nom, prénom, civilité)', critical: true, selectorKeys: ['form.nom', 'form.prenom'] },
   { id: 'identifiants', label: 'Création des identifiants de connexion', critical: true, selectorKeys: ['form.loginField', 'form.password', 'form.password2', 'form.reinitCheckbox'] },
+  { id: 'validite', label: 'Saisie des dates de validité du compte', critical: false, selectorKeys: ['form.dateCellHint'] },
   { id: 'enregistrement', label: 'Enregistrement de la fiche (Valider)', critical: true, selectorKeys: [] },
 ];
+
+/** yyyy-mm-dd (formulaire) → jj/mm/aaaa (saisie BlueKanGo). */
+function toFrDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
 
 /**
  * Recherche le select d'établissement (« Etablissements : XXX » en haut à
@@ -257,6 +264,53 @@ async function createAccount(data, ctx) {
         },
       },
       {
+        id: 'validite',
+        critical: false,
+        label: 'Saisie des dates de validité du compte',
+        run: async () => {
+          const debut = toFrDate(data.date_debut);
+          const fin = toFrDate(data.date_fin);
+          if (!debut && !fin) {
+            ctx.log('Aucune date de validité fournie : étape ignorée');
+            return;
+          }
+          // Les cellules « date » de la fiche affichent l'indication (jj/mm/aaaa)
+          // à côté d'un champ sans libellé : on les repère par ce texte.
+          const hintRe = new RegExp(S.form.dateCellHint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+          const cells = fancy().getByRole('cell', { name: hintRe });
+          try {
+            await cells.first().waitFor({ timeout: 15000 });
+          } catch {
+            if (fin) {
+              throw new Error(
+                'Champ « date de fin de validité » introuvable sur la fiche : ' +
+                  'le compte n’a pas été enregistré (aucune validation effectuée).'
+              );
+            }
+            return;
+          }
+          const count = await cells.count();
+          const inputFor = (i) => cells.nth(i).locator('input:not([type="hidden"])').first();
+          if (count >= 2) {
+            // Deux champs date : le premier = début de validité, le dernier = fin.
+            if (debut) {
+              await inputFor(0).fill(debut);
+              ctx.log(`Début de validité saisi : ${debut}`);
+            }
+            if (fin) {
+              await inputFor(count - 1).fill(fin);
+              ctx.log(`Fin de validité saisie : ${fin}`);
+            }
+          } else if (fin) {
+            // Un seul champ date : c'est la fin de validité (cas de l'enregistrement codegen).
+            await inputFor(0).fill(fin);
+            ctx.log(`Fin de validité saisie : ${fin}`);
+          }
+          // Referme un éventuel calendrier ouvert par la prise de focus.
+          await page.keyboard.press('Escape').catch(() => {});
+        },
+      },
+      {
         id: 'enregistrement',
         critical: true,
         label: 'Enregistrement de la fiche',
@@ -276,7 +330,8 @@ async function createAccount(data, ctx) {
     log: ctx.log,
     successMessage:
       `Compte BlueKanGo créé pour ${fullName} — identifiant « ${login} », ` +
-      `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)`,
+      `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)` +
+      (data.date_fin ? ` — valide jusqu'au ${toFrDate(data.date_fin)}` : ''),
     steps: composeSteps(config.id, nativeSteps, data, ctx.log),
   });
   if (result.success) result.account = account;

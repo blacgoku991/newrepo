@@ -36,6 +36,27 @@
     for (const f of s.fields) values[f.name] = f.type === 'checkboxes' ? [] : '';
   }
 
+  // Connexion SSO Microsoft 365 : l'identité du demandeur est préremplie et
+  // verrouillée (c'est elle qui fait foi côté serveur).
+  const lockedFields = new Set();
+  try {
+    const me = await fetchJson('/api/sso/me');
+    if (me.user) {
+      values._demandeur_nom = me.user.name || '';
+      values._demandeur_email = me.user.email || '';
+      lockedFields.add('_demandeur_nom');
+      lockedFields.add('_demandeur_email');
+    }
+  } catch {
+    /* SSO non configuré : champs demandeur libres */
+  }
+
+  // Mode « plusieurs comptes » : chaque entrée est un jeu de valeurs complet
+  // déjà validé. Le compte en cours de saisie est dans `values`.
+  const batch = [];
+  // Champs propres à la personne, remis à zéro quand on ajoute un autre compte.
+  const PERSON_FIELDS = ['civilite', 'nom', 'prenom', 'email'];
+
   let current = 0;
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -85,7 +106,8 @@
             <div>
               ${
                 isRecap
-                  ? `<button type="submit" class="btn btn-primary" id="submit-btn">Envoyer la demande</button>`
+                  ? `<button type="button" class="btn btn-ghost" id="add-account-btn">+ Ajouter un compte à créer</button>
+                     <button type="submit" class="btn btn-primary" id="submit-btn">Envoyer la demande${batch.length ? ` (${batch.length + 1} comptes)` : ''}</button>`
                   : `<button type="submit" class="btn btn-primary">Continuer ${icon('arrow')}</button>`
               }
             </div>
@@ -120,6 +142,24 @@
       for (const btn of content.querySelectorAll('[data-goto]')) {
         btn.addEventListener('click', () => {
           current = Number(btn.dataset.goto);
+          render();
+        });
+      }
+      // « + Ajouter un compte à créer » : le compte courant (déjà validé étape
+      // par étape) est mis de côté, et on ressaisit l'identité du suivant.
+      // Établissement, fonction, dates et demandeur sont conservés.
+      document.getElementById('add-account-btn').addEventListener('click', () => {
+        batch.push(JSON.parse(JSON.stringify(values)));
+        for (const name of PERSON_FIELDS) {
+          if (name in values) values[name] = Array.isArray(values[name]) ? [] : '';
+        }
+        current = 0;
+        render();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      for (const btn of content.querySelectorAll('[data-remove-batch]')) {
+        btn.addEventListener('click', () => {
+          batch.splice(Number(btn.dataset.removeBatch), 1);
           render();
         });
       }
@@ -189,7 +229,8 @@
               .map((s) => `<option value="${escapeHtml(s)}"></option>`)
               .join('')}</datalist>`
           : '';
-        control = `<input type="${field.type}" name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}"${hasList ? ` list="${listId}" autocomplete="off"` : ''} />${datalist}`;
+        const locked = lockedFields.has(field.name) ? ' readonly title="Rempli automatiquement depuis votre connexion Microsoft 365"' : '';
+        control = `<input type="${field.type}" name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}"${hasList ? ` list="${listId}" autocomplete="off"` : ''}${locked} />${datalist}`;
       }
     }
 
@@ -288,10 +329,27 @@
     return value || '—';
   }
 
+  function batchListHtml() {
+    if (batch.length === 0) return '';
+    return `
+      <div class="recap-block">
+        <div class="rh"><span>Comptes déjà ajoutés à cette demande (${batch.length})</span></div>
+        <dl>
+          ${batch
+            .map((v, i) => {
+              const who = `${v.prenom || ''} ${v.nom || ''}`.trim() || `Compte ${i + 1}`;
+              return `<dt>${escapeHtml(who)}</dt><dd style="display:flex;justify-content:space-between;gap:10px"><span>${escapeHtml(v.fonction || '')}</span><button type="button" class="btn btn-ghost btn-sm" data-remove-batch="${i}">Retirer</button></dd>`;
+            })
+            .join('')}
+        </dl>
+      </div>`;
+  }
+
   function recapHtml() {
     return `
       <h3 class="sh">Vérifiez votre demande</h3>
-      <div class="recap-note">Relisez attentivement : ces informations seront saisies telles quelles par le robot dans ${escapeHtml(app.name)}.</div>
+      <div class="recap-note">Relisez attentivement : ces informations seront saisies telles quelles par le robot dans ${escapeHtml(app.name)}.${batch.length ? ` <strong>${batch.length + 1} comptes</strong> seront créés (une référence de suivi par compte).` : ''}</div>
+      ${batchListHtml()}
       ${sections
         .map(
           (section, i) => `
@@ -317,57 +375,79 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Envoi en cours…';
 
-    try {
-      const result = await fetchJson(`/api/apps/${encodeURIComponent(app.id)}/requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-      showConfirmation(result.reference);
-    } catch (err) {
-      btn.disabled = false;
-      btn.innerHTML = `${icon('zap')} Envoyer la demande`;
-      if (err.status === 422 && err.body.fields) {
-        // Le serveur a rejeté un champ : on renvoie l'utilisateur à la première
-        // section fautive avec les messages d'erreur affichés.
-        const fieldNames = Object.keys(err.body.fields);
-        const idx = sections.findIndex((s) => s.fields.some((f) => fieldNames.includes(f.name)));
-        current = idx >= 0 ? idx : 0;
-        render();
-        showErrors(err.body.fields);
-      } else {
-        alert(`Erreur : ${err.message}`);
+    // Tous les comptes de la demande : ceux mis de côté + celui en cours.
+    const comptes = [...batch, JSON.parse(JSON.stringify(values))];
+    const references = [];
+
+    for (let i = 0; i < comptes.length; i++) {
+      const compte = comptes[i];
+      const who = `${compte.prenom || ''} ${compte.nom || ''}`.trim() || `compte ${i + 1}`;
+      try {
+        const result = await fetchJson(`/api/apps/${encodeURIComponent(app.id)}/requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(compte),
+        });
+        references.push({ reference: result.reference, who });
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = `Envoyer la demande${batch.length ? ` (${batch.length + 1} comptes)` : ''}`;
+        // Les comptes déjà envoyés le restent : on prévient précisément.
+        const sent = references.length
+          ? ` Les ${references.length} premiers comptes ont bien été enregistrés (${references.map((r) => r.reference).join(', ')}).`
+          : '';
+        if (err.status === 422 && err.body.fields && i === comptes.length - 1) {
+          const fieldNames = Object.keys(err.body.fields);
+          const idx = sections.findIndex((s) => s.fields.some((f) => fieldNames.includes(f.name)));
+          current = idx >= 0 ? idx : 0;
+          render();
+          showErrors(err.body.fields);
+          if (sent) alert(sent.trim());
+        } else {
+          alert(`Erreur sur ${who} : ${err.message}.${sent}`);
+        }
+        return;
       }
     }
+    showConfirmation(references);
   }
 
-  function showConfirmation(reference) {
+  function showConfirmation(references) {
     document.title = 'Demande envoyée — Portail Comptes';
+    const many = references.length > 1;
     content.innerHTML = `
       <div class="panel result">
         <div class="big">${icon('check')}</div>
-        <h2>Demande enregistrée&nbsp;!</h2>
-        <p>Votre demande de compte <strong>${escapeHtml(app.name)}</strong> est dans la file de traitement.<br/>
-        Le robot va la prendre en charge dans quelques instants.</p>
+        <h2>${many ? `${references.length} demandes enregistrées` : 'Demande enregistrée'}&nbsp;!</h2>
+        <p>${many ? 'Vos demandes de comptes' : 'Votre demande de compte'} <strong>${escapeHtml(app.name)}</strong> ${many ? 'sont' : 'est'} dans la file de traitement.<br/>
+        Le robot va les prendre en charge dans quelques instants.</p>
+        ${references
+          .map(
+            (r) => `
         <div class="refbox">
-          <span>${escapeHtml(reference)}</span>
-          <button type="button" id="copy-ref">Copier</button>
-        </div>
-        <p>Conservez cette référence : elle permet de suivre l'avancement de votre demande.</p>
+          <span>${escapeHtml(r.reference)}</span>
+          ${many ? `<span style="color:var(--muted);font-size:.85rem">${escapeHtml(r.who)}</span>` : ''}
+          <button type="button" class="copy-ref" data-ref="${escapeHtml(r.reference)}">Copier</button>
+        </div>`
+          )
+          .join('')}
+        <p>${many ? 'Conservez ces références : chacune permet de suivre l’avancement du compte correspondant.' : 'Conservez cette référence : elle permet de suivre l’avancement de votre demande.'}</p>
         <div class="form-nav" style="justify-content:center;border:none;padding-top:10px">
-          <a class="btn btn-primary" href="/suivi.html?ref=${encodeURIComponent(reference)}">Suivre ma demande ${icon('arrow')}</a>
+          <a class="btn btn-primary" href="/suivi.html?ref=${encodeURIComponent(references[0].reference)}">Suivre ${many ? 'la première demande' : 'ma demande'} ${icon('arrow')}</a>
           <a class="btn btn-ghost" href="/">Retour à l'accueil</a>
         </div>
       </div>`;
-    document.getElementById('copy-ref').addEventListener('click', async (event) => {
-      try {
-        await navigator.clipboard.writeText(reference);
-        event.target.textContent = 'Copié ✓';
-        setTimeout(() => (event.target.textContent = 'Copier'), 2000);
-      } catch {
-        /* presse-papier indisponible : sans gravité */
-      }
-    });
+    for (const btn of content.querySelectorAll('.copy-ref')) {
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.ref);
+          btn.textContent = 'Copié ✓';
+          setTimeout(() => (btn.textContent = 'Copier'), 2000);
+        } catch {
+          /* presse-papier indisponible : sans gravité */
+        }
+      });
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 })();

@@ -55,6 +55,9 @@ module.exports = {
     password: '#UTL_pw',
     password2: '#UTL_pw2',
     reinitCheckbox: 'input[name="UTL_reinit"]', // réinitialisation du mdp au 1er login
+    // Cellules « date » de la fiche (début / fin de validité) : elles affichent
+    // l'aide « (jj/mm/aaaa) » à côté d'un champ de saisie sans libellé.
+    dateCellHint: '(jj/mm/aaaa)',
     validerLabel: 'Valider',                    // bouton dans le cadre principal
   },
 };

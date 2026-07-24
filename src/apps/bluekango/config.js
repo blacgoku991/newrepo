@@ -24,7 +24,7 @@ module.exports = {
   logo: '/img/bluekango',
   referencePrefix: 'BKG',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
-  robotFields: ['civilite', 'nom', 'prenom', 'etablissement', 'fonction'],
+  robotFields: ['civilite', 'nom', 'prenom', 'etablissement', 'fonction', 'date_fin'],
 
   formSchema: {
     intro:
@@ -165,6 +165,25 @@ module.exports = {
             type: 'textarea',
             required: false,
             placeholder: 'Précisions utiles pour la création du compte…',
+          },
+        ],
+      },
+      {
+        title: 'Validité du compte',
+        fields: [
+          {
+            name: 'date_debut',
+            label: 'Date de début du compte',
+            type: 'date',
+            required: true,
+            help: 'Le robot ne créera le compte qu’à partir de cette date (aujourd’hui = création immédiate).',
+          },
+          {
+            name: 'date_fin',
+            label: 'Date de fin de validité',
+            type: 'date',
+            required: true,
+            help: 'Le robot renseigne cette date dans la fiche BlueKanGo : le compte sera désactivé automatiquement après cette date.',
           },
         ],
       },

@@ -9,6 +9,7 @@ const express = require('express');
 const db = require('./db');
 const registry = require('./registry');
 const auth = require('./auth');
+const sso = require('./sso');
 const stats = require('./stats');
 const { validate } = require('./validate');
 const { augmentSchema, effectiveSchema, validateOverrides, requesterLabel } = require('./schema');
@@ -45,8 +46,31 @@ app.use((req, res, next) => {
 // Compte administrateur initial + purge des sessions expirées au démarrage.
 auth.ensureSeedAdmin();
 db.purgeExpiredSessions();
+db.purgeExpiredSsoSessions();
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+// ---------------------------------------------------------------------------
+// SSO Microsoft 365 — porte d'entrée du site public.
+// Quand il est configuré (M365_*), l'accès aux pages et à l'API publiques est
+// réservé aux comptes Microsoft 365 du tenant ADEF. L'admin garde sa propre
+// authentification, et la console démo (/demo) reste accessible au robot.
+// ---------------------------------------------------------------------------
+
+app.get('/auth/sso/login', sso.loginRoute);
+app.get('/auth/sso/callback', sso.callbackRoute);
+app.post('/auth/sso/logout', sso.logoutRoute);
+
+// Identité SSO du visiteur (préremplissage du formulaire + bandeau).
+app.get('/api/sso/me', (req, res) => {
+  res.json({ enabled: sso.required(), user: sso.currentUser(req) });
+});
+
+// Pages publiques protégées par le SSO (statiques et ressources exclues).
+app.get(['/', '/index.html', '/demande.html', '/suivi.html'], sso.requirePage, (req, res) => {
+  const file = req.path === '/' ? 'index.html' : req.path.slice(1);
+  res.sendFile(path.join(PUBLIC_DIR, file));
+});
 
 // Pages/fichiers d'administration protégés (avant le service statique global).
 app.get(['/admin.html', '/admin'], auth.requirePage, (req, res) => {
@@ -85,11 +109,11 @@ app.use('/demo', require('./demoApp'));
 // API publique
 // ---------------------------------------------------------------------------
 
-app.get('/api/apps', (req, res) => {
+app.get('/api/apps', sso.requireApi, (req, res) => {
   res.json(registry.publicList());
 });
 
-app.get('/api/apps/:id/schema', (req, res) => {
+app.get('/api/apps/:id/schema', sso.requireApi, (req, res) => {
   const entry = registry.get(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue' });
   if (entry.config.comingSoon) {
@@ -99,7 +123,7 @@ app.get('/api/apps/:id/schema', (req, res) => {
   res.json({ id, name, category, description, icon, color, logo: logo || null, schema: effectiveSchema(entry.config) });
 });
 
-app.post('/api/apps/:id/requests', (req, res) => {
+app.post('/api/apps/:id/requests', sso.requireApi, (req, res) => {
   const entry = registry.getAvailable(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue ou indisponible' });
 
@@ -108,13 +132,25 @@ app.post('/api/apps/:id/requests', (req, res) => {
     return res.status(422).json({ error: 'Formulaire invalide', fields: errors });
   }
 
-  const demandeur = requesterLabel(data);
-  const reference = db.createRequest(entry.config.id, entry.config.referencePrefix, data, demandeur);
+  // Traçabilité : l'identité Microsoft 365 (si SSO actif) fait foi sur le
+  // demandeur déclaré, et l'adresse IP d'origine est conservée.
+  const ip = sso.clientIp(req);
+  const ssoUser = sso.currentUser(req);
+  const demandeur = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : requesterLabel(data);
+  const reference = db.createRequest(
+    entry.config.id,
+    entry.config.referencePrefix,
+    data,
+    demandeur,
+    ssoUser ? ssoUser.email : '',
+    ip
+  );
+  db.audit(demandeur, 'depot_demande', reference, `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim(), ip);
   res.status(201).json({ reference });
 });
 
 // Suivi public d'une demande par sa référence (informations limitées).
-app.get('/api/requests/:reference', (req, res) => {
+app.get('/api/requests/:reference', sso.requireApi, (req, res) => {
   const row = db.getByReference(req.params.reference.toUpperCase());
   if (!row) return res.status(404).json({ error: 'Référence inconnue' });
   const appEntry = registry.get(row.app_id);
@@ -138,7 +174,11 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
   }
   const result = auth.login(String(username).trim(), String(password));
-  if (!result) return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
+  if (!result) {
+    db.audit(String(username).trim(), 'echec_connexion_admin', '', '', sso.clientIp(req));
+    return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
+  }
+  db.audit(result.user.username, 'connexion_admin', '', '', sso.clientIp(req));
   auth.setSessionCookie(res, result.token);
   // Le jeton est aussi renvoyé pour un frontend cross-domaine, qui pourra le
   // stocker et l'envoyer via l'en-tête « Authorization: Bearer <token> ».
@@ -191,6 +231,8 @@ app.get('/api/admin/requests', auth.requireApi, (req, res) => {
       message: row.result_message,
       attempts: row.attempts,
       demandeur: row.demandeur,
+      ssoEmail: row.sso_email || null,
+      ip: row.client_ip || null,
       login: row.generated_login || null,
       payload: JSON.parse(row.payload),
       logs: JSON.parse(row.logs),
@@ -356,12 +398,14 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
   res.json({
     automationMode: process.env.AUTOMATION_MODE === 'production' ? 'production' : 'demo',
     smtp: mailer.smtpConfigured(),
+    sso: { configured: sso.configured(), required: sso.required(), tenant: process.env.M365_TENANT_ID || null },
     apps,
   });
 });
 
 app.get('/api/admin/audit', auth.requireApi, (req, res) => {
-  res.json({ entries: db.listAudit(120) });
+  const limit = Math.min(Number(req.query.limit) || 300, 1000);
+  res.json({ entries: db.listAudit(limit) });
 });
 
 app.get('/api/admin/accounts', auth.requireApi, (req, res) => {

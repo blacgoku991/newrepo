@@ -75,6 +75,19 @@ function validate(schema, body) {
     }
   }
 
+  // Cohérence des dates de validité du compte (si le schéma les définit).
+  if (data.date_debut && data.date_fin && !errors.date_debut && !errors.date_fin) {
+    if (data.date_fin < data.date_debut) {
+      errors.date_fin = 'La fin de validité doit être postérieure à la date de début';
+    }
+  }
+  if (data.date_fin && !errors.date_fin) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (data.date_fin < today) {
+      errors.date_fin = 'La date de fin de validité est déjà passée';
+    }
+  }
+
   return { data, errors };
 }
 

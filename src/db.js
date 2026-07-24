@@ -99,6 +99,16 @@ db.exec(`
     UNIQUE (app_id, login)
   );
 
+  -- Sessions SSO Microsoft 365 (accès au site public).
+  CREATE TABLE IF NOT EXISTS sso_sessions (
+    token TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    oid TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+  );
+
   -- Boîte d'envoi des e-mails d'identifiants.
   CREATE TABLE IF NOT EXISTS outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +138,17 @@ if (!adminCols.includes('disabled')) {
 if (!columns.includes('generated_login')) {
   db.exec(`ALTER TABLE requests ADD COLUMN generated_login TEXT NOT NULL DEFAULT ''`);
 }
+// Traçabilité : identité SSO du déposant et adresse IP d'origine.
+if (!columns.includes('sso_email')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN sso_email TEXT NOT NULL DEFAULT ''`);
+}
+if (!columns.includes('client_ip')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`);
+}
+const auditCols = db.prepare(`PRAGMA table_info(audit_log)`).all().map((c) => c.name);
+if (!auditCols.includes('ip')) {
+  db.exec(`ALTER TABLE audit_log ADD COLUMN ip TEXT NOT NULL DEFAULT ''`);
+}
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
 db.prepare(`UPDATE requests SET status = 'en_attente' WHERE status = 'en_cours'`).run();
@@ -142,15 +163,15 @@ function generateReference(prefix) {
 const api = {
   ARTIFACTS_DIR,
 
-  createRequest(appId, prefix, payload, demandeur = '') {
+  createRequest(appId, prefix, payload, demandeur = '', ssoEmail = '', clientIp = '') {
     const stmt = db.prepare(
-      `INSERT INTO requests (reference, app_id, payload, demandeur) VALUES (?, ?, ?, ?)`
+      `INSERT INTO requests (reference, app_id, payload, demandeur, sso_email, client_ip) VALUES (?, ?, ?, ?, ?, ?)`
     );
     // La référence est aléatoire : on réessaie en cas de collision (extrêmement rare).
     for (let i = 0; i < 5; i++) {
       const reference = generateReference(prefix);
       try {
-        stmt.run(reference, appId, JSON.stringify(payload), demandeur);
+        stmt.run(reference, appId, JSON.stringify(payload), demandeur, ssoEmail, clientIp);
         return reference;
       } catch (err) {
         if (!String(err.message).includes('UNIQUE')) throw err;
@@ -172,8 +193,17 @@ const api = {
   },
 
   nextPending() {
+    // Une demande dont la « date de début du compte » est dans le futur reste en
+    // file d'attente : le robot ne la traite qu'à partir de cette date.
     return db
-      .prepare(`SELECT * FROM requests WHERE status = 'en_attente' ORDER BY id ASC LIMIT 1`)
+      .prepare(
+        `SELECT * FROM requests
+          WHERE status = 'en_attente'
+            AND (json_extract(payload, '$.date_debut') IS NULL
+                 OR json_extract(payload, '$.date_debut') = ''
+                 OR json_extract(payload, '$.date_debut') <= date('now'))
+          ORDER BY id ASC LIMIT 1`
+      )
       .get();
   },
 
@@ -339,13 +369,35 @@ const api = {
     ).run(appId, JSON.stringify(data), admin);
   },
 
-  audit(admin, action, target = '', details = '') {
-    db.prepare(`INSERT INTO audit_log (admin, action, target, details) VALUES (?, ?, ?, ?)`)
-      .run(admin, action, target, typeof details === 'string' ? details : JSON.stringify(details));
+  audit(admin, action, target = '', details = '', ip = '') {
+    db.prepare(`INSERT INTO audit_log (admin, action, target, details, ip) VALUES (?, ?, ?, ?, ?)`)
+      .run(admin, action, target, typeof details === 'string' ? details : JSON.stringify(details), ip || '');
   },
 
   listAudit(limit = 50) {
     return db.prepare(`SELECT * FROM audit_log ORDER BY id DESC LIMIT ?`).all(limit);
+  },
+
+  // --- Sessions SSO Microsoft 365 -------------------------------------------
+
+  createSsoSession(token, email, name, oid, expiresAt) {
+    db.prepare(
+      `INSERT INTO sso_sessions (token, email, name, oid, expires_at) VALUES (?, ?, ?, ?, ?)`
+    ).run(token, email, name || '', oid || '', expiresAt);
+  },
+
+  getSsoSession(token) {
+    return db
+      .prepare(`SELECT * FROM sso_sessions WHERE token = ? AND expires_at > datetime('now')`)
+      .get(token);
+  },
+
+  deleteSsoSession(token) {
+    db.prepare(`DELETE FROM sso_sessions WHERE token = ?`).run(token);
+  },
+
+  purgeExpiredSsoSessions() {
+    db.prepare(`DELETE FROM sso_sessions WHERE expires_at <= datetime('now')`).run();
   },
 
   // --- Boîte d'envoi des e-mails --------------------------------------------

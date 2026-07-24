@@ -121,16 +121,34 @@
     relance_demande: 'Demande relancée', creation_admin: 'Compte admin créé',
     maj_mdp_admin: 'Mot de passe modifié', desactivation_admin: 'Compte désactivé',
     reactivation_admin: 'Compte réactivé', renvoi_email: 'E-mail renvoyé', email_marque_envoye: 'E-mail marqué envoyé',
+    depot_demande: 'Demande déposée', creation_compte: 'Compte créé par le robot',
+    echec_creation: 'Échec de création (robot)', connexion_admin: 'Connexion admin',
+    echec_connexion_admin: 'Échec de connexion admin', connexion_sso: 'Connexion Microsoft 365',
+    echec_connexion_sso: 'Échec de connexion Microsoft 365',
+    email_identifiants_envoye: 'E-mail d’identifiants envoyé',
+    email_identifiants_en_attente: 'E-mail d’identifiants en boîte d’envoi',
   };
+  let journalEntries = [];
   async function loadJournal() {
     let data;
-    try { data = await fetchJson('/api/admin/audit'); } catch (e) { el('journal-rows').innerHTML = `<tr><td colspan="4" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
-    el('journal-rows').innerHTML = data.entries.length ? data.entries.map((e) => `<tr>
-      <td>${formatDate(e.created_at)}</td>
+    try { data = await fetchJson('/api/admin/audit?limit=500'); } catch (e) { el('journal-rows').innerHTML = `<tr><td colspan="6" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
+    journalEntries = data.entries;
+    el('journal-search').oninput = renderJournal;
+    renderJournal();
+  }
+  function renderJournal() {
+    const q = el('journal-search').value.trim().toLowerCase();
+    const rows = journalEntries.filter((e) =>
+      !q || `${e.admin} ${AUDIT_LABELS[e.action] || e.action} ${e.target} ${e.details} ${e.ip}`.toLowerCase().includes(q)
+    );
+    el('journal-rows').innerHTML = rows.length ? rows.map((e) => `<tr>
+      <td style="white-space:nowrap">${formatDate(e.created_at)}</td>
       <td><b>${escapeHtml(e.admin)}</b></td>
       <td>${escapeHtml(AUDIT_LABELS[e.action] || e.action)}</td>
       <td>${escapeHtml(e.target || '—')}</td>
-    </tr>`).join('') : '<tr><td colspan="4" class="loading">Aucune activité enregistrée.</td></tr>';
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(e.details || '')}">${escapeHtml(e.details || '—')}</td>
+      <td style="color:var(--muted);font-size:.82rem">${escapeHtml(e.ip || '—')}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="loading">Aucune activité correspondante.</td></tr>';
   }
 
   // ========================================================================
@@ -225,6 +243,7 @@
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>Demande <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
+      ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
       ${r.login ? `<p style="margin-top:8px;font-size:.9rem">Identifiant attribué : <span class="ref" style="font-size:.9rem">${escapeHtml(r.login)}</span></p>` : ''}
       ${r.message ? `<p style="margin-top:8px;font-size:.9rem"><strong>Résultat :</strong> ${escapeHtml(r.message)}</p>` : ''}
       <h4>Informations saisies</h4><dl class="kv">${payloadRows}</dl>
@@ -610,6 +629,10 @@
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Robot</h3></div><div class="cb">
         <p style="font-size:.92rem">Mode d'automatisation : <b>${s.automationMode === 'production' ? 'Production (vraies applications)' : 'Démonstration (console factice)'}</b></p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Se règle via la variable d'environnement <code>AUTOMATION_MODE</code> côté serveur.</p>
+      </div></div>
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Connexion SSO Microsoft 365</h3></div><div class="cb">
+        <p style="font-size:.92rem">État : ${s.sso && s.sso.required ? '<span class="badge st-terminee">Actif — accès réservé aux comptes ADEF</span>' : s.sso && s.sso.configured ? '<span class="badge st-en_attente">Configuré mais désactivé (SSO_REQUIRED=false)</span>' : '<span class="badge st-en_attente">Non configuré — site en accès libre</span>'}</p>
+        <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Renseignez <code>M365_TENANT_ID</code>, <code>M365_CLIENT_ID</code>, <code>M365_CLIENT_SECRET</code> et <code>M365_REDIRECT_URI</code> dans le <code>.env</code> (application « Web » enregistrée dans Entra ID). Seuls les comptes Microsoft 365 du tenant ADEF pourront alors accéder au portail.</p>
       </div></div>
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Envoi d'e-mails (SMTP)</h3></div><div class="cb">
         <p style="font-size:.92rem">État : ${badge(s.smtp)}</p>
