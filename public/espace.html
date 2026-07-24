@@ -62,6 +62,15 @@
     .acc-row-actions .btn { gap: 5px; padding: 6px 11px; }
     .acc-row-actions .btn svg { width: 14px; height: 14px; }
     @media (max-width: 760px) { .acc-row-actions .btn span { display: none; } }
+    /* Pagination. */
+    .esp-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    .esp-pager .pg-info { color: var(--muted); font-size: .82rem; }
+    .pg-btns { display: flex; gap: 5px; align-items: center; }
+    .pg { min-width: 34px; height: 34px; padding: 0 9px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); font-size: .85rem; font-weight: 600; cursor: pointer; }
+    .pg:hover:not(:disabled) { color: var(--text); border-color: var(--gold-line); }
+    .pg.on { background: var(--gold-soft); color: var(--gold-bright); border-color: var(--gold-line); }
+    .pg:disabled { opacity: .4; cursor: default; }
+    .pg-ell { color: var(--faint); padding: 0 2px; }
     .empty-box { background: var(--surface); border: 1px dashed var(--line-2); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; color: var(--muted); }
     .notauth { max-width: 620px; margin: 60px auto; text-align: center; }
     .notauth .ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; margin: 0 auto 18px; background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }

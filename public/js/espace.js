@@ -75,58 +75,61 @@
       </div>
 
       <div class="esp-section-head">
-        <h2>Comptes existants</h2>
-        <span class="hint" id="acc-count"></span>
+        <h2>Comptes &amp; activité</h2>
+        <span class="hint" id="esp-count"></span>
       </div>
       <div class="acc-toolbar">
-        <div class="acc-tabs" id="acc-tabs"></div>
-        <label class="esp-search"><input type="text" id="acc-search" placeholder="Rechercher un identifiant, un nom, une fonction…" autocomplete="off" /></label>
+        <div class="acc-tabs" id="esp-tabs"></div>
+        <label class="esp-search"><input type="text" id="esp-search-input" placeholder="Rechercher un identifiant, un nom, une référence…" autocomplete="off" /></label>
       </div>
-      <div id="accounts"></div>
+      <div id="esp-view"></div>`;
 
-      <div class="esp-section-head"><h2>Activité récente</h2></div>
-      <div id="activity"></div>`;
-
-    setupAccounts(data.accounts);
-    renderActivity(data.activity || []);
+    setupViews(data);
   }
 
-  const ACC_CAP = 100; // nombre max de lignes affichées (le reste via la recherche)
-  const accState = { all: [], app: '', query: '' };
+  // Un seul espace paginé, organisé en onglets : une application par onglet
+  // (BlueKanGo, NetSoins…) plus « Activité ». Évite de scroller une longue page.
+  const PAGE_SIZE = 15;
+  const V = { accounts: [], activity: [], view: '', query: '', page: 1 };
 
-  // Applications présentes dans les comptes, pour les onglets de filtre.
   function appsOf(accounts) {
     const seen = new Map();
     for (const a of accounts) if (!seen.has(a.appId)) seen.set(a.appId, a.app);
     return [...seen.entries()].map(([appId, app]) => ({ appId, app }));
   }
 
-  function setupAccounts(accounts) {
-    accState.all = accounts;
-    const apps = appsOf(accounts);
-    // Onglet par défaut : « Toutes » s'il y a plusieurs applications, sinon l'unique.
-    accState.app = apps.length > 1 ? '' : (apps[0] ? apps[0].appId : '');
-    accState.query = '';
+  function setupViews(data) {
+    V.accounts = data.accounts || [];
+    V.activity = data.activity || [];
+    const tabs = appsOf(V.accounts).map((a) => ({ key: a.appId, label: a.app }));
+    tabs.push({ key: '__activity', label: 'Activité' });
+    V.view = tabs[0].key;
+    V.query = '';
+    V.page = 1;
 
-    const tabsBox = document.getElementById('acc-tabs');
-    const tabs = (apps.length > 1 ? [{ appId: '', app: 'Toutes' }] : []).concat(apps);
+    const tabsBox = document.getElementById('esp-tabs');
     tabsBox.innerHTML = tabs
-      .map((t) => `<button class="acc-tab" data-app="${escapeHtml(t.appId)}">${escapeHtml(t.app)}</button>`)
+      .map((t) => `<button class="acc-tab" data-view="${escapeHtml(t.key)}">${escapeHtml(t.label)}</button>`)
       .join('');
     tabsBox.querySelectorAll('.acc-tab').forEach((btn) => {
-      btn.addEventListener('click', () => { accState.app = btn.dataset.app; drawAccounts(); });
+      btn.addEventListener('click', () => { V.view = btn.dataset.view; V.page = 1; draw(); });
     });
 
-    const search = document.getElementById('acc-search');
-    search.addEventListener('input', () => { accState.query = search.value.trim().toLowerCase(); drawAccounts(); });
+    const search = document.getElementById('esp-search-input');
+    search.addEventListener('input', () => { V.query = search.value.trim().toLowerCase(); V.page = 1; draw(); });
 
-    drawAccounts();
+    draw();
   }
 
-  function filteredAccounts() {
-    const q = accState.query;
-    return accState.all.filter((a) => {
-      if (accState.app && a.appId !== accState.app) return false;
+  function currentList() {
+    const q = V.query;
+    if (V.view === '__activity') {
+      return !q ? V.activity : V.activity.filter((r) =>
+        [r.reference, r.who, r.login, r.etablissementLabel, TYPE_LABELS[r.type]]
+          .some((v) => (v || '').toLowerCase().includes(q)));
+    }
+    return V.accounts.filter((a) => {
+      if (a.appId !== V.view) return false;
       if (!q) return true;
       return [a.login, a.nom, a.prenom, a.fonction, a.etablissementLabel]
         .some((v) => (v || '').toLowerCase().includes(q));
@@ -144,7 +147,6 @@
     return `<tr>
       <td>${escapeHtml(who)}</td>
       <td><span class="ref">${escapeHtml(a.login)}</span></td>
-      <td>${escapeHtml(a.app)}</td>
       <td>${escapeHtml(a.etablissementLabel || '—')}</td>
       <td>${escapeHtml(a.fonction || '—')}</td>
       <td>${src}${inactif}</td>
@@ -155,60 +157,90 @@
     </tr>`;
   }
 
-  function drawAccounts() {
-    const box = document.getElementById('accounts');
-    const countEl = document.getElementById('acc-count');
-    const list = filteredAccounts();
-
-    // Onglet actif.
-    document.querySelectorAll('#acc-tabs .acc-tab').forEach((b) => {
-      b.classList.toggle('on', b.dataset.app === accState.app);
-    });
-    countEl.textContent = `${list.length} compte${list.length > 1 ? 's' : ''}`;
-
-    if (!list.length) {
-      box.innerHTML = accState.query
-        ? `<div class="empty-box">Aucun compte ne correspond à « ${escapeHtml(accState.query)} ».</div>`
-        : `<div class="empty-box">Aucun compte pour cette sélection.
-           <br />Les comptes apparaissent après une création ou un import.</div>`;
-      return;
-    }
-    const shown = list.slice(0, ACC_CAP);
-    const more = list.length - shown.length;
-    box.innerHTML =
-      `<div class="tablecard"><table class="data acc-table">
-        <thead><tr><th>Bénéficiaire</th><th>Identifiant</th><th>Application</th><th>Établissement</th><th>Fonction</th><th>État</th><th></th></tr></thead>
-        <tbody>${shown.map(accRow).join('')}</tbody>
-      </table></div>` +
-      (more > 0
-        ? `<div class="empty-box" style="margin-top:12px">${more} autre${more > 1 ? 's' : ''} compte${more > 1 ? 's' : ''} — affinez la recherche pour les voir.</div>`
-        : '');
+  function accountsTable(rows) {
+    return `<div class="tablecard"><table class="data acc-table">
+      <thead><tr><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Fonction</th><th>État</th><th></th></tr></thead>
+      <tbody>${rows.map(accRow).join('')}</tbody>
+    </table></div>`;
   }
 
-  function renderActivity(activity) {
-    const box = document.getElementById('activity');
-    if (!activity.length) {
-      box.innerHTML = `<div class="empty-box">Aucune demande enregistrée pour vos établissements.</div>`;
+  function activityTable(rows) {
+    return `<div class="tablecard"><table class="data">
+      <thead><tr><th>Référence</th><th>Type</th><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Déposée le</th><th>Statut</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td><a class="ref" href="/suivi.html?ref=${encodeURIComponent(r.reference)}">${escapeHtml(r.reference)}</a></td>
+        <td>${escapeHtml(TYPE_LABELS[r.type] || r.type)}</td>
+        <td>${escapeHtml(r.who || '—')}</td>
+        <td>${r.login ? `<span class="ref">${escapeHtml(r.login)}</span>` : '—'}</td>
+        <td>${escapeHtml(r.etablissementLabel || '—')}</td>
+        <td>${formatDate(r.createdAt)}</td>
+        <td>${statusBadge(r.status)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+
+  // Numéros de page à afficher (1 … n-1 n n+1 … N).
+  function pageNumbers(page, pages) {
+    const wanted = [1, pages, page, page - 1, page + 1].filter((n) => n >= 1 && n <= pages);
+    const uniq = [...new Set(wanted)].sort((a, b) => a - b);
+    const out = [];
+    let prev = 0;
+    for (const n of uniq) { if (n - prev > 1) out.push('…'); out.push(n); prev = n; }
+    return out;
+  }
+
+  function pager(page, pages, from, to, total, noun) {
+    const info = `<span class="pg-info">${from}–${to} sur ${total} ${noun}</span>`;
+    if (pages <= 1) return `<div class="esp-pager">${info}</div>`;
+    const btns = pageNumbers(page, pages)
+      .map((n) => n === '…'
+        ? '<span class="pg-ell">…</span>'
+        : `<button class="pg${n === page ? ' on' : ''}" data-page="${n}">${n}</button>`)
+      .join('');
+    return `<div class="esp-pager">${info}
+      <div class="pg-btns">
+        <button class="pg" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''} aria-label="Précédent">‹</button>
+        ${btns}
+        <button class="pg" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''} aria-label="Suivant">›</button>
+      </div>
+    </div>`;
+  }
+
+  function draw() {
+    document.querySelectorAll('#esp-tabs .acc-tab').forEach((b) => {
+      b.classList.toggle('on', b.dataset.view === V.view);
+    });
+    const isActivity = V.view === '__activity';
+    const noun = isActivity ? 'demandes' : 'comptes';
+    const list = currentList();
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (V.page > pages) V.page = pages;
+    const start = (V.page - 1) * PAGE_SIZE;
+    const slice = list.slice(start, start + PAGE_SIZE);
+
+    document.getElementById('esp-count').textContent =
+      `${total} ${total > 1 ? noun : noun.replace(/s$/, '')}`;
+
+    const box = document.getElementById('esp-view');
+    if (!total) {
+      box.innerHTML = V.query
+        ? `<div class="empty-box">Aucun résultat pour « ${escapeHtml(V.query)} ».</div>`
+        : isActivity
+          ? `<div class="empty-box">Aucune demande enregistrée pour vos établissements.</div>`
+          : `<div class="empty-box">Aucun compte pour cette sélection.<br />Les comptes apparaissent après une création ou un import.</div>`;
       return;
     }
-    box.innerHTML = `
-      <div class="tablecard"><table class="data">
-        <thead><tr><th>Référence</th><th>Type</th><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Déposée le</th><th>Statut</th></tr></thead>
-        <tbody>
-          ${activity
-            .map(
-              (r) => `<tr>
-            <td><a class="ref" href="/suivi.html?ref=${encodeURIComponent(r.reference)}">${escapeHtml(r.reference)}</a></td>
-            <td>${escapeHtml(TYPE_LABELS[r.type] || r.type)}</td>
-            <td>${escapeHtml(r.who || '—')}</td>
-            <td>${r.login ? `<span class="ref">${escapeHtml(r.login)}</span>` : '—'}</td>
-            <td>${escapeHtml(r.etablissementLabel || '—')}</td>
-            <td>${formatDate(r.createdAt)}</td>
-            <td>${statusBadge(r.status)}</td>
-          </tr>`
-            )
-            .join('')}
-        </tbody>
-      </table></div>`;
+    box.innerHTML =
+      (isActivity ? activityTable(slice) : accountsTable(slice)) +
+      pager(V.page, pages, start + 1, start + slice.length, total, noun);
+
+    box.querySelectorAll('.pg[data-page]').forEach((b) => {
+      if (b.disabled) return;
+      b.addEventListener('click', () => {
+        const p = Number(b.dataset.page);
+        if (p >= 1 && p <= pages && p !== V.page) { V.page = p; draw(); }
+      });
+    });
   }
 })();
