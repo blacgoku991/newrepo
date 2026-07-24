@@ -9,7 +9,10 @@ module.exports = {
   icon: 'heart',
   color: '#0d9488',
   order: 2,
-  logo: '/img/netsoins',
+  // Logo officiel de l'éditeur (repli sur le SVG local /img/netsoins si le
+  // chargement échoue). Le domaine est autorisé dans la CSP (img-src).
+  logo: 'https://adef.netsoins.com/images/orisha_socialcare_teranga.png',
+  logoFallback: '/img/netsoins',
   referencePrefix: 'NS',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
   robotFields: ['nom', 'prenom', 'email', 'etablissement', 'metier', 'type_contrat', 'date_debut', 'acces_prescriptions'],

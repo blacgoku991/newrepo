@@ -65,10 +65,16 @@ function statusBadge(status) {
 
 /* Visuel d'une application : logo réel si disponible, sinon pastille (initiale + couleur). */
 function appVisual(app, cls) {
+  const color = escapeHtml(app.color || '#2f5fda');
+  const letter = escapeHtml((app.name || '?').charAt(0));
   if (app.logo) {
-    return `<img class="logo ${cls || ''}" src="${escapeHtml(app.logo)}" alt="${escapeHtml(app.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'logo-fallback ${cls||''}',textContent:'${escapeHtml((app.name||'?').charAt(0))}',style:'background:${escapeHtml(app.color||'#2f5fda')}'}))" />`;
+    // Logo officiel de l'éditeur en priorité, repli sur le SVG local
+    // (/img/<id>), puis sur une pastille lettrée. Fallback géré par écouteur
+    // (attachLogoFallbacks) — aucun gestionnaire inline (CSP stricte).
+    const fb = app.logoFallback || (app.id ? `/img/${escapeHtml(app.id)}` : '');
+    return `<img class="logo ${cls || ''}" src="${escapeHtml(app.logo)}" alt="${escapeHtml(app.name)}" data-logo-fallback="${escapeHtml(fb)}" data-letter="${letter}" data-color="${color}" />`;
   }
-  return `<span class="logo-fallback ${cls || ''}" style="background:${escapeHtml(app.color || '#2f5fda')}">${escapeHtml((app.name || '?').charAt(0))}</span>`;
+  return `<span class="logo-fallback ${cls || ''}" style="background:${color}">${letter}</span>`;
 }
 
 function escapeHtml(value) {
@@ -100,7 +106,7 @@ function renderFooter() {
     <div class="ft-inner">
       <div class="ft-top">
         <div class="ft-brand">
-          <span class="ft-secret" id="ft-secret" role="button" tabindex="0" title="Algonis" aria-label="Algonis">${logoImg('https://algonis.net/wp-content/uploads/2022/10/cropped-LogoAlgonis-1.png', 'Algonis', 'ft-logo')}</span>
+          <span class="ft-secret" id="ft-secret" role="button" tabindex="0" title="Algonis" aria-label="Algonis">${logoImg('/img/algonis', 'Algonis', 'ft-logo')}</span>
           <p>Portail interne d'ADEF Résidences pour la création automatisée des comptes sur les applications métiers, avec suivi et remise sécurisée des identifiants.</p>
         </div>
         <div>
@@ -148,27 +154,57 @@ function renderFooter() {
   }
 }
 
-/* Repli texte pour toute image marquée data-fallback (logos éditeurs, logo
- * Algonis en en-tête). Gère aussi le cas où l'image a déjà échoué avant
- * l'attachement de l'écouteur. Aucun gestionnaire inline (CSP stricte). */
-function attachImgFallbacks() {
-  for (const img of document.querySelectorAll('img[data-fallback]')) {
-    if (img._fbBound) continue;
-    img._fbBound = true;
-    const swap = () => {
-      const span = document.createElement('span');
-      span.className = img.dataset.fallbackCls || '';
-      span.textContent = img.dataset.fallback;
-      img.replaceWith(span);
-    };
-    img.addEventListener('error', swap);
-    if (img.complete && img.naturalWidth === 0) swap();
+/* Replis d'images sans gestionnaire inline (CSP stricte), par délégation en
+ * phase de capture — l'évènement « error » ne bulle pas, mais est capturé au
+ * niveau document, ce qui couvre AUSSI les images injectées dynamiquement
+ * (cartes d'applications, panneaux de formulaire, pied de page). */
+function handleTextFallback(img) {
+  if (img._fbDone) return;
+  img._fbDone = true;
+  const span = document.createElement('span');
+  span.className = img.dataset.fallbackCls || '';
+  span.textContent = img.dataset.fallback;
+  img.replaceWith(span);
+}
+function handleLogoError(img) {
+  // 1) image éditeur → 2) SVG local (/img/<id>) → 3) pastille lettrée.
+  const fb = img.dataset.logoFallback;
+  if (fb && img.getAttribute('src') !== fb) {
+    img.dataset.logoFallback = '';
+    img.src = fb;
+    return;
+  }
+  if (img._fbDone) return;
+  img._fbDone = true;
+  const span = document.createElement('span');
+  span.className = img.className.replace(/\blogo\b/, 'logo-fallback');
+  span.textContent = img.dataset.letter || '?';
+  span.style.background = img.dataset.color || '#2f5fda';
+  img.replaceWith(span);
+}
+document.addEventListener(
+  'error',
+  (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== 'IMG') return;
+    if ('logoFallback' in img.dataset) handleLogoError(img);
+    else if ('fallback' in img.dataset) handleTextFallback(img);
+  },
+  true
+);
+/* Images déjà en échec avant l'exécution du script (logo en-tête notamment). */
+function sweepFailedImages() {
+  for (const img of document.querySelectorAll('img[data-logo-fallback], img[data-fallback]')) {
+    if (img.complete && img.naturalWidth === 0) {
+      if ('logoFallback' in img.dataset) handleLogoError(img);
+      else handleTextFallback(img);
+    }
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   renderFooter();
-  attachImgFallbacks();
+  sweepFailedImages();
 });
 
 /* Barre de navigation du site public :

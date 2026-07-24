@@ -21,7 +21,10 @@ module.exports = {
   icon: 'shield',
   color: '#2563eb',
   order: 1,
-  logo: '/img/bluekango',
+  // Logo officiel de l'éditeur (repli sur le SVG local /img/bluekango si le
+  // chargement échoue). Le domaine est autorisé dans la CSP (img-src).
+  logo: 'https://app.bluekango.com/BMS_EARLY/images/bkg_logo.png',
+  logoFallback: '/img/bluekango',
   referencePrefix: 'BKG',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
   robotFields: ['civilite', 'nom', 'prenom', 'etablissement', 'fonction', 'date_fin'],
