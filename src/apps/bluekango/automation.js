@@ -75,32 +75,6 @@ async function selectProfile(page, log) {
 }
 
 /**
- * Ferme les fenêtres d'accueil qui s'ouvrent parfois juste après la connexion
- * (ex. « Pyramide documentaire »), et qui recouvrent le menu Administration.
- * Non bloquant : on tente plusieurs stratégies de fermeture puis on continue.
- */
-async function dismissWelcomePopups(page, log) {
-  // N'agit QUE si une fenêtre fancybox est réellement ouverte (sinon on ne
-  // touche à rien — parcours nominal inchangé).
-  const overlay = page.locator('.fancybox-overlay, .fancybox-wrap').first();
-  if (!(await overlay.isVisible().catch(() => false))) return;
-  for (let i = 0; i < 3; i++) {
-    const closers = [
-      page.locator('.fancybox-close, .fancybox-item-close, a.fancybox-close').first(),
-      page.getByRole('button', { name: /Fermer/i }).first(),
-      page.getByTitle(/Fermer|Close/i).first(),
-    ];
-    let clicked = false;
-    for (const c of closers) {
-      if (await c.isVisible().catch(() => false)) { await c.click({ timeout: 2000 }).catch(() => {}); clicked = true; break; }
-    }
-    if (!clicked) await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(500).catch(() => {});
-    if (!(await overlay.isVisible().catch(() => false))) { if (log) log('Fenêtre d’accueil fermée'); return; }
-  }
-}
-
-/**
  * Recherche le select d'établissement (« Etablissements : XXX » en haut à
  * droite) dans TOUTES les frames de la page. BlueKanGo classique utilise
  * d'anciens <frame> (frameset), pas des <iframe> : on itère donc sur
@@ -192,9 +166,6 @@ async function createAccount(data, ctx) {
           await page.getByRole('button', { name: S.login.submitLabel }).click();
           // Page de choix de profil éventuelle (« Prénom Nom ÉTABLISSEMENT »).
           await selectProfile(page, ctx.log);
-          // Ferme une éventuelle fenêtre d'accueil (Pyramide documentaire…).
-          await dismissWelcomePopups(page, ctx.log);
-          await page.getByText(S.nav.administration).first().waitFor({ timeout: 45000 });
         },
       },
       {
@@ -202,7 +173,7 @@ async function createAccount(data, ctx) {
         critical: true,
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
-          await dismissWelcomePopups(page, ctx.log);
+          // Comme le codegen : le clic attend tout seul que « Administration » soit prêt.
           await page.getByText(S.nav.administration).first().click();
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
@@ -503,8 +474,6 @@ async function resetPassword(data, ctx) {
         await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
         await page.getByRole('button', { name: S.login.submitLabel }).click();
         await selectProfile(page, ctx.log);
-        await dismissWelcomePopups(page, ctx.log);
-        await page.getByText(S.nav.administration).first().waitFor({ timeout: 45000 });
       },
     },
     {
