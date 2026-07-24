@@ -133,66 +133,83 @@ async function assertPasDErreur(page, S, etape) {
 /**
  * Coche UN établissement dans la liste des établissements autorisés.
  *
- * Deux précautions :
- *  - la case est un interrupteur : si elle est DÉJÀ cochée, cliquer la
- *    décocherait. On lit donc son état avant d'agir ;
- *  - le repérage est tenté par identifiant interne, puis par libellé complet,
- *    puis par le seul nom de l'établissement — la mise en forme de l'adresse
- *    variant d'une liste à l'autre.
+ * NetSoins affiche les établissements sous leur libellé HIÉRARCHIQUE
+ * (« ADEF RESIDENCES - EHPAD - La Maison Chantereine - 94600 CHOISY LE ROI »)
+ * et replie l'arbre : on filtre donc par le champ de recherche du menu plutôt
+ * que de déplier les groupes — déplier obligerait à approcher le nœud parent,
+ * dont la case sélectionne tout le groupe d'un coup.
  *
- * Si rien ne correspond, on liste les établissements réellement proposés :
- * le journal devient un diagnostic exploitable plutôt qu'un « introuvable ».
+ * La case est un interrupteur : son état est lu avant d'agir, faute de quoi un
+ * établissement déjà rattaché serait retiré.
  */
 async function cocherEtablissement(page, S, ctx, value) {
   const label = etabLabel(value);
   const nom = label.split(' - ')[0].trim();
 
-  for (const selector of S.compte.etabOption(label, value, nom)) {
-    const option = L(page, selector).first();
-    let present = false;
-    try {
-      await option.waitFor({ state: 'visible', timeout: 2500 });
-      present = true;
-    } catch {
-      continue; // écriture suivante
-    }
-    if (!present) continue;
-
-    // Déjà coché ? Ne pas cliquer, sous peine de le retirer.
-    const caseACocher = L(page, selector).first().locator('xpath=../input[@type="checkbox"]');
-    let dejaCoche = false;
-    try {
-      dejaCoche = await caseACocher.first().isChecked({ timeout: 1000 });
-    } catch {
-      dejaCoche = false; // état illisible : on clique (cas nominal)
-    }
-    if (dejaCoche) {
-      ctx.log(`Établissement déjà autorisé : ${label}.`);
-      return;
-    }
-    await option.click();
-    ctx.log(`Établissement autorisé : ${label}.`);
-    return;
+  // Filtre la liste sur le nom de l'établissement.
+  const recherche = L(page, S.compte.etabSearch).first();
+  try {
+    await recherche.waitFor({ state: 'visible', timeout: 3000 });
+    await recherche.fill(nom);
+    await page.waitForTimeout(700);
+  } catch {
+    ctx.log('Pas de champ de recherche dans la liste — repérage direct.');
   }
 
-  let proposes = [];
+  const ligne = L(page, S.compte.etabRow).filter({ hasText: nom }).first();
   try {
-    proposes = await page
-      .locator('label.bloc_option, .bloc_option, label:has(> .checkbox)')
-      .evaluateAll((els) =>
+    await ligne.waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    let proposes = [];
+    try {
+      proposes = await L(page, S.compte.etabRow).evaluateAll((els) =>
         els
           .filter((e) => e.offsetParent !== null)
           .slice(0, 15)
-          .map((e) => (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 45))
+          .map((e) => (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60))
           .filter(Boolean)
       );
-  } catch {
-    /* le diagnostic ne doit pas masquer l'erreur d'origine */
+    } catch {
+      /* le diagnostic ne doit pas masquer l'erreur d'origine */
+    }
+    throw new Error(
+      `Établissement « ${nom} » introuvable dans la liste.` +
+        (proposes.length ? ` Options visibles : ${proposes.map((t) => `« ${t} »`).join(', ')}` : '')
+    );
   }
-  throw new Error(
-    `Établissement « ${label} » introuvable dans la liste.` +
-      (proposes.length ? ` Options visibles : ${proposes.map((t) => `« ${t} »`).join(', ')}` : '')
-  );
+
+  // Selon les écrans, c'est la pastille, la ligne entière ou la case elle-même
+  // qui réagit au clic. On essaie dans cet ordre, en relisant l'état AVANT
+  // chaque tentative — sans quoi un second clic retirerait ce que le premier
+  // vient de cocher — puis on VÉRIFIE le résultat.
+  const caseACocher = ligne.locator('input[type="checkbox"]').first();
+  const estCochee = () => caseACocher.isChecked().catch(() => false);
+
+  if (await estCochee()) {
+    ctx.log(`Établissement déjà autorisé : ${label}.`);
+  } else {
+    for (const cible of [ligne.locator('.checkbox').first(), ligne, caseACocher]) {
+      if (await estCochee()) break;
+      try {
+        await cible.click({ timeout: 3000 });
+      } catch {
+        continue; // cible non cliquable : on tente la suivante
+      }
+      await page.waitForTimeout(250);
+    }
+    if (!(await estCochee())) {
+      throw new Error(`Établissement « ${nom} » trouvé, mais sa case n'a pas pu être cochée`);
+    }
+    ctx.log(`Établissement autorisé : ${label}.`);
+  }
+
+  // Remet la liste à zéro pour l'établissement suivant.
+  try {
+    await recherche.fill('');
+    await page.waitForTimeout(400);
+  } catch {
+    /* pas de champ de recherche */
+  }
 }
 
 /**

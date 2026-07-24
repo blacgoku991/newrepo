@@ -65,19 +65,15 @@ module.exports = {
     // Établissements autorisés (multi-sélection). L'identifiant du widget se
     // termine par un suffixe aléatoire : on cible par son préfixe.
     etabOpen: '[id^="multi_champ_id_visibilite_etablissements_autorises"]',
-    etabRoot: 'text="ADEF RESIDENCES"',
-    // Plusieurs écritures essayées dans l'ordre : par identifiant interne quand
-    // le widget le porte, sinon par libellé complet, sinon par le seul nom de
-    // l'établissement (la partie avant le tiret) — l'adresse pouvant être mise
-    // en forme différemment d'une liste à l'autre.
-    etabOption: (label, value, nom) => [
-      `label:has(input[data="${value}"]) > .checkbox`,
-      `label:has(input[value="${value}"]) > .checkbox`,
-      `[value="${value}"] > .checkbox`,
-      `label:has-text("${label}") > .checkbox`,
-      `label:has-text("${nom}") > .checkbox`,
-      `.bloc_option:has-text("${nom}") > .checkbox`,
-    ],
+    // Le menu propose un champ de recherche : on l'utilise pour filtrer, plutôt
+    // que de déplier l'arbre « ADEF RESIDENCES » — dont le nœud parent
+    // sélectionnerait tout le groupe s'il était coché par mégarde.
+    etabSearch: 'input[placeholder*="Recherch" i]',
+    // Ligne d'un établissement dans la liste. Le libellé affiché est préfixé
+    // par la hiérarchie (« ADEF RESIDENCES - EHPAD - <nom> - <code postal ville> ») :
+    // on repère donc la ligne par le NOM de l'établissement, pas par le libellé
+    // complet du portail.
+    etabRow: 'label.bloc_option, label:has(> .checkbox), .bloc_option, .filter_choose_line',
   },
 
   // Onglet « Informations » : état civil et catégorie professionnelle.
