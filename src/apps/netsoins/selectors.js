@@ -65,10 +65,13 @@ module.exports = {
     // Établissements autorisés (multi-sélection). L'identifiant du widget se
     // termine par un suffixe aléatoire : on cible par son préfixe.
     etabOpen: '[id^="multi_champ_id_visibilite_etablissements_autorises"]',
-    // Le menu propose un champ de recherche : on l'utilise pour filtrer, plutôt
-    // que de déplier l'arbre « ADEF RESIDENCES » — dont le nœud parent
-    // sélectionnerait tout le groupe s'il était coché par mégarde.
-    etabSearch: 'input[placeholder*="Recherch" i]',
+    // Le menu propose un champ de recherche (rôle « searchbox ») : on filtre
+    // avec, plutôt que de déplier l'arbre.
+    etabSearch: 'role=searchbox',
+    // Repli : cliquer l'intitulé du groupe DÉPLIE l'arbre et fait apparaître
+    // tous les établissements. Attention, c'est bien le LIBELLÉ qu'on clique —
+    // la case à cocher du groupe, elle, sélectionnerait tout d'un coup.
+    etabGroupe: 'text="ADEF RESIDENCES"',
     // Ligne d'un établissement dans la liste. Le libellé affiché est préfixé
     // par la hiérarchie (« ADEF RESIDENCES - EHPAD - <nom> - <code postal ville> ») :
     // on repère donc la ligne par le NOM de l'établissement, pas par le libellé
@@ -78,9 +81,15 @@ module.exports = {
 
   // Onglet « Informations » : état civil et catégorie professionnelle.
   informations: {
+    // L'onglet demande deux clics : le bandeau, puis son intitulé.
+    tabZone: '#onglet_informations',
     tab: '#onglet_informations >> text=Informations',
     categorieOpen: 'link:Choisissez',
-    categorieOption: (label) => `.selectsearchchoice:text-is("${label}")`,
+    // Correspondance sur le texte EXACT : les options sont indentées par des
+    // espaces insécables, et surtout certains libellés sont le préfixe d'un
+    // autre (« Infirmier/ère » vs « Infirmier/ère H.A.D ») — une recherche
+    // partielle cocherait la mauvaise catégorie.
+    categorieOption: (label) => `text-exact:${label}`,
     // ⚠️ Sélecteurs positionnels relevés au codegen : à confirmer sur l'instance
     // (l'un vaut « Masculin », l'autre « Féminin »).
     sexeMasculin: 'span:nth-child(3) > span > span:nth-child(2) > label > .radio',

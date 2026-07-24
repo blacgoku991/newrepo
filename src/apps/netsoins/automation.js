@@ -68,7 +68,14 @@ function chooseStrategy(data) {
  * `scope` est une page ou une frame : les deux exposent locator() et getByRole().
  */
 const ROLE_SELECTOR = /^(textbox|link|button|combobox|checkbox|radio|option|tab|cell|row):(.+)$/;
+// « text-exact:… » → correspondance sur le texte EXACT, espaces normalisés.
+// Indispensable pour les listes où un libellé est le préfixe d'un autre
+// (« Infirmier/ère » et « Infirmier/ère H.A.D ») et dont les options portent
+// des espaces d'indentation.
+const TEXT_EXACT = /^text-exact:(.+)$/;
 function L(scope, selector) {
+  const t = TEXT_EXACT.exec(selector);
+  if (t) return scope.getByText(t[1], { exact: true });
   const m = ROLE_SELECTOR.exec(selector);
   return m ? scope.getByRole(m[1], { name: m[2] }) : scope.locator(selector);
 }
@@ -146,17 +153,40 @@ async function cocherEtablissement(page, S, ctx, value) {
   const label = etabLabel(value);
   const nom = label.split(' - ')[0].trim();
 
-  // Filtre la liste sur le nom de l'établissement.
+  const chercherLigne = () => L(page, S.compte.etabRow).filter({ hasText: nom }).first();
+  const ligneVisible = async () =>
+    (await chercherLigne().isVisible().catch(() => false));
+
+  // 1. Filtrer par le champ de recherche du menu : c'est la voie la plus sûre,
+  //    elle évite d'avoir à toucher à l'arborescence.
   const recherche = L(page, S.compte.etabSearch).first();
   try {
     await recherche.waitFor({ state: 'visible', timeout: 3000 });
+    await recherche.click();
     await recherche.fill(nom);
     await page.waitForTimeout(700);
   } catch {
-    ctx.log('Pas de champ de recherche dans la liste — repérage direct.');
+    ctx.log('Pas de champ de recherche dans la liste — dépliage de l’arborescence.');
   }
 
-  const ligne = L(page, S.compte.etabRow).filter({ hasText: nom }).first();
+  // 2. Si l'établissement n'apparaît toujours pas, il est replié sous son
+  //    groupe : on déplie en cliquant les INTITULÉS (jamais leur case, qui
+  //    sélectionnerait tout le groupe), et on s'arrête dès qu'il est visible.
+  if (!(await ligneVisible())) {
+    const groupes = L(page, S.compte.etabGroupe);
+    const n = await groupes.count().catch(() => 0);
+    for (let i = 0; i < n; i++) {
+      try {
+        await groupes.nth(i).click({ timeout: 1500 });
+        await page.waitForTimeout(500);
+      } catch {
+        continue;
+      }
+      if (await ligneVisible()) break;
+    }
+  }
+
+  const ligne = chercherLigne();
   try {
     await ligne.waitFor({ state: 'visible', timeout: 5000 });
   } catch {
@@ -496,6 +526,8 @@ async function createAccount(data, ctx) {
       critical: true,
       label: `Onglet Informations — état civil (${fullName})`,
       run: async (page) => {
+        // Deux clics : le bandeau de l'onglet, puis son intitulé.
+        await L(page, S.informations.tabZone).first().click().catch(() => {});
         await L(page, S.informations.tab).first().click();
         ctx.log('Onglet « Informations » ouvert.');
 

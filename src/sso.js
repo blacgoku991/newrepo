@@ -156,10 +156,27 @@ async function callbackRoute(req, res) {
     const name = String(payload.name || `${givenName} ${familyName}`.trim() || email);
     if (!email) throw new Error('Adresse e-mail absente du jeton Microsoft');
 
+    // Attributs d'annuaire : tout ce que le jeton porte au-delà des
+    // revendications techniques. C'est là que se trouvent les attributs
+    // personnalisés (rôle, établissement) si Microsoft est configuré pour les
+    // émettre. Conservés tels quels : le mode observation les affiche, et
+    // l'attribution automatique des habilitations s'appuie dessus.
+    const TECHNIQUES = new Set([
+      'aud', 'iss', 'iat', 'nbf', 'exp', 'nonce', 'tid', 'ver', 'sub', 'oid', 'uti', 'rh', 'aio',
+      'at_hash', 'c_hash', 'auth_time', 'name', 'given_name', 'family_name',
+      'preferred_username', 'email', 'upn',
+    ]);
+    const claims = {};
+    for (const [cle, valeur] of Object.entries(payload)) {
+      if (TECHNIQUES.has(cle)) continue;
+      if (valeur === null || valeur === undefined || valeur === '') continue;
+      claims[cle] = valeur;
+    }
+
     const token = b64url(crypto.randomBytes(32));
     const expires = new Date(Date.now() + SESSION_TTL_H * 3600 * 1000)
       .toISOString().slice(0, 19).replace('T', ' ');
-    db.createSsoSession(token, email, name, String(payload.oid || ''), expires, givenName, familyName);
+    db.createSsoSession(token, email, name, String(payload.oid || ''), expires, givenName, familyName, claims);
     db.audit(`${name} <${email}>`, 'connexion_sso', '', '', clientIp(req));
 
     const secure = String(process.env.COOKIE_SECURE || 'false') === 'true';

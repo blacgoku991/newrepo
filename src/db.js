@@ -252,6 +252,12 @@ if (!ssoCols.includes('given_name')) {
 if (!ssoCols.includes('family_name')) {
   db.exec(`ALTER TABLE sso_sessions ADD COLUMN family_name TEXT NOT NULL DEFAULT ''`);
 }
+// Attributs d'annuaire portés par le jeton Microsoft (claims non standard :
+// rôle, établissement…). Conservés tels quels pour l'attribution automatique
+// des habilitations et pour le mode observation.
+if (!ssoCols.includes('claims')) {
+  db.exec(`ALTER TABLE sso_sessions ADD COLUMN claims TEXT NOT NULL DEFAULT '{}'`);
+}
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
 db.prepare(`UPDATE requests SET status = 'en_attente' WHERE status = 'en_cours'`).run();
@@ -584,10 +590,14 @@ const api = {
 
   // --- Sessions SSO Microsoft 365 -------------------------------------------
 
-  createSsoSession(token, email, name, oid, expiresAt, givenName = '', familyName = '') {
+  createSsoSession(token, email, name, oid, expiresAt, givenName = '', familyName = '', claims = {}) {
     db.prepare(
-      `INSERT INTO sso_sessions (token, email, name, given_name, family_name, oid, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(token, email, name || '', givenName || '', familyName || '', oid || '', expiresAt);
+      `INSERT INTO sso_sessions (token, email, name, given_name, family_name, oid, expires_at, claims)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      token, email, name || '', givenName || '', familyName || '', oid || '', expiresAt,
+      JSON.stringify(claims || {})
+    );
   },
 
   getSsoSession(token) {
