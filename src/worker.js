@@ -78,10 +78,14 @@ async function processOne(request) {
       if (result.account && result.account.login) {
         try {
           const credentials = require('./credentials');
+          // Le robot peut imposer un mot de passe précis (ex. réinitialisation :
+          // provisoire aléatoire, car BlueKanGo refuse un mot de passe déjà
+          // utilisé). Sinon, mot de passe initial par défaut de l'application.
+          const password = result.account.password || credentials.initialPasswordFor(request.app_id);
           credentialLink = credentials.createLink(
             request.id,
             result.account.login,
-            credentials.initialPasswordFor(request.app_id)
+            password
           );
           log(`Lien de récupération des identifiants généré (valide ${credentialLink.ttlDays} jours)`);
         } catch (linkErr) {

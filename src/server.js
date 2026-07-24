@@ -280,7 +280,10 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
       return res.status(403).json({ error: 'Ces identifiants sont réservés au demandeur ou au bénéficiaire de la demande.' });
     }
   }
-  const link = credentials.createLink(row.id, row.generated_login, credentials.initialPasswordFor(row.app_id), req);
+  // Régénère avec le MÊME mot de passe que celui posé par le robot (réinit =
+  // provisoire aléatoire), sinon le mot de passe initial de l'application.
+  const pwd = credentials.passwordForRequest(row.id) || credentials.initialPasswordFor(row.app_id);
+  const link = credentials.createLink(row.id, row.generated_login, pwd, req);
   const actor = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : row.demandeur || 'suivi';
   db.audit(actor, 'lien_identifiants_regenere', row.reference, row.generated_login, sso.clientIp(req));
   res.json({ path: link.path });
@@ -389,7 +392,7 @@ app.post('/api/admin/requests/:id/credential-link', auth.requireApi, (req, res) 
   const link = credentials.createLink(
     row.id,
     row.generated_login,
-    credentials.initialPasswordFor(row.app_id),
+    credentials.passwordForRequest(row.id) || credentials.initialPasswordFor(row.app_id),
     req
   );
   db.audit(req.admin.username, 'lien_identifiants_regenere', row.reference, row.generated_login, sso.clientIp(req));

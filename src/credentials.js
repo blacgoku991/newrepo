@@ -104,4 +104,18 @@ function initialPasswordFor(appId) {
   return process.env[`${String(appId).toUpperCase()}_DEFAULT_PASSWORD`] || '';
 }
 
-module.exports = { createLink, reveal, initialPasswordFor, TTL_DAYS };
+/**
+ * Mot de passe réellement posé par le robot pour une demande (déchiffré depuis
+ * le dernier lien). Permet de RÉGÉNÉRER un lien avec le MÊME mot de passe —
+ * indispensable pour la réinitialisation, dont le provisoire est aléatoire.
+ */
+function passwordForRequest(requestId) {
+  try {
+    const enc = db.lastCredentialSecret(requestId);
+    return enc ? decrypt(enc) : '';
+  } catch {
+    return '';
+  }
+}
+
+module.exports = { createLink, reveal, initialPasswordFor, passwordForRequest, TTL_DAYS };

@@ -454,6 +454,14 @@ const api = {
       .get(requestId);
   },
 
+  /** Secret chiffré du dernier lien d'une demande (pour régénérer avec le MÊME mot de passe). */
+  lastCredentialSecret(requestId) {
+    const row = db
+      .prepare(`SELECT secret_enc FROM credential_links WHERE request_id = ? ORDER BY id DESC LIMIT 1`)
+      .get(requestId);
+    return row ? row.secret_enc : null;
+  },
+
   // --- Boîte d'envoi des e-mails --------------------------------------------
 
   createOutbox(requestId, toEmail, subject, bodyText) {

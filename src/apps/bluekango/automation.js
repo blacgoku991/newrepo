@@ -61,6 +61,17 @@ function toFrDate(iso) {
 }
 
 /**
+ * Mot de passe provisoire ALÉATOIRE (réinitialisation) : BlueKanGo refuse un
+ * mot de passe déjà utilisé récemment, on ne peut donc pas remettre celui par
+ * défaut. Respecte la complexité : majuscule, minuscules, chiffres, spécial.
+ */
+function randomProvisionalPassword() {
+  const crypto = require('node:crypto');
+  const core = crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+  return `Adef${core}${crypto.randomInt(10, 99)}!`;
+}
+
+/**
  * Motif du lien de choix de profil affiché après connexion. Le lien a la forme
  * « Prénom Nom ÉTABLISSEMENT » (ex. « Achraf Maatoug COMBS LA VILLE ») : on le
  * repère par le NOM DE L'ÉTABLISSEMENT (dérivé de la liste du config, partie
@@ -350,23 +361,21 @@ async function createAccount(data, ctx) {
 async function resetPassword(data, ctx) {
   // Identifiant EXACT du compte à réinitialiser (saisi dans le formulaire).
   const identifiant = String(data.identifiant || '').trim();
-  const newPassword = process.env.BLUEKANGO_DEFAULT_PASSWORD;
+  // Mot de passe provisoire ALÉATOIRE : BlueKanGo refuse de remettre un mot de
+  // passe déjà utilisé (message « choisissez-en un nouveau »).
+  const newPassword = randomProvisionalPassword();
 
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
-    for (const step of ['Connexion au compte administrateur', `Bascule sur l'établissement`, `Recherche du compte « ${identifiant} »`, 'Compte trouvé — bouton Modifier', 'Nouveau mot de passe provisoire saisi', 'Fiche validée']) {
+    for (const step of ['Connexion au compte administrateur', `Bascule sur l'établissement`, `Recherche du compte « ${identifiant} »`, 'Compte trouvé — bouton Modifier', 'Nouveau mot de passe provisoire aléatoire saisi', 'Fiche validée']) {
       await new Promise((r) => setTimeout(r, 700));
       ctx.log(step);
     }
     return {
       success: true,
       message: `Mot de passe réinitialisé pour « ${identifiant} » (démonstration)`,
-      account: { login: identifiant, prenom: '', nom: '' },
+      account: { login: identifiant, password: newPassword, prenom: '', nom: '' },
     };
-  }
-
-  if (!newPassword) {
-    return { success: false, message: 'BLUEKANGO_DEFAULT_PASSWORD manquant dans le .env : impossible de définir le mot de passe provisoire.' };
   }
 
   const base = process.env.BLUEKANGO_URL.replace(/\/$/, '');
@@ -474,6 +483,13 @@ async function resetPassword(data, ctx) {
       label: 'Enregistrement de la fiche',
       run: async () => {
         await main().getByRole('button', { name: S.form.validerLabel }).click();
+        // BlueKanGo affiche une fenêtre « Information » (bouton OK) après la
+        // modification : on la confirme si elle apparaît.
+        await page.waitForTimeout(1500).catch(() => {});
+        for (const scope of [fancy(), main(), page]) {
+          const ok = scope.getByRole('button', { name: /^OK$/i }).first();
+          if (await ok.isVisible().catch(() => false)) { await ok.click().catch(() => {}); break; }
+        }
         await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
       },
     },
@@ -486,7 +502,7 @@ async function resetPassword(data, ctx) {
     steps,
   });
   if (result.success) {
-    result.account = { login: identifiant, prenom: '', nom: '' };
+    result.account = { login: identifiant, password: newPassword, prenom: '', nom: '' };
   }
   return result;
 }
