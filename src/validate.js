@@ -12,12 +12,32 @@
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^[0-9+().\s-]{6,20}$/;
 
+/**
+ * Un champ conditionnel (`showIf`) n'est actif que si le champ de contrôle a la
+ * bonne valeur (ex. date de fin visible seulement si contrat = CDD). Un champ
+ * inactif n'est ni requis ni conservé.
+ */
+function fieldActive(field, body) {
+  const cond = field.showIf;
+  if (!cond) return true;
+  const raw = body[cond.field];
+  const v = typeof raw === 'string' ? raw.trim() : raw;
+  if (Array.isArray(cond.in)) return cond.in.includes(v);
+  if (cond.equals !== undefined) return v === cond.equals;
+  return true;
+}
+
 function validate(schema, body) {
   const data = {};
   const errors = {};
 
   for (const section of schema.sections) {
     for (const field of section.fields) {
+      // Champ conditionnel masqué : on ne valide pas et on ne stocke rien.
+      if (!fieldActive(field, body)) {
+        data[field.name] = field.type === 'checkboxes' ? [] : '';
+        continue;
+      }
       let value = body[field.name];
 
       if (field.type === 'checkboxes') {

@@ -9,15 +9,21 @@
  * (Ces valeurs sont des placeholders : le mode démo n'en dépend pas.)
  */
 
+  // ⚠️ Toute l'application NetSoins est rendue DANS UNE IFRAME : les sélecteurs
+  // ci-dessous s'appliquent au contenu de cette iframe (voir `frame` dans
+  // automation.js), pas à la page de premier niveau.
 module.exports = {
+  frame: 'iframe',
   login: {
-    user: '#username',
-    password: '#password',
-    submit: '#login-button',
-    // Double authentification (OTP par e-mail).
-    otpInput: 'input[name="otp"]',
-    otpSubmit: 'button:has-text("Valider")',
-    loggedInProof: '#etablissement-select',
+    user: 'input[placeholder="Identifiant"]',
+    password: 'input[placeholder="Mot de passe"]',
+    submit: 'text="Connexion"',
+    // Double authentification (code à usage unique reçu par e-mail).
+    otpInput: 'input[placeholder="Code reçu par mail"]',
+    otpSubmit: 'text="OK"',
+    // Fenêtre d'accueil affichée après connexion (à fermer).
+    closePopup: '.button_close > .fa-times',
+    loggedInProof: '.button_close > .fa-times',
   },
   etablissementSelect: '#etablissement-select',
   // Liste du personnel (pour la duplication d'un compte modèle).
@@ -41,6 +47,9 @@ module.exports = {
     // Profil de droit : case cochée par identifiant interne (attribut data).
     profil: (id) => `input[data="${id}"]`,
     dateDebut: 'input[name="date_debut"]',
+    // Fin de validité du compte (CDD) : case à cocher + date associée.
+    finValiditeCheck: 'input[type="checkbox"][name="fin_validite"]',
+    dateFin: 'input[name="date_fin"]',
     save: 'button:has-text("Enregistrer")',
     successProof: '.toast-success',
   },

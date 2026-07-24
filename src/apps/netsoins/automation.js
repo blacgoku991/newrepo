@@ -81,13 +81,18 @@ async function createAccount(data, ctx) {
   const fullName = `${data.prenom} ${data.nom}`;
   let otpSince = new Date();
 
+  // NetSoins rend toute son interface dans une iframe : on travaille donc à
+  // l'intérieur de ce cadre (résolu à chaque usage, l'iframe se recharge).
+  const F = (page) => page.frameLocator(S.frame);
+
   // Étape « fiche » commune : renseigne/écrase l'identité sur la fiche ouverte
   // (nouvelle fiche OU fiche dupliquée).
   const remplirIdentite = async (page) => {
-    await page.fill(S.form.login, login);
-    await page.fill(S.form.nom, data.nom);
-    await page.fill(S.form.prenom, data.prenom);
-    if (data.email) await page.fill(S.form.email, data.email);
+    const f = F(page);
+    await f.locator(S.form.login).fill(login);
+    await f.locator(S.form.nom).fill(data.nom);
+    await f.locator(S.form.prenom).fill(data.prenom);
+    if (data.email) await f.locator(S.form.email).fill(data.email);
   };
 
   const steps = [
@@ -102,10 +107,15 @@ async function createAccount(data, ctx) {
       critical: true,
       label: 'Connexion avec le compte administrateur',
       run: async (page) => {
-        await page.fill(S.login.user, process.env.NETSOINS_ADMIN_USER);
-        await page.fill(S.login.password, process.env.NETSOINS_ADMIN_PASSWORD);
-        otpSince = new Date(); // le code OTP est envoyé au moment de la validation
-        await page.click(S.login.submit);
+        const f = F(page);
+        // Le formulaire vit dans l'iframe : on clique avant de saisir (le champ
+        // n'accepte la frappe qu'une fois focalisé).
+        await f.locator(S.login.user).click();
+        await f.locator(S.login.user).fill(process.env.NETSOINS_ADMIN_USER);
+        await f.locator(S.login.password).click();
+        await f.locator(S.login.password).fill(process.env.NETSOINS_ADMIN_PASSWORD);
+        otpSince = new Date(); // le code OTP part au moment de la validation
+        await f.locator(S.login.submit).click();
       },
     },
     {
@@ -113,23 +123,30 @@ async function createAccount(data, ctx) {
       critical: true,
       label: 'Double authentification — récupération du code',
       run: async (page) => {
-        await page.waitForSelector(S.login.otpInput);
+        const f = F(page);
+        const field = f.locator(S.login.otpInput);
+        await field.waitFor();
         // Récupère le code (lecture auto par e-mail si configurée, sinon saisie
         // manuelle par l'admin dans les détails de la demande).
         const code = await ctx.awaitOtp({
           since: otpSince,
-          label: 'Code de connexion NetSoins reçu par e-mail.',
+          label: 'Code de connexion NetSoins reçu par e-mail — saisissez-le ici.',
         });
-        await page.fill(S.login.otpInput, code);
-        await page.click(S.login.otpSubmit);
-        await page.waitForSelector(S.login.loggedInProof);
+        await field.click();
+        await field.fill(code);
+        await f.locator(S.login.otpSubmit).click();
+        // Fenêtre d'accueil affichée après connexion : on la ferme.
+        const close = f.locator(S.login.closePopup).first();
+        await close.waitFor();
+        await close.click();
+        ctx.log('Connexion NetSoins établie.');
       },
     },
     {
       id: 'etablissement',
       critical: true,
       label: `Sélection de l'établissement`,
-      run: (page) => page.selectOption(S.etablissementSelect, String(data.etablissement)),
+      run: (page) => F(page).locator(S.etablissementSelect).selectOption(String(data.etablissement)),
     },
   ];
 
@@ -140,10 +157,11 @@ async function createAccount(data, ctx) {
         critical: true,
         label: `Duplication du compte modèle « ${strategy.templateLogin} »`,
         run: async (page) => {
-          await page.fill(S.userList.search, strategy.templateLogin);
-          const row = page.locator(S.userList.row, { hasText: strategy.templateLogin }).first();
+          const f = F(page);
+          await f.locator(S.userList.search).fill(strategy.templateLogin);
+          const row = f.locator(S.userList.row, { hasText: strategy.templateLogin }).first();
           await row.locator(S.userList.duplicateButton).first().click();
-          await page.waitForSelector(S.form.login);
+          await f.locator(S.form.login).waitFor();
         },
       },
       {
@@ -160,10 +178,11 @@ async function createAccount(data, ctx) {
         critical: true,
         label: 'Ouverture d’une nouvelle fiche intervenant',
         run: async (page) => {
-          await page.click(S.menu.parametrage);
-          await page.click(S.menu.personnel);
-          await page.click(S.menu.ajouter);
-          await page.waitForSelector(S.form.login);
+          const f = F(page);
+          await f.locator(S.menu.parametrage).click();
+          await f.locator(S.menu.personnel).click();
+          await f.locator(S.menu.ajouter).click();
+          await f.locator(S.form.login).waitFor();
         },
       },
       {
@@ -171,10 +190,19 @@ async function createAccount(data, ctx) {
         critical: true,
         label: `Saisie de la fiche (${fullName})`,
         run: async (page) => {
+          const f = F(page);
           await remplirIdentite(page);
-          if (data.categorie_personnel) await page.selectOption(S.form.categorie, data.categorie_personnel);
-          if (data.profil_droit) await page.check(S.form.profil(data.profil_droit));
-          if (data.date_debut) await page.fill(S.form.dateDebut, data.date_debut);
+          if (data.categorie_personnel) await f.locator(S.form.categorie).selectOption(data.categorie_personnel);
+          if (data.profil_droit) await f.locator(S.form.profil(data.profil_droit)).check();
+          if (data.date_debut) await f.locator(S.form.dateDebut).fill(data.date_debut);
+          // CDD : on coche « fin de validité » et on renseigne la date ; un CDI
+          // reste sans date de fin.
+          if (data.type_contrat === 'cdd' && data.date_fin) {
+            const box = f.locator(S.form.finValiditeCheck);
+            if (!(await box.isChecked().catch(() => false))) await box.check();
+            await f.locator(S.form.dateFin).fill(data.date_fin);
+            ctx.log(`Contrat à durée déterminée : fin de validité au ${data.date_fin}.`);
+          }
         },
       }
     );
@@ -185,8 +213,9 @@ async function createAccount(data, ctx) {
     critical: true,
     label: 'Enregistrement et vérification',
     run: async (page) => {
-      await page.click(S.form.save);
-      await page.waitForSelector(S.form.successProof);
+      const f = F(page);
+      await f.locator(S.form.save).click();
+      await f.locator(S.form.successProof).waitFor();
     },
   });
 

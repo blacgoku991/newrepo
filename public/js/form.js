@@ -144,7 +144,11 @@
       </div>`;
 
     const form = document.getElementById('step-form');
-    if (!isRecap) restoreSectionValues(sections[current], form);
+    if (!isRecap) {
+      restoreSectionValues(sections[current], form);
+      applyConditional(sections[current], form);
+      form.addEventListener('change', () => applyConditional(sections[current], form));
+    }
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -200,6 +204,31 @@
     return `
       <h3 class="sh">${escapeHtml(section.title)}</h3>
       <div class="grid2">${section.fields.map(fieldHtml).join('')}</div>`;
+  }
+
+  // Champ conditionnel : visible seulement si le champ de contrôle a la bonne
+  // valeur (ex. « Date de fin de validité » visible si contrat = CDD).
+  function fieldVisible(field, vals) {
+    const cond = field.showIf;
+    if (!cond) return true;
+    const v = (vals || values)[cond.field];
+    if (Array.isArray(cond.in)) return cond.in.includes(v);
+    if (cond.equals !== undefined) return v === cond.equals;
+    return true;
+  }
+
+  // Affiche/masque en direct les champs conditionnels de la section courante.
+  function applyConditional(section, form) {
+    for (const field of section.fields) {
+      if (!field.showIf) continue;
+      const ctrl = form.elements[field.showIf.field];
+      const v = ctrl ? ctrl.value : ''; // une RadioNodeList renvoie la valeur cochée
+      const visible = Array.isArray(field.showIf.in)
+        ? field.showIf.in.includes(v)
+        : field.showIf.equals === undefined ? true : v === field.showIf.equals;
+      const wrapper = form.querySelector(`.field[data-field="${CSS.escape(field.name)}"]`);
+      if (wrapper) wrapper.hidden = !visible;
+    }
   }
 
   function fieldHtml(field) {
@@ -284,8 +313,11 @@
       }
     }
 
+    const condAttr = field.showIf
+      ? ` data-showif="${escapeHtml(JSON.stringify(field.showIf))}"${fieldVisible(field) ? '' : ' hidden'}`
+      : '';
     return `
-      <div class="field ${isWide ? 'full' : ''}" data-field="${escapeHtml(field.name)}">
+      <div class="field ${isWide ? 'full' : ''}" data-field="${escapeHtml(field.name)}"${condAttr}>
         <label>${escapeHtml(field.label)}${req}</label>
         ${control}
         ${help}
@@ -304,6 +336,13 @@
         values[field.name] = checked ? checked.value : '';
       } else {
         values[field.name] = form.elements[field.name].value.trim();
+      }
+    }
+    // Un champ conditionnel masqué ne conserve pas de valeur (ex. date de fin
+    // quand on repasse en CDI).
+    for (const field of section.fields) {
+      if (field.showIf && !fieldVisible(field)) {
+        values[field.name] = field.type === 'checkboxes' ? [] : '';
       }
     }
   }
@@ -330,6 +369,7 @@
   function validateSection(section) {
     const errors = {};
     for (const field of section.fields) {
+      if (field.showIf && !fieldVisible(field)) continue; // champ masqué : non requis
       const value = values[field.name];
       if (field.type === 'checkboxes') {
         if (field.required && value.length === 0) errors[field.name] = 'Sélectionnez au moins une option';
@@ -410,6 +450,7 @@
           </div>
           <dl>
             ${section.fields
+              .filter((f) => fieldVisible(f))
               .map((f) => `<dt>${escapeHtml(f.label)}</dt><dd>${escapeHtml(displayValue(f))}</dd>`)
               .join('')}
           </dl>
