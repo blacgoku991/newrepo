@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const dbApi = require('../db');
-const { launchBrowser } = require('./helpers');
+const { launchBrowser, browserVisible } = require('./helpers');
 
 const STEP_TIMEOUT_MS = Number(process.env.STEP_TIMEOUT_MS || 30000);
 
@@ -34,7 +34,9 @@ async function runScenario({ reference, log, steps, successMessage }) {
     }
   }
 
-  log('Lancement du navigateur (Chromium headless)');
+  log(browserVisible()
+    ? 'Lancement du navigateur (Chromium VISIBLE — vous suivez le robot en direct)'
+    : 'Lancement du navigateur (Chromium headless)');
   const browser = await launchBrowser();
   const context = await browser.newContext({ viewport: { width: 1280, height: 850 } });
   context.setDefaultTimeout(STEP_TIMEOUT_MS);

@@ -28,17 +28,32 @@ function portalBaseUrl() {
   return `http://127.0.0.1:${process.env.PORT || 3000}`;
 }
 
-/** Lance un navigateur Chromium headless via Playwright. */
+/**
+ * Lance un navigateur Chromium via Playwright.
+ *
+ * Par défaut : headless (invisible), pour tourner sur un serveur.
+ * Pour VOIR le robot travailler en temps réel sur votre PC, mettez dans le .env :
+ *   SHOW_BROWSER=true        → ouvre une vraie fenêtre Chromium
+ *   ROBOT_SLOWMO=500         → ralentit chaque action de 500 ms (optionnel)
+ * (nécessite un écran : à utiliser en local, pas sur un serveur sans affichage.)
+ */
 async function launchBrowser() {
   const { chromium } = require('playwright');
   // CHROMIUM_PATH permet d'utiliser un Chromium déjà installé sur la machine
   // au lieu de celui téléchargé par `npx playwright install chromium`.
   const executablePath = process.env.CHROMIUM_PATH || undefined;
-  return chromium.launch({ headless: true, executablePath });
+  const headless = String(process.env.SHOW_BROWSER || '').toLowerCase() !== 'true';
+  const slowMo = Number(process.env.ROBOT_SLOWMO || 0) || 0;
+  return chromium.launch({ headless, slowMo, executablePath });
+}
+
+/** Le navigateur est-il en mode visible ? (pour l'affichage des logs) */
+function browserVisible() {
+  return String(process.env.SHOW_BROWSER || '').toLowerCase() === 'true';
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-module.exports = { getMode, portalBaseUrl, launchBrowser, sleep };
+module.exports = { getMode, portalBaseUrl, launchBrowser, browserVisible, sleep };
