@@ -187,6 +187,26 @@
     el('chart-demandeur').innerHTML = barChart(s.parDemandeur || [], { color: CHART.terra, empty: 'Aucun compte créé.' });
     el('chart-etab').innerHTML = barChart(s.parEtablissement || [], { color: CHART.pine, empty: 'Aucun établissement.' });
     el('chart-fonction').innerHTML = barChart(s.parFonction || [], { color: CHART.gold, empty: 'Aucune fonction.' });
+    el('ms-accounts').innerHTML = msAccountsTable(s.parCompteMicrosoft || []);
+  }
+
+  // « Qui a fait quoi » : par compte Microsoft, avec le détail par type de démarche.
+  function msAccountsTable(rows) {
+    if (!rows.length) return '<div class="empty">Aucune demande enregistrée.</div>';
+    return `<div style="overflow-x:auto"><table class="data" style="margin:0"><thead><tr>
+        <th>Compte Microsoft</th><th style="text-align:center">Total</th>
+        <th style="text-align:center">Créations</th><th style="text-align:center">Réinit. mdp</th>
+        <th style="text-align:center">Ajouts étab.</th><th style="text-align:center">Comptes créés</th>
+      </tr></thead><tbody>
+        ${rows.map((r) => `<tr>
+          <td><b>${escapeHtml(r.account)}</b></td>
+          <td style="text-align:center">${r.total}</td>
+          <td style="text-align:center">${r.creation || 0}</td>
+          <td style="text-align:center">${r.reset_mdp || 0}</td>
+          <td style="text-align:center">${r.ajout_etab || 0}</td>
+          <td style="text-align:center"><span class="badge st-terminee">${r.crees || 0}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
   }
 
   const who = (p = {}) => `${p.prenom || ''} ${p.nom || ''}`.trim() || '—';
@@ -239,18 +259,36 @@
   function openModal(id) { const r = requests.find((x) => x.id === id); if (!r) return; openId = id; renderModal(r); backdrop.classList.add('show'); modal.classList.remove('wide'); }
   function closeModal() { openId = null; backdrop.classList.remove('show'); }
 
+  function adminProgressHtml(r) {
+    if (r.status !== 'en_cours' && r.status !== 'en_attente') return '';
+    const p = r.progress || {};
+    const pct = r.status === 'en_attente' ? 0 : Math.min(100, Math.max(0, p.percent || 0));
+    const info = r.status === 'en_attente'
+      ? 'En file d’attente'
+      : (p.total ? `Étape ${p.done}/${p.total}${p.label ? ' — ' + escapeHtml(p.label) : ''}` : 'Traitement en cours');
+    return `<div class="adm-progress"><div class="pl"><span>${info}</span><span class="pct">${pct}%</span></div><div class="track"><div class="fill" style="width:${pct}%"></div></div></div>`;
+  }
+
   function renderModal(r) {
     const payloadRows = Object.entries(r.payload || {}).map(([k, v]) => {
       const label = k.startsWith('_demandeur_') ? k.replace('_demandeur_', 'demandeur ') : k;
       return `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(Array.isArray(v) ? v.join(', ') : v || '—')}</dd>`;
     }).join('');
-    const logs = (r.logs || []).length ? r.logs.map((l) => `<span class="t">${new Date(l.at).toLocaleTimeString('fr-FR')}</span>  ${escapeHtml(l.message)}`).join('\n') : 'Aucune activité.';
+    const logs = (r.logs || []).length
+      ? r.logs.map((l) => {
+          const t = new Date(l.at).toLocaleTimeString('fr-FR');
+          const isStep = /^Étape\s+\d+\/\d+/.test(l.message || '');
+          const isErr = /^(Erreur|Échec)/i.test(l.message || '');
+          return `<div class="logline${isStep ? ' step' : ''}${isErr ? ' err' : ''}"><span class="t">${t}</span> ${escapeHtml(l.message)}</div>`;
+        }).join('')
+      : '<div class="logline">Aucune activité.</div>';
     const shots = (r.artifacts || []).length ? `<h4>Captures d’écran</h4><div class="shots">${r.artifacts.map((f) => { const u = `/artifacts/${encodeURIComponent(r.reference)}/${encodeURIComponent(f)}`; return `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${escapeHtml(f)}" loading="lazy"/><span class="cap">${escapeHtml(f)}</span></a>`; }).join('')}</div>` : '';
     const emails = (r.emails || []).length ? `<h4>E-mail d'identifiants</h4>${r.emails.map((e) => `<div style="font-size:.88rem;padding:6px 0">${escapeHtml(e.to)} — ${statusBadge2(e.status)}</div>`).join('')}` : '';
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${r.type === 'reset_mdp' ? 'Réinitialisation de mot de passe' : r.type === 'ajout_etab' ? "Ajout d'établissement" : 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
       ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
+      ${adminProgressHtml(r)}
       ${r.login ? `<p style="margin-top:8px;font-size:.9rem">Identifiant attribué : <span class="ref" style="font-size:.9rem">${escapeHtml(r.login)}</span></p>` : ''}
       ${r.credentialLink ? `<p style="margin-top:6px;font-size:.88rem">Lien d'identifiants : ${r.credentialLink.viewedAt
           ? `<span class="badge st-terminee">Consulté</span> le ${formatDate(r.credentialLink.viewedAt)}${r.credentialLink.viewedBy ? ' par ' + escapeHtml(r.credentialLink.viewedBy) : ''}`

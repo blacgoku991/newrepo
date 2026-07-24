@@ -304,6 +304,8 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
   const row = db.getByReference(req.params.reference.toUpperCase());
   if (!row) return res.status(404).json({ error: 'Référence inconnue' });
   const appEntry = registry.get(row.app_id);
+  const total = row.progress_total || 0;
+  const done = row.progress_done || 0;
   res.json({
     reference: row.reference,
     app: appEntry ? appEntry.config.name : row.app_id,
@@ -311,6 +313,12 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
     message: row.result_message,
     createdAt: row.created_at,
     finishedAt: row.finished_at,
+    progress: {
+      done,
+      total,
+      label: row.progress_label || '',
+      percent: total ? Math.round((done / total) * 100) : (row.status === 'terminee' ? 100 : 0),
+    },
   });
 });
 
@@ -488,6 +496,16 @@ app.get('/api/admin/requests', auth.requireApi, (req, res) => {
       ssoEmail: row.sso_email || null,
       ip: row.client_ip || null,
       login: row.generated_login || null,
+      progress: (() => {
+        const total = row.progress_total || 0;
+        const done = row.progress_done || 0;
+        return {
+          done,
+          total,
+          label: row.progress_label || '',
+          percent: total ? Math.round((done / total) * 100) : (row.status === 'terminee' ? 100 : 0),
+        };
+      })(),
       payload: JSON.parse(row.payload),
       logs: JSON.parse(row.logs),
       artifacts: JSON.parse(row.artifacts || '[]'),

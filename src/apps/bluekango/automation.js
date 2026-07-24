@@ -114,6 +114,26 @@ async function findEtabSelect(page, timeout = 20000) {
   return null;
 }
 
+/**
+ * Attend que la grille d'utilisateurs se STABILISE (nombre de lignes constant),
+ * plutôt qu'une temporisation fixe. Rend la main dès que c'est prêt — donc plus
+ * vite quand la grille charge rapidement — sans jamais dépasser `max`. Si le
+ * nombre de lignes ne peut pas être lu (frame en navigation), on retombe sur
+ * l'attente maximale : jamais plus court que l'ancien comportement.
+ */
+async function waitGridSettle(list, page, { max = 6000, min = 900, quiet = 700 } = {}) {
+  const start = Date.now();
+  let last = -1;
+  let stableSince = start;
+  while (Date.now() - start < max) {
+    let n = -1;
+    try { n = await list.locator('tr').count(); } catch { /* frame en cours de navigation */ }
+    if (n !== last) { last = n; stableSince = Date.now(); }
+    if (Date.now() - start >= min && n > 1 && Date.now() - stableSince >= quiet) return;
+    await page.waitForTimeout(180).catch(() => {});
+  }
+}
+
 async function createAccount(data, ctx) {
   // Identifiant unique : 1re lettre du prénom + nom, en ajoutant des lettres du
   // prénom si l'identifiant est déjà pris (voir identifiants.js).
@@ -223,7 +243,8 @@ async function createAccount(data, ctx) {
           } else {
             await list.locator('select').last().selectOption('200').catch(() => {});
           }
-          await page.waitForTimeout(4000).catch(() => {});
+          // Attente adaptative : rend la main dès que les lignes sont chargées.
+          await waitGridSettle(list, page, { max: 4000, min: 1000, quiet: 800 });
 
           // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics, avec
           //    attente entre les deux) pour regrouper les fonctions renseignées
@@ -234,9 +255,9 @@ async function createAccount(data, ctx) {
             header = list.getByText(/Fonctions ADEF/).first();
           }
           await header.click().catch(() => {});
-          await page.waitForTimeout(2500).catch(() => {});
+          await waitGridSettle(list, page, { max: 2500, min: 600, quiet: 500 });
           await header.click().catch(() => {});
-          await page.waitForTimeout(2500).catch(() => {});
+          await waitGridSettle(list, page, { max: 2500, min: 600, quiet: 500 });
           ctx.log(`Recherche de la cellule « ${data.fonction} » et de son bouton dupliquer`);
 
           // 3. Repérer la CELLULE (gridcell) contenant la fonction demandée.
@@ -340,6 +361,7 @@ async function createAccount(data, ctx) {
   const result = await runScenario({
     reference: ctx.reference,
     log: ctx.log,
+    onProgress: ctx.progress,
     successMessage:
       `Compte BlueKanGo créé pour ${fullName} — identifiant « ${login} », ` +
       `établissement ${etabLabel} (droits hérités de la fonction « ${data.fonction} »)` +
@@ -498,6 +520,7 @@ async function resetPassword(data, ctx) {
   const result = await runScenario({
     reference: ctx.reference,
     log: ctx.log,
+    onProgress: ctx.progress,
     successMessage: `Mot de passe réinitialisé pour « ${identifiant} » — établissement ${etabLabel} (à changer à la première connexion)`,
     steps,
   });

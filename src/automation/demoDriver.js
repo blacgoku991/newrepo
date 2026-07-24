@@ -42,7 +42,7 @@ async function fillField(page, field, value) {
   }
 }
 
-async function createAccount(config, data, { reference, log }) {
+async function createAccount(config, data, { reference, log, progress }) {
   const base = portalBaseUrl();
   const fullName = `${data.prenom || ''} ${data.nom || ''}`.trim();
   let accountId = null;
@@ -91,6 +91,7 @@ async function createAccount(config, data, { reference, log }) {
   const result = await runScenario({
     reference,
     log,
+    onProgress: progress,
     steps,
     successMessage: '',
   });

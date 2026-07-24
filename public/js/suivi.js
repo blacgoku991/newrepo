@@ -88,6 +88,28 @@
     </div>`;
   }
 
+  function progressBarHtml(req) {
+    const p = req.progress || {};
+    if (req.status !== 'en_cours' && req.status !== 'en_attente') return '';
+    const pct = req.status === 'en_attente' ? 0 : Math.min(100, Math.max(0, p.percent || 0));
+    const stepInfo =
+      req.status === 'en_attente'
+        ? 'En file d’attente…'
+        : p.total
+          ? `Étape ${p.done} sur ${p.total}${p.label ? ' — ' + escapeHtml(p.label) : ''}`
+          : 'Traitement en cours…';
+    return `
+      <div style="margin:18px 0 4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="color:var(--muted);font-size:.86rem">${stepInfo}</span>
+          <span style="font-family:var(--mono);font-weight:650;color:var(--gold-bright)">${pct}%</span>
+        </div>
+        <div style="height:9px;border-radius:99px;background:var(--surface-3);overflow:hidden;border:1px solid var(--line)">
+          <div style="height:100%;width:${pct}%;border-radius:99px;background:linear-gradient(90deg,var(--gold-dark),var(--gold-bright));transition:width .5s ease"></div>
+        </div>
+      </div>`;
+  }
+
   function render(req) {
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -97,6 +119,7 @@
         </div>
         ${statusBadge(req.status)}
       </div>
+      ${progressBarHtml(req)}
       ${timelineHtml(req)}
       ${
         req.status === 'terminee'

@@ -201,6 +201,16 @@ if (!columns.includes('client_ip')) {
 if (!columns.includes('request_type')) {
   db.exec(`ALTER TABLE requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'creation'`);
 }
+// Progression du traitement (étapes du robot) : done / total + libellé de l'étape.
+if (!columns.includes('progress_done')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN progress_done INTEGER NOT NULL DEFAULT 0`);
+}
+if (!columns.includes('progress_total')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN progress_total INTEGER NOT NULL DEFAULT 0`);
+}
+if (!columns.includes('progress_label')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN progress_label TEXT NOT NULL DEFAULT ''`);
+}
 const auditCols = db.prepare(`PRAGMA table_info(audit_log)`).all().map((c) => c.name);
 if (!auditCols.includes('ip')) {
   db.exec(`ALTER TABLE audit_log ADD COLUMN ip TEXT NOT NULL DEFAULT ''`);
@@ -273,9 +283,17 @@ const api = {
   markProcessing(id) {
     db.prepare(
       `UPDATE requests
-         SET status = 'en_cours', attempts = attempts + 1, started_at = datetime('now')
+         SET status = 'en_cours', attempts = attempts + 1, started_at = datetime('now'),
+             progress_done = 0, progress_total = 0, progress_label = ''
        WHERE id = ?`
     ).run(id);
+  },
+
+  /** Progression du robot (étape courante / total) pour l'affichage en direct. */
+  setProgress(id, done, total, label = '') {
+    db.prepare(
+      `UPDATE requests SET progress_done = ?, progress_total = ?, progress_label = ? WHERE id = ?`
+    ).run(Math.max(0, done | 0), Math.max(0, total | 0), String(label || ''), id);
   },
 
   markFinished(id, success, message, logs, artifacts = []) {
@@ -337,7 +355,7 @@ const api = {
   allForStats() {
     return db
       .prepare(
-        `SELECT app_id, demandeur, status, payload, created_at, finished_at FROM requests`
+        `SELECT app_id, demandeur, sso_email, request_type, status, payload, created_at, finished_at FROM requests`
       )
       .all();
   },

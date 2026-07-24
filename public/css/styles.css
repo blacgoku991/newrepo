@@ -500,6 +500,17 @@ table.data .who small { display: block; font-weight: 400; color: var(--muted); }
 .kv dt:last-of-type, .kv dd:last-of-type { border-bottom: none; }
 .logbox { background: var(--bg-deep); border: 1px solid var(--line); color: var(--ink-2); border-radius: var(--radius-sm); padding: 15px 17px; font-family: var(--mono); font-size: .78rem; line-height: 1.7; overflow-x: auto; white-space: pre-wrap; }
 .logbox .t { color: var(--faint); }
+.logbox .logline { padding: 1px 0; }
+.logbox .logline.step { color: #fff; font-weight: 600; margin-top: 4px; }
+.logbox .logline.step .t { color: var(--gold-bright); }
+.logbox .logline.err { color: var(--danger); }
+
+/* Barre de progression (détails de demande côté admin). */
+.adm-progress { margin: 14px 0 4px; }
+.adm-progress .pl { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; font-size: .84rem; color: var(--muted); }
+.adm-progress .pl .pct { font-family: var(--mono); font-weight: 700; color: var(--gold-bright); }
+.adm-progress .track { height: 9px; border-radius: 99px; background: var(--surface-3); border: 1px solid var(--line); overflow: hidden; }
+.adm-progress .track .fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--gold-dark), var(--gold-bright)); transition: width .5s ease; }
 .shots { display: flex; gap: 12px; flex-wrap: wrap; }
 .shots a { display: block; border: 1px solid var(--line-2); border-radius: var(--radius-sm); overflow: hidden; width: 180px; transition: box-shadow .15s; }
 .shots a:hover { box-shadow: var(--shadow); }

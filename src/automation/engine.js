@@ -20,7 +20,12 @@ const { launchBrowser, browserVisible } = require('./helpers');
 
 const STEP_TIMEOUT_MS = Number(process.env.STEP_TIMEOUT_MS || 30000);
 
-async function runScenario({ reference, log, steps, successMessage }) {
+async function runScenario({ reference, log, steps, successMessage, onProgress }) {
+  const report = (done, label) => {
+    if (typeof onProgress === 'function') {
+      try { onProgress(done, steps.length, label); } catch { /* la progression est un bonus */ }
+    }
+  };
   const dir = path.join(dbApi.ARTIFACTS_DIR, reference);
   fs.mkdirSync(dir, { recursive: true });
   const artifacts = [];
@@ -44,10 +49,13 @@ async function runScenario({ reference, log, steps, successMessage }) {
 
   let stepIndex = 0;
   try {
+    report(0, 'Démarrage');
     for (const step of steps) {
       stepIndex++;
       log(`Étape ${stepIndex}/${steps.length} — ${step.label}`);
+      report(stepIndex - 1, step.label); // étape en cours (pas encore terminée)
       await step.run(page);
+      report(stepIndex, step.label); // étape terminée
     }
     await capture(page, 'preuve-creation.png');
     log('Capture de preuve enregistrée');

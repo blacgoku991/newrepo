@@ -48,9 +48,15 @@ async function processOne(request) {
     return;
   }
 
+  // Progression en direct (étape courante / total) persistée pour l'affichage
+  // côté suivi (client) et côté admin (détails de la demande).
+  const progress = (done, total, label) => {
+    try { db.setProgress(request.id, done, total, label); } catch { /* la progression est un bonus */ }
+  };
+
   try {
     const result = await Promise.race([
-      action(data, { log, reference: request.reference }),
+      action(data, { log, reference: request.reference, progress }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Délai maximum dépassé (timeout)')), TIMEOUT_MS)
       ),

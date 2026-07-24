@@ -48,6 +48,8 @@ function compute() {
   const byEtab = new Map(); // label -> count (comptes créés)
   const byFonction = new Map();
   const byDemandeur = new Map();
+  const byMsAccount = new Map(); // compte -> { total, creation, reset_mdp, ajout_etab, crees }
+  const byType = { creation: 0, reset_mdp: 0, ajout_etab: 0 };
   const createdByDay = new Map(); // day -> count (comptes créés)
   const requestsByDay = new Map(); // day -> count (demandes déposées)
 
@@ -63,6 +65,17 @@ function compute() {
 
     const dCreated = dayKey(r.created_at);
     if (dCreated) requestsByDay.set(dCreated, (requestsByDay.get(dCreated) || 0) + 1);
+
+    // Qui a fait quoi : par compte Microsoft (identité SSO), toutes demandes
+    // confondues, avec le détail par type de démarche.
+    const type = r.request_type || 'creation';
+    if (type in byType) byType[type]++;
+    const account = (r.sso_email || '').trim() || (r.demandeur || '').trim() || 'Sans SSO';
+    const acc = byMsAccount.get(account) || { total: 0, creation: 0, reset_mdp: 0, ajout_etab: 0, crees: 0 };
+    acc.total++;
+    acc[type] = (acc[type] || 0) + 1;
+    if (r.status === 'terminee') acc.crees++;
+    byMsAccount.set(account, acc);
 
     if (r.status === 'terminee') {
       let payload = {};
@@ -119,6 +132,11 @@ function compute() {
     parEtablissement: topN(byEtab, 8),
     parFonction: topN(byFonction, 8),
     parDemandeur: topN(byDemandeur, 8),
+    parType: byType,
+    parCompteMicrosoft: [...byMsAccount.entries()]
+      .map(([account, v]) => ({ account, ...v }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 12),
   };
 }
 
