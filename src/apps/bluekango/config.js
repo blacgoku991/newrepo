@@ -230,3 +230,25 @@ module.exports.resetSchema = {
     },
   ],
 };
+
+module.exports.extensionSchema = {
+  intro:
+    'Le robot recherche le compte par son identifiant, puis lui ajoute l’établissement demandé (les autres rattachements sont conservés).',
+  sections: [
+    {
+      title: 'Compte et établissement à ajouter',
+      fields: [
+        {
+          name: 'identifiant',
+          label: 'Identifiant BlueKanGo (exact)',
+          type: 'text',
+          required: true,
+          placeholder: 'mdupont',
+          pattern: '^[a-zA-Z0-9._-]{2,60}$',
+          patternMessage: 'Identifiant invalide (lettres/chiffres/._-)',
+        },
+        { ...etabField, label: 'Établissement à ajouter', help: 'Établissement à rattacher au compte.' },
+      ],
+    },
+  ],
+};

@@ -436,9 +436,17 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
     }
   }
 
+  // Applications sur lesquelles le référent peut agir (celles où il a des
+  // établissements), pour proposer « Faire une demande » sur chacune.
+  const apps = [...byApp.keys()].map((appId) => {
+    const entry = registry.get(appId);
+    return { appId, name: entry ? entry.config.name : appId };
+  });
+
   res.json({
     user,
     referent: { email: ref.email, nom: ref.nom, prenom: ref.prenom, etablissements: ref.etablissements },
+    apps,
     accounts: [...accountsMap.values()],
     activity: activity.slice(0, 200),
     enforced: referents.enforced(),

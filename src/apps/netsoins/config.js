@@ -75,3 +75,57 @@ module.exports = {
     ],
   },
 };
+
+// Champ « établissement » réutilisé par les démarches reset / extension.
+const etabField = { name: 'etablissement', label: 'Établissement', type: 'select', required: true, options: ETABLISSEMENTS };
+
+// Réinitialisation de mot de passe : on retrouve l'intervenant par son identifiant.
+module.exports.resetSchema = {
+  intro:
+    'Le robot recherche l’intervenant par son identifiant exact dans l’établissement indiqué, vérifie qu’il existe, réinitialise son mot de passe et vous transmet le provisoire par lien sécurisé.',
+  sections: [
+    {
+      title: 'Compte concerné',
+      fields: [
+        {
+          name: 'identifiant',
+          label: 'Identifiant NetSoins (NOM PRÉNOM)',
+          type: 'text',
+          required: true,
+          placeholder: 'MARTIN PAUL',
+          help: 'L’identifiant exact du compte, au format NOM PRÉNOM.',
+        },
+        { ...etabField, help: 'Établissement auquel le compte est rattaché.' },
+        {
+          name: 'email',
+          label: 'E-mail du titulaire',
+          type: 'email',
+          required: false,
+          placeholder: 'paul.martin@adef-residences.com',
+          help: 'Pour recevoir le lien sécurisé de récupération du nouveau mot de passe.',
+        },
+      ],
+    },
+  ],
+};
+
+// Ajout d'établissement : on rattache un établissement à un compte existant.
+module.exports.extensionSchema = {
+  intro:
+    'Le robot recherche l’intervenant par son identifiant, puis lui ajoute l’établissement demandé.',
+  sections: [
+    {
+      title: 'Compte et établissement à ajouter',
+      fields: [
+        {
+          name: 'identifiant',
+          label: 'Identifiant NetSoins (NOM PRÉNOM)',
+          type: 'text',
+          required: true,
+          placeholder: 'MARTIN PAUL',
+        },
+        { ...etabField, label: 'Établissement à ajouter', help: 'Établissement à rattacher au compte.' },
+      ],
+    },
+  ],
+};

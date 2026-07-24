@@ -58,21 +58,8 @@
         ${chips}
       </div>
 
-      <div class="esp-section-head"><h2>Faire une demande</h2></div>
-      <div class="esp-actions">
-        <a class="esp-act" href="/demande.html?app=bluekango">
-          <span class="ic">${icon('users')}</span>
-          <span><b>Créer un compte</b><span>Nouveau compte BlueKanGo pour un agent</span></span>
-        </a>
-        <a class="esp-act" href="/demande.html?app=bluekango&type=extension">
-          <span class="ic">${icon('building')}</span>
-          <span><b>Ajouter un établissement</b><span>Rattacher un établissement à un compte existant</span></span>
-        </a>
-        <a class="esp-act" href="/demande.html?app=bluekango&type=reset">
-          <span class="ic">${icon('lock')}</span>
-          <span><b>Mot de passe oublié</b><span>Réinitialiser le mot de passe d'un compte</span></span>
-        </a>
-      </div>
+      <div class="esp-section-head"><h2>Faire une demande</h2><div class="acc-tabs" id="dmd-apps"></div></div>
+      <div class="esp-actions" id="dmd-actions"></div>
 
       <div class="esp-section-head">
         <h2>Comptes &amp; activité</h2>
@@ -84,7 +71,47 @@
       </div>
       <div id="esp-view"></div>`;
 
+    setupDemande(data.apps || []);
     setupViews(data);
+  }
+
+  // « Faire une demande » : les actions (créer / ajout étab. / reset) pointent
+  // vers l'application choisie (BlueKanGo, NetSoins…). Sélecteur si plusieurs.
+  const DMD = { apps: [], app: '' };
+
+  function setupDemande(apps) {
+    DMD.apps = apps;
+    const tabsBox = document.getElementById('dmd-apps');
+    const actionsBox = document.getElementById('dmd-actions');
+    if (!apps.length) { tabsBox.innerHTML = ''; actionsBox.innerHTML = ''; return; }
+    DMD.app = apps[0].appId;
+    tabsBox.innerHTML = apps.length > 1
+      ? apps.map((a) => `<button class="acc-tab" data-app="${escapeHtml(a.appId)}">${escapeHtml(a.name)}</button>`).join('')
+      : '';
+    tabsBox.querySelectorAll('.acc-tab').forEach((b) => {
+      b.addEventListener('click', () => { DMD.app = b.dataset.app; drawDemande(); });
+    });
+    drawDemande();
+  }
+
+  function drawDemande() {
+    const app = DMD.apps.find((a) => a.appId === DMD.app) || DMD.apps[0];
+    document.querySelectorAll('#dmd-apps .acc-tab').forEach((b) => b.classList.toggle('on', b.dataset.app === DMD.app));
+    const a = encodeURIComponent(app.appId);
+    const name = escapeHtml(app.name);
+    document.getElementById('dmd-actions').innerHTML = `
+      <a class="esp-act" href="/demande.html?app=${a}">
+        <span class="ic">${icon('users')}</span>
+        <span><b>Créer un compte</b><span>Nouveau compte ${name} pour un agent</span></span>
+      </a>
+      <a class="esp-act" href="/demande.html?app=${a}&type=extension">
+        <span class="ic">${icon('building')}</span>
+        <span><b>Ajouter un établissement</b><span>Rattacher un établissement à un compte ${name}</span></span>
+      </a>
+      <a class="esp-act" href="/demande.html?app=${a}&type=reset">
+        <span class="ic">${icon('lock')}</span>
+        <span><b>Mot de passe oublié</b><span>Réinitialiser le mot de passe d'un compte ${name}</span></span>
+      </a>`;
   }
 
   // Un seul espace paginé, organisé en onglets : une application par onglet
