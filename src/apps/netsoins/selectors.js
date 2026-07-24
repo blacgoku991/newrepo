@@ -1,19 +1,20 @@
 'use strict';
 
 /**
- * Sélecteurs de l'interface d'administration NetSoins (mode production).
+ * Sélecteurs de l'interface NetSoins (instance ADEF), relevés au codegen.
  *
- * ⚠️ À CALIBRER sur l'instance réelle avec
- * `npx playwright codegen https://votre-instance.netsoins.fr`
- * puis reportez ici les sélecteurs générés. Voir docs/AUTOMATISATION.md.
- * (Ces valeurs sont des placeholders : le mode démo n'en dépend pas.)
+ * ⚠️ Deux contextes différents :
+ *   - `login.*`  → DANS l'iframe (page de connexion + code OTP) ;
+ *   - `menu.*` / `form.*` → sur la PAGE DE PREMIER NIVEAU (après connexion,
+ *     NetSoins sort de l'iframe).
+ *
+ * Ces sélecteurs sont modifiables depuis le panel admin (éditeur de scénario)
+ * sans toucher au code.
  */
 
-  // ⚠️ Toute l'application NetSoins est rendue DANS UNE IFRAME : les sélecteurs
-  // ci-dessous s'appliquent au contenu de cette iframe (voir `frame` dans
-  // automation.js), pas à la page de premier niveau.
 module.exports = {
   frame: 'iframe',
+
   login: {
     user: 'input[placeholder="Identifiant"]',
     password: 'input[placeholder="Mot de passe"]',
@@ -21,36 +22,40 @@ module.exports = {
     // Double authentification (code à usage unique reçu par e-mail).
     otpInput: 'input[placeholder="Code reçu par mail"]',
     otpSubmit: 'text="OK"',
-    // Fenêtre d'accueil affichée après connexion (à fermer).
-    closePopup: '.button_close > .fa-times',
-    loggedInProof: '.button_close > .fa-times',
   },
-  etablissementSelect: '#etablissement-select',
-  // Liste du personnel (pour la duplication d'un compte modèle).
-  userList: {
-    search: 'input[type="search"]',
-    row: 'table tr',
-    duplicateButton: '[id^="duplicate-user-"]',
-  },
+
+  // --- Page de premier niveau (après connexion) ------------------------------
+
+  // Fenêtre d'accueil affichée après connexion (à fermer).
+  closePopup: '.button_close > .fa-times',
+
   menu: {
-    parametrage: 'nav >> text=Paramétrage',
-    personnel: 'text=Personnel',
-    ajouter: 'button:has-text("Ajouter")',
+    administratif: '#menu-links span:has-text("Administratif")',
+    intervenant: 'text="Intervenant"',
   },
+
   form: {
-    login: 'input[name="identifiant"]',
-    nom: 'input[name="nom"]',
-    prenom: 'input[name="prenom"]',
-    email: 'input[name="email"]',
+    login: 'role=textbox[name="Identifiant"]',
+    password: 'role=textbox[name="Mot de passe"]',
+    passwordConfirm: 'role=textbox[name="Confirmation"]',
+    nom: 'role=textbox[name="Nom"]',
+    prenom: 'role=textbox[name="Prénom"]',
+    email: 'role=textbox[name="Mail"]',
+
+    // Accès limité dans le temps (CDD) : bouton radio « oui », puis date limite.
+    accesLimite:
+      'div:nth-child(6) > span > .p > .page_widgets > span > span > span:nth-child(2) > label > .radio',
+    dateLimite: 'role=textbox[name="Date limite d\'accès"]',
+
+    // Profil de droits : un lien ouvre la liste, puis on coche l'option voulue
+    // (repérée par l'identifiant interne NetSoins, attribut `data`).
+    profilOpen: 'role=link[name="Non renseigné"]',
+    profilOption: (id) => `label.bloc_option:has(input[data="${id}"]) > .checkbox`,
+
     // Catégorie de personnel (liste déroulante recherchable).
-    categorie: 'select[name="categorie_personnel"]',
-    // Profil de droit : case cochée par identifiant interne (attribut data).
-    profil: (id) => `input[data="${id}"]`,
-    dateDebut: 'input[name="date_debut"]',
-    // Fin de validité du compte (CDD) : case à cocher + date associée.
-    finValiditeCheck: 'input[type="checkbox"][name="fin_validite"]',
-    dateFin: 'input[name="date_fin"]',
-    save: 'button:has-text("Enregistrer")',
-    successProof: '.toast-success',
+    categorieOpen: '.selectsearchhandle .selectsearchinput',
+    categorieOption: (label) => `.selectsearchchoice:text-is("${label}")`,
+
+    save: 'text="Enregistrer"',
   },
 };

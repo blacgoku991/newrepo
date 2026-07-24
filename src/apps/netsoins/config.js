@@ -76,6 +76,26 @@ module.exports = {
             type: 'radio',
             required: true,
             options: [
+              { value: 'cdi', label: 'CDI — accès sans limite de durée' },
+              { value: 'cdd', label: 'CDD / intérim / stage — accès limité dans le temps' },
+            ],
+            help: 'En CDD, une date limite d’accès est renseignée dans NetSoins : le compte est désactivé automatiquement après cette date.',
+          },
+          {
+            // Affiché (et exigé) uniquement en CDD — voir `showIf`.
+            name: 'date_fin',
+            label: 'Date limite d’accès',
+            type: 'date',
+            required: true,
+            showIf: { field: 'type_contrat', equals: 'cdd' },
+            help: 'Dernier jour d’accès au compte.',
+          },
+          {
+            name: 'type_contrat',
+            label: 'Type de contrat',
+            type: 'radio',
+            required: true,
+            options: [
               { value: 'cdi', label: 'CDI (compte sans date de fin)' },
               { value: 'cdd', label: 'CDD / Intérim / Stage (compte à durée limitée)' },
             ],

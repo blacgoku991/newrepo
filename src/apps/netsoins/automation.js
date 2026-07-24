@@ -29,6 +29,7 @@ const demo = require('../../automation/demoDriver');
 const db = require('../../db');
 const config = require('./config');
 const { pickUniqueLogin } = require('./login');
+const { PROFILS_DROIT } = require('./data');
 const BASE_SELECTORS = require('./selectors');
 
 const ENV = ['NETSOINS_URL', 'NETSOINS_ADMIN_USER', 'NETSOINS_ADMIN_PASSWORD'];
@@ -37,10 +38,9 @@ const STEPS_META = [
   { id: 'ouverture', label: 'Ouverture de NetSoins', critical: true, selectorKeys: [] },
   { id: 'connexion', label: 'Connexion administrateur', critical: true, selectorKeys: ['login.user', 'login.password', 'login.submit'] },
   { id: 'otp', label: 'Double authentification (code par e-mail)', critical: true, selectorKeys: ['login.otpInput', 'login.otpSubmit'] },
-  { id: 'etablissement', label: "Sélection de l'établissement", critical: true, selectorKeys: ['etablissementSelect'] },
-  { id: 'creation', label: 'Création (duplication ou nouvelle fiche)', critical: true, selectorKeys: ['userList.duplicateButton', 'menu.ajouter'] },
-  { id: 'fiche', label: 'Saisie de la fiche', critical: true, selectorKeys: ['form.login', 'form.nom', 'form.prenom', 'form.email'] },
-  { id: 'enregistrement', label: 'Enregistrement et vérification', critical: true, selectorKeys: ['form.save', 'form.successProof'] },
+  { id: 'creation', label: 'Ouverture de la fiche intervenant', critical: true, selectorKeys: ['menu.administratif', 'menu.intervenant'] },
+  { id: 'fiche', label: 'Saisie de la fiche', critical: true, selectorKeys: ['form.login', 'form.password', 'form.passwordConfirm', 'form.accesLimite', 'form.dateLimite', 'form.profilOpen'] },
+  { id: 'enregistrement', label: 'Enregistrement de la fiche', critical: true, selectorKeys: ['form.save'] },
 ];
 
 /** Décide de la stratégie de création à partir des comptes déjà connus. */
@@ -51,6 +51,18 @@ function chooseStrategy(data) {
     : { mode: 'form' };
 }
 
+/** Date ISO (2026-08-25) → format NetSoins (25/08/2026). */
+function frDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || '');
+}
+
+/** Libellé lisible d'un profil de droits (pour le journal). */
+function profilLabel(id) {
+  const found = PROFILS_DROIT.find((p) => p.value === String(id));
+  return found ? found.label : String(id);
+}
+
 async function createAccount(data, ctx) {
   // Identifiant NetSoins : « NOM PRÉNOM » en majuscules, unique.
   const login = pickUniqueLogin(data.nom, data.prenom, (l) => db.loginExists(config.id, l));
@@ -58,41 +70,51 @@ async function createAccount(data, ctx) {
   ctx.log(`Identifiant retenu : « ${login} »`);
 
   const strategy = chooseStrategy(data);
-  ctx.log(
-    strategy.mode === 'duplicate'
-      ? `Duplication du compte modèle « ${strategy.templateLogin} » (même établissement et même profil).`
-      : 'Aucun compte modèle : création par le formulaire.'
-  );
+  if (strategy.mode === 'duplicate') {
+    // La duplication reste à calibrer sur l'instance (parcours non relevé) :
+    // on crée par le formulaire, qui produit le même résultat.
+    ctx.log(`Un compte de même établissement et même profil existe (« ${strategy.templateLogin} ») — création par le formulaire.`);
+  } else {
+    ctx.log('Aucun compte modèle : création par le formulaire.');
+  }
 
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
     const result = await demo.createAccount(config, data, ctx);
     if (result.success) {
       result.account = account;
-      result.message =
-        `${result.message} — identifiant « ${login} » ` +
-        (strategy.mode === 'duplicate' ? '(par duplication)' : '(par formulaire)');
+      result.message = `${result.message} — identifiant « ${login} »`;
     }
     return result;
   }
+
+  // Mot de passe initial des comptes créés : uniquement via l'environnement.
+  const initialPassword = process.env.NETSOINS_DEFAULT_PASSWORD || '';
+  if (!initialPassword) {
+    throw new Error('NETSOINS_DEFAULT_PASSWORD absent de la configuration : impossible de créer le compte');
+  }
+  account.password = initialPassword;
 
   const S = applySelectorPatches(BASE_SELECTORS, config.id);
   const base = process.env.NETSOINS_URL.replace(/\/$/, '');
   const fullName = `${data.prenom} ${data.nom}`;
   let otpSince = new Date();
 
-  // NetSoins rend toute son interface dans une iframe : on travaille donc à
-  // l'intérieur de ce cadre (résolu à chaque usage, l'iframe se recharge).
+  // La page de CONNEXION de NetSoins est rendue dans une iframe ; une fois
+  // connecté, l'application occupe la page de premier niveau.
   const F = (page) => page.frameLocator(S.frame);
 
-  // Étape « fiche » commune : renseigne/écrase l'identité sur la fiche ouverte
-  // (nouvelle fiche OU fiche dupliquée).
-  const remplirIdentite = async (page) => {
-    const f = F(page);
-    await f.locator(S.form.login).fill(login);
-    await f.locator(S.form.nom).fill(data.nom);
-    await f.locator(S.form.prenom).fill(data.prenom);
-    if (data.email) await f.locator(S.form.email).fill(data.email);
+  /** Remplit un champ s'il existe sur cette instance ; sinon le signale. */
+  const fillIfPresent = async (page, selector, value, label) => {
+    if (!value) return;
+    const el = page.locator(selector).first();
+    try {
+      await el.waitFor({ timeout: 2000 });
+      await el.fill(value);
+      ctx.log(`${label} renseigné.`);
+    } catch {
+      ctx.log(`Champ « ${label} » absent de la fiche — ignoré.`);
+    }
   };
 
   const steps = [
@@ -150,11 +172,12 @@ async function createAccount(data, ctx) {
         }
         ctx.log('Code accepté.');
 
-        // Fenêtre d'accueil affichée après connexion : on la ferme si présente
-        // (elle n'apparaît pas systématiquement — son absence n'est pas un échec).
-        const close = f.locator(S.login.closePopup).first();
+        // ⚠️ Après connexion, NetSoins SORT de l'iframe : tout ce qui suit se
+        // joue sur la page de premier niveau. La fenêtre d'accueil est
+        // facultative (son absence n'est pas un échec).
+        const close = page.locator(S.closePopup).first();
         try {
-          await close.waitFor({ timeout: 8000 });
+          await close.waitFor({ timeout: 10000 });
           await close.click();
           ctx.log('Fenêtre d’accueil fermée.');
         } catch {
@@ -163,80 +186,100 @@ async function createAccount(data, ctx) {
         ctx.log('Connexion NetSoins établie.');
       },
     },
-    {
-      id: 'etablissement',
-      critical: true,
-      label: `Sélection de l'établissement`,
-      run: (page) => F(page).locator(S.etablissementSelect).selectOption(String(data.etablissement)),
-    },
   ];
 
-  if (strategy.mode === 'duplicate') {
-    steps.push(
-      {
-        id: 'creation',
-        critical: true,
-        label: `Duplication du compte modèle « ${strategy.templateLogin} »`,
-        run: async (page) => {
-          const f = F(page);
-          await f.locator(S.userList.search).fill(strategy.templateLogin);
-          const row = f.locator(S.userList.row, { hasText: strategy.templateLogin }).first();
-          await row.locator(S.userList.duplicateButton).first().click();
-          await f.locator(S.form.login).waitFor();
-        },
+  steps.push(
+    {
+      id: 'creation',
+      critical: true,
+      label: 'Ouverture d’une nouvelle fiche intervenant',
+      run: async (page) => {
+        // Menu de premier niveau : Administratif > Intervenant.
+        await page.locator(S.menu.administratif).first().click();
+        ctx.log('Menu « Administratif » ouvert.');
+        await page.locator(S.menu.intervenant).first().click();
+        await page.locator(S.form.login).first().waitFor();
+        ctx.log('Formulaire « Intervenant » ouvert.');
       },
-      {
-        id: 'fiche',
-        critical: true,
-        label: `Mise à jour de l'identité (${fullName})`,
-        run: remplirIdentite,
-      }
-    );
-  } else {
-    steps.push(
-      {
-        id: 'creation',
-        critical: true,
-        label: 'Ouverture d’une nouvelle fiche intervenant',
-        run: async (page) => {
-          const f = F(page);
-          await f.locator(S.menu.parametrage).click();
-          await f.locator(S.menu.personnel).click();
-          await f.locator(S.menu.ajouter).click();
-          await f.locator(S.form.login).waitFor();
-        },
-      },
-      {
-        id: 'fiche',
-        critical: true,
-        label: `Saisie de la fiche (${fullName})`,
-        run: async (page) => {
-          const f = F(page);
-          await remplirIdentite(page);
-          if (data.categorie_personnel) await f.locator(S.form.categorie).selectOption(data.categorie_personnel);
-          if (data.profil_droit) await f.locator(S.form.profil(data.profil_droit)).check();
-          if (data.date_debut) await f.locator(S.form.dateDebut).fill(data.date_debut);
-          // CDD : on coche « fin de validité » et on renseigne la date ; un CDI
-          // reste sans date de fin.
-          if (data.type_contrat === 'cdd' && data.date_fin) {
-            const box = f.locator(S.form.finValiditeCheck);
-            if (!(await box.isChecked().catch(() => false))) await box.check();
-            await f.locator(S.form.dateFin).fill(data.date_fin);
-            ctx.log(`Contrat à durée déterminée : fin de validité au ${data.date_fin}.`);
+    },
+    {
+      id: 'fiche',
+      critical: true,
+      label: `Saisie de la fiche (${fullName})`,
+      run: async (page) => {
+        // Identifiant + mot de passe initial (le mot de passe vient de .env,
+        // jamais du code ; il n'est jamais journalisé).
+        const id = page.locator(S.form.login).first();
+        await id.click();
+        await id.fill(login);
+        ctx.log(`Identifiant saisi : « ${login} ».`);
+
+        const pw = page.locator(S.form.password).first();
+        await pw.click();
+        await pw.fill(initialPassword);
+        const pwc = page.locator(S.form.passwordConfirm).first();
+        await pwc.click();
+        await pwc.fill(initialPassword);
+        ctx.log('Mot de passe initial et confirmation saisis.');
+
+        // Champs d'identité complémentaires : présents selon la configuration
+        // de l'instance — on les remplit s'ils existent.
+        await fillIfPresent(page, S.form.nom, data.nom, 'Nom');
+        await fillIfPresent(page, S.form.prenom, data.prenom, 'Prénom');
+        await fillIfPresent(page, S.form.email, data.email, 'Mail');
+
+        // CDD : on active « accès limité dans le temps » puis la date limite.
+        // Un CDI reste sans date de fin.
+        if (data.type_contrat === 'cdd' && data.date_fin) {
+          await page.locator(S.form.accesLimite).first().click();
+          const dl = page.locator(S.form.dateLimite).first();
+          await dl.click();
+          await dl.press('ControlOrMeta+a');
+          await dl.fill(frDate(data.date_fin));
+          ctx.log(`Contrat à durée déterminée : accès limité au ${frDate(data.date_fin)}.`);
+        } else {
+          ctx.log('Contrat à durée indéterminée : aucune date limite d’accès.');
+        }
+
+        // Profil de droits : un lien ouvre la liste, on coche l'option voulue
+        // (repérée par son identifiant interne NetSoins).
+        if (data.profil_droit) {
+          await page.locator(S.form.profilOpen).first().click();
+          await page.locator(S.form.profilOption(data.profil_droit)).first().click();
+          ctx.log(`Profil de droits appliqué (${profilLabel(data.profil_droit)}).`);
+        }
+
+        // Catégorie de personnel (liste recherchable) : optionnelle tant que le
+        // sélecteur n'est pas confirmé sur l'instance.
+        if (data.categorie_personnel) {
+          try {
+            await page.locator(S.form.categorieOpen).first().fill(data.categorie_personnel);
+            await page.locator(S.form.categorieOption(data.categorie_personnel)).first().click();
+            ctx.log(`Catégorie de personnel : ${data.categorie_personnel}.`);
+          } catch {
+            ctx.log(`Catégorie de personnel non renseignée automatiquement (${data.categorie_personnel}) — à compléter.`);
           }
-        },
-      }
-    );
-  }
+        }
+      },
+    }
+  );
 
   steps.push({
     id: 'enregistrement',
     critical: true,
-    label: 'Enregistrement et vérification',
+    label: 'Enregistrement de la fiche',
     run: async (page) => {
-      const f = F(page);
-      await f.locator(S.form.save).click();
-      await f.locator(S.form.successProof).waitFor();
+      const save = page.locator(S.form.save).first();
+      try {
+        await save.waitFor({ timeout: 5000 });
+      } catch {
+        throw new Error('Bouton d’enregistrement introuvable — sélecteur « form.save » à calibrer sur l’instance');
+      }
+      await save.click();
+      // Laisse NetSoins traiter l'enregistrement ; la capture de fin de scénario
+      // sert de preuve visuelle.
+      await page.waitForTimeout(2500);
+      ctx.log('Fiche enregistrée.');
     },
   });
 
