@@ -35,12 +35,12 @@
   const NAV = {
     overview: { ic: 'grid', label: "Vue d'ensemble", h1: "Vue d'ensemble", sub: 'Statistiques de création de comptes' },
     requests: { ic: 'list', label: 'Demandes', h1: 'Demandes', sub: 'Toutes les demandes et leur traitement' },
-    accounts: { ic: 'users', label: 'Comptes créés', h1: 'Comptes créés', sub: 'Identifiants attribués par le robot' },
+    accounts: { ic: 'users', label: 'Comptes créés', h1: 'Comptes créés', sub: 'Identifiants attribués automatiquement' },
     emails: { ic: 'inbox', label: 'E-mails', h1: "E-mails d'identifiants", sub: "Boîte d'envoi des identifiants de connexion" },
     forms: { ic: 'briefcase', label: 'Formulaires', h1: 'Éditeur de formulaires', sub: 'Champs demandés pour chaque application' },
-    scenarios: { ic: 'bot', label: 'Scénarios robot', h1: 'Éditeur de scénarios', sub: 'Étapes du robot pour chaque application' },
+    scenarios: { ic: 'bot', label: 'Scénarios', h1: 'Éditeur de scénarios', sub: 'Étapes d’automatisation par application' },
     users: { ic: 'users', label: 'Comptes admin', h1: 'Comptes administrateurs', sub: 'Accès à cet espace' },
-    settings: { ic: 'lock', label: 'Réglages', h1: 'Réglages', sub: 'Mode du robot, e-mail, configuration' },
+    settings: { ic: 'lock', label: 'Réglages', h1: 'Réglages', sub: 'Mode d’exécution, e-mail, configuration' },
     journal: { ic: 'list', label: "Journal d'activité", h1: "Journal d'activité", sub: 'Toutes les modifications faites dans l\'admin' },
   };
 
@@ -121,8 +121,8 @@
     relance_demande: 'Demande relancée', creation_admin: 'Compte admin créé',
     maj_mdp_admin: 'Mot de passe modifié', desactivation_admin: 'Compte désactivé',
     reactivation_admin: 'Compte réactivé', renvoi_email: 'E-mail renvoyé', email_marque_envoye: 'E-mail marqué envoyé',
-    depot_demande: 'Demande déposée', creation_compte: 'Compte créé par le robot',
-    echec_creation: 'Échec de création (robot)', connexion_admin: 'Connexion admin',
+    depot_demande: 'Demande déposée', creation_compte: 'Compte créé automatiquement',
+    echec_creation: 'Échec de création', connexion_admin: 'Connexion admin',
     echec_connexion_admin: 'Échec de connexion admin', connexion_sso: 'Connexion Microsoft 365',
     echec_connexion_sso: 'Échec de connexion Microsoft 365',
     email_identifiants_envoye: 'E-mail d’identifiants envoyé',
@@ -131,9 +131,9 @@
     lien_identifiants_regenere: 'Lien d’identifiants régénéré',
     acces_identifiants_refuse: 'Accès aux identifiants refusé',
     depot_reinit_mdp: 'Réinitialisation de mdp déposée',
-    reinit_mdp: 'Mot de passe réinitialisé (robot)',
+    reinit_mdp: 'Mot de passe réinitialisé',
     depot_ajout_etab: 'Ajout d’établissement déposé',
-    ajout_etab: 'Établissement ajouté (robot)',
+    ajout_etab: 'Établissement ajouté',
     admin_consultation_identifiants: 'Identifiants consultés (admin)',
   };
   let journalEntries = [];
@@ -245,8 +245,8 @@
       const label = k.startsWith('_demandeur_') ? k.replace('_demandeur_', 'demandeur ') : k;
       return `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(Array.isArray(v) ? v.join(', ') : v || '—')}</dd>`;
     }).join('');
-    const logs = (r.logs || []).length ? r.logs.map((l) => `<span class="t">${new Date(l.at).toLocaleTimeString('fr-FR')}</span>  ${escapeHtml(l.message)}`).join('\n') : 'Aucune activité du robot.';
-    const shots = (r.artifacts || []).length ? `<h4>Captures d'écran du robot</h4><div class="shots">${r.artifacts.map((f) => { const u = `/artifacts/${encodeURIComponent(r.reference)}/${encodeURIComponent(f)}`; return `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${escapeHtml(f)}" loading="lazy"/><span class="cap">${escapeHtml(f)}</span></a>`; }).join('')}</div>` : '';
+    const logs = (r.logs || []).length ? r.logs.map((l) => `<span class="t">${new Date(l.at).toLocaleTimeString('fr-FR')}</span>  ${escapeHtml(l.message)}`).join('\n') : 'Aucune activité.';
+    const shots = (r.artifacts || []).length ? `<h4>Captures d’écran</h4><div class="shots">${r.artifacts.map((f) => { const u = `/artifacts/${encodeURIComponent(r.reference)}/${encodeURIComponent(f)}`; return `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${escapeHtml(f)}" loading="lazy"/><span class="cap">${escapeHtml(f)}</span></a>`; }).join('')}</div>` : '';
     const emails = (r.emails || []).length ? `<h4>E-mail d'identifiants</h4>${r.emails.map((e) => `<div style="font-size:.88rem;padding:6px 0">${escapeHtml(e.to)} — ${statusBadge2(e.status)}</div>`).join('')}` : '';
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${r.type === 'reset_mdp' ? 'Réinitialisation de mot de passe' : r.type === 'ajout_etab' ? "Ajout d'établissement" : 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
@@ -260,7 +260,7 @@
       ${r.message ? `<p style="margin-top:8px;font-size:.9rem"><strong>Résultat :</strong> ${escapeHtml(r.message)}</p>` : ''}
       <h4>Informations saisies</h4><dl class="kv">${payloadRows}</dl>
       ${emails}
-      <h4>Journal du robot</h4><div class="logbox">${logs}</div>${shots}
+      <h4>Journal d’exécution</h4><div class="logbox">${logs}</div>${shots}
       <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;margin-top:8px;display:flex;gap:10px">${r.status === 'echec' ? `<button class="btn btn-ghost" id="m-retry">Relancer</button>` : ''}<button class="btn btn-primary" id="m-close">Fermer</button></div>`;
     modal.querySelector('#m-close').addEventListener('click', closeModal);
     const rt = modal.querySelector('#m-retry'); if (rt) rt.addEventListener('click', () => retry(r.id, rt));
@@ -374,7 +374,7 @@
     const added = ov.added || [];
     const base = formsData.baseSchema;
 
-    let html = `<p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">Personnalisez le formulaire de <b>${escapeHtml(formsData.name)}</b>. Les champs <span class="lock">robot</span> sont saisis par l'automate : non supprimables. Ajoutez vos propres champs en bas.</p>`;
+    let html = `<p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">Personnalisez le formulaire de <b>${escapeHtml(formsData.name)}</b>. Les champs <span class="lock">auto</span> sont renseignés automatiquement : non supprimables. Ajoutez vos propres champs en bas.</p>`;
     for (const section of base.sections) {
       html += `<h3 style="font-size:1rem;margin:18px 0 10px">${escapeHtml(section.title)}</h3>`;
       for (const f of section.fields) {
@@ -400,7 +400,7 @@
   }
 
   function fieldRow(f, o) {
-    const badge = o.isRobot ? '<span class="lock">robot</span>' : o.added ? '<span class="lock" style="color:var(--accent);background:var(--accent-soft);border-color:var(--line-2)">ajouté</span>' : '';
+    const badge = o.isRobot ? '<span class="lock">auto</span>' : o.added ? '<span class="lock" style="color:var(--accent);background:var(--accent-soft);border-color:var(--line-2)">ajouté</span>' : '';
     const meta = `${f.type}${o.required ? ' · obligatoire' : ''}${o.hidden ? ' · masqué' : ''}`;
     return `<div class="fld-row ${o.isRobot ? 'locked' : ''} ${o.hidden ? 'disabled' : ''}">
       <span class="grip">${icon('list')}</span>
@@ -431,7 +431,7 @@
     modal.classList.remove('wide');
     modal.innerHTML = `
       <h3>Modifier « ${escapeHtml(base.label)} »</h3>
-      <p style="color:var(--muted);font-size:.84rem;margin:4px 0 16px">Champ <code>${escapeHtml(name)}</code> (${escapeHtml(base.type)})${isRobot ? ' — champ robot : le nom et le type sont verrouillés.' : ''}</p>
+      <p style="color:var(--muted);font-size:.84rem;margin:4px 0 16px">Champ <code>${escapeHtml(name)}</code> (${escapeHtml(base.type)})${isRobot ? ' — champ automatique : le nom et le type sont verrouillés.' : ''}</p>
       <div class="form-grid">
         <label class="full">Libellé<input class="inp" id="ef-label" value="${escapeHtml(p.label ?? base.label)}" /></label>
         <label class="full">Aide (facultatif)<input class="inp" id="ef-help" value="${escapeHtml(p.help ?? base.help ?? '')}" /></label>
@@ -530,7 +530,7 @@
     const selectors = ov.selectors || {};
     const custom = ov.custom || [];
 
-    let html = `<p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">Étapes du robot pour <b>${escapeHtml(scenData.name)}</b>. Les étapes critiques ne peuvent pas être désactivées (elles créent réellement le compte) mais leurs <b>sélecteurs</b> restent modifiables. Vous pouvez insérer des étapes personnalisées.</p>`;
+    let html = `<p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">Étapes d’automatisation pour <b>${escapeHtml(scenData.name)}</b>. Les étapes critiques ne peuvent pas être désactivées (elles créent réellement le compte) mais leurs <b>sélecteurs</b> restent modifiables. Vous pouvez insérer des étapes personnalisées.</p>`;
     scenData.steps.forEach((s, i) => {
       const off = disabled.has(s.id);
       html += `<div class="step-row ${off ? 'disabled' : ''}">
@@ -678,7 +678,7 @@
     if (sec.https && !sec.cookieSecure) secAlerts.push('HTTPS détecté mais ADMIN_COOKIE_SECURE n’est pas à true : les cookies devraient être marqués « Secure ».');
     el('settings-body').innerHTML = `
       ${secAlerts.length ? `<div class="alert alert-err" style="margin-bottom:18px"><b>Sécurité :</b><ul style="margin:6px 0 0 18px">${secAlerts.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>` : ''}
-      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Robot</h3></div><div class="cb">
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Automatisation</h3></div><div class="cb">
         <p style="font-size:.92rem">Mode d'automatisation : <b>${s.automationMode === 'production' ? 'Production (vraies applications)' : 'Démonstration (console factice)'}</b></p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Se règle via la variable d'environnement <code>AUTOMATION_MODE</code> côté serveur.</p>
       </div></div>

@@ -56,12 +56,12 @@
       {
         state: processing ? 'current' : waiting ? '' : done || failed ? 'done' : '',
         icon: 'bot',
-        title: processing ? 'Le robot crée le compte…' : waiting ? 'En file d’attente' : 'Traitement par le robot',
+        title: processing ? 'Création du compte en cours…' : waiting ? 'En file d’attente' : 'Traitement en cours',
         text: processing
           ? `Connexion à ${req.app} et saisie de la fiche en cours.`
           : waiting
             ? 'Votre demande sera prise en charge dans quelques instants.'
-            : `Le robot s'est connecté à ${req.app} et a saisi la fiche.`,
+            : `Le compte a été renseigné dans ${req.app}.`,
       },
       {
         state: done ? 'done' : failed ? 'failed' : '',
@@ -70,7 +70,7 @@
         text: done
           ? `${req.message || 'Le compte a été créé avec succès.'} (${formatDate(req.finishedAt)})`
           : failed
-            ? `${req.message || 'Le robot n’a pas pu créer le compte.'} — l'équipe support peut relancer la demande.`
+            ? `${req.message || 'Le compte n’a pas pu être créé.'} — l'équipe support peut relancer la demande.`
             : 'Vous verrez ici la confirmation de création du compte.',
       },
     ];

@@ -102,10 +102,10 @@
           </div>
           ${stepperHtml()}
           <div class="aside-note">${resetMode
-            ? `Le robot Algonis vérifie l'identifiant sur la fiche ${escapeHtml(app.name)} puis remplace le mot de passe par un provisoire, remis par lien sécurisé.`
+            ? `Algonis vérifie l'identifiant sur la fiche ${escapeHtml(app.name)} puis remplace le mot de passe par un provisoire, remis par lien sécurisé.`
             : extensionMode
-              ? `Le robot Algonis rattache l'établissement supplémentaire au compte existant (identifiant vérifié), avec les droits de la fonction indiquée.`
-              : `Le robot Algonis saisit ces informations telles quelles dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.`}</div>
+              ? `Algonis rattache l'établissement supplémentaire au compte existant (identifiant vérifié), avec les droits de la fonction indiquée.`
+              : `Algonis saisit ces informations dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.`}</div>
         </aside>
         <div class="panel form-main">
         ${current === 0 && app.schema.intro ? `<div class="intro">${escapeHtml(app.schema.intro)}</div>` : ''}
@@ -363,7 +363,7 @@
   function recapHtml() {
     return `
       <h3 class="sh">Vérifiez votre demande</h3>
-      <div class="recap-note">Relisez attentivement : ces informations seront saisies telles quelles par le robot dans ${escapeHtml(app.name)}.${batch.length ? ` <strong>${batch.length + 1} comptes</strong> seront créés (une référence de suivi par compte).` : ''}</div>
+      <div class="recap-note">Relisez attentivement : ces informations seront saisies telles quelles dans ${escapeHtml(app.name)}.${batch.length ? ` <strong>${batch.length + 1} comptes</strong> seront créés (une référence de suivi par compte).` : ''}</div>
       ${batchListHtml()}
       ${sections
         .map(
@@ -435,7 +435,7 @@
         <div class="big">${icon('check')}</div>
         <h2>${many ? `${references.length} demandes enregistrées` : 'Demande enregistrée'}&nbsp;!</h2>
         <p>${many ? 'Vos demandes de comptes' : 'Votre demande de compte'} <strong>${escapeHtml(app.name)}</strong> ${many ? 'sont' : 'est'} dans la file de traitement.<br/>
-        Le robot va les prendre en charge dans quelques instants.</p>
+        Elles vont être prises en charge dans quelques instants.</p>
         ${references
           .map(
             (r) => `
