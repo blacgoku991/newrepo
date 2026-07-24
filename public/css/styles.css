@@ -99,8 +99,9 @@ a:hover { text-decoration: underline; }
 .brand .name { font-size: 1.14rem; letter-spacing: .01em; }
 .brand .name b { font-weight: 650; }
 .brand .name span { color: var(--muted); font-weight: 400; font-family: var(--font); font-size: .9rem; }
-/* Logo Algonis en en-tête (image) + repli texte si l'image ne charge pas. */
-.brand .brand-logo { height: 30px; width: auto; display: block; }
+/* Logo Algonis en en-tête (image sur pastille claire — le logo multicolore est
+ * conçu pour fond clair) + repli texte si l'image ne charge pas. */
+.brand .brand-logo { height: 40px; width: auto; display: block; background: #fff; padding: 6px 12px; border-radius: 10px; box-sizing: content-box; }
 .brand .brand-fallback { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: #fff; }
 .brand .brand-sub { color: var(--muted); font-weight: 400; font-family: var(--font); font-size: .9rem; padding-left: 2px; border-left: 1px solid var(--line-2); padding-left: 12px; margin-left: 2px; }
 @media (max-width: 540px) { .brand .brand-sub { display: none; } }
@@ -355,7 +356,8 @@ a.app-card:hover .go svg { transform: translateX(3px); }
 .site-footer { background: var(--bg-deep); color: var(--faint); margin-top: 56px; border-top: 1px solid var(--line); }
 .site-footer .ft-inner { max-width: 1180px; margin: 0 auto; padding: 44px 24px 0; }
 .site-footer .ft-top { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 40px; padding-bottom: 34px; }
-.site-footer .ft-brand .ft-logo { height: 30px; width: auto; margin-bottom: 14px; }
+.site-footer .ft-brand .ft-logo { height: 34px; width: auto; margin-bottom: 14px; background: #fff; padding: 7px 12px; border-radius: 10px; box-sizing: content-box; }
+.site-footer .ft-secret { display: inline-block; }
 .site-footer .ft-brand .ft-logo-txt { font-family: var(--ui); font-weight: 700; font-size: 1.3rem; color: #fff; margin-bottom: 14px; display: inline-block; }
 .site-footer .ft-brand p { font-size: .88rem; line-height: 1.6; max-width: 40ch; color: var(--muted); }
 .site-footer .ft-h { display: block; font-family: var(--ui); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-bright); font-weight: 600; margin-bottom: 14px; }
