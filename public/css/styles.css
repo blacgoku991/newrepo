@@ -398,6 +398,9 @@ body.admin { background: var(--bg); font-size: 15px; }
 .side .head .mark svg { width: 17px; height: 17px; }
 .side .head .nm { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: #fff; }
 .side .head .nm span { color: var(--muted); font-weight: 400; font-family: var(--font); }
+/* Logo Algonis (image) dans l'en-tête de la barre latérale admin. */
+.side .head .side-logo { height: 30px; width: auto; background: #fff; padding: 5px 9px; border-radius: 8px; box-sizing: content-box; }
+.side .head .nm-sub { font-family: var(--font-display); font-weight: 600; font-size: .9rem; color: var(--muted); }
 .side nav { padding: 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
 .side nav a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; color: var(--ink-2); font-size: .92rem; font-weight: 600; cursor: pointer; position: relative; transition: background .15s, color .15s; }
 .side nav a svg { width: 17px; height: 17px; color: var(--faint); }
@@ -589,6 +592,8 @@ body.auth { min-height: 100vh; background: var(--bg); margin: 0; }
 .login { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 36px 32px; }
 .login .lmark { width: 48px; height: 48px; border-radius: 13px; background: linear-gradient(160deg, var(--gold-bright), var(--gold-dark)); color: var(--gold-ink); display: grid; place-items: center; margin-bottom: 20px; }
 .login .lmark svg { width: 24px; height: 24px; }
+.login .login-logo { height: 40px; width: auto; background: #fff; padding: 7px 13px; border-radius: 10px; box-sizing: content-box; margin-bottom: 22px; }
+.login .login-logo-txt { display: inline-block; font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; color: #fff; margin-bottom: 22px; }
 .login h1 { font-size: 1.42rem; color: #fff; }
 .login p.sub { color: var(--muted); font-size: .92rem; margin: 6px 0 24px; }
 .login .field { margin-bottom: 16px; }
