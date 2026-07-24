@@ -32,7 +32,7 @@ const { applySelectorPatches, composeSteps } = require('../../automation/scenari
 const demo = require('../../automation/demoDriver');
 const db = require('../../db');
 const config = require('./config');
-const { pickUniqueLogin } = require('./login');
+const { baseLogin } = require('./login');
 const { PROFILS_DROIT, ETABLISSEMENTS } = require('./data');
 const BASE_SELECTORS = require('./selectors');
 
@@ -110,6 +110,45 @@ function profilLabel(id) {
 function etabLabel(value) {
   const found = ETABLISSEMENTS.find((e) => e.value === String(value));
   return found ? found.label : String(value);
+}
+
+/**
+ * Retrouve le bouton d'enregistrement en essayant les écritures déclarées dans
+ * `selectors.save`, du plus précis au plus large. En cas d'échec total, liste
+ * les boutons réellement présents sur la page : le journal devient alors un
+ * outil de diagnostic plutôt qu'un simple « introuvable ».
+ */
+async function findSave(page, S, ctx) {
+  const candidats = Array.isArray(S.save) ? S.save : [S.save];
+  for (const selector of candidats) {
+    const loc = L(page, selector).first();
+    try {
+      await loc.waitFor({ state: 'visible', timeout: 3000 });
+      ctx.log(`Bouton d'enregistrement trouvé (${selector}).`);
+      return loc;
+    } catch {
+      /* on essaie l'écriture suivante */
+    }
+  }
+  // Diagnostic : que contient réellement la page ?
+  let vus = [];
+  try {
+    vus = await page
+      .locator('button, input[type="button"], input[type="submit"], [role="button"], a.btn')
+      .evaluateAll((els) =>
+        els
+          .filter((e) => e.offsetParent !== null)
+          .slice(0, 12)
+          .map((e) => (e.value || e.textContent || '').trim().slice(0, 40))
+          .filter(Boolean)
+      );
+  } catch {
+    /* le diagnostic ne doit pas masquer l'erreur d'origine */
+  }
+  throw new Error(
+    "Bouton d'enregistrement introuvable — sélecteur « save » à calibrer." +
+      (vus.length ? ` Boutons visibles sur la page : ${vus.map((t) => `« ${t} »`).join(', ')}` : '')
+  );
 }
 
 /**
@@ -195,10 +234,17 @@ function buildLoginSteps({ S, ctx, base }) {
 }
 
 async function createAccount(data, ctx) {
-  // Identifiant NetSoins : « NOM PRÉNOM » en majuscules, unique.
-  const login = pickUniqueLogin(data.nom, data.prenom, (l) => db.loginExists(config.id, l));
+  // Identifiant NetSoins : « NOM PRÉNOM » en majuscules, tel quel.
+  // On n'ajoute PAS de suffixe : NetSoins fait autorité sur l'unicité de ses
+  // identifiants et refusera un doublon réel. Le registre local, lui, peut
+  // contenir des entrées de test ou périmées — il ne doit pas modifier
+  // l'identifiant dans le dos du demandeur.
+  const login = baseLogin(data.nom, data.prenom);
   const account = { login, prenom: data.prenom, nom: data.nom };
   ctx.log(`Identifiant retenu : « ${login} »`);
+  if (db.loginExists(config.id, login)) {
+    ctx.log(`Attention : un compte « ${login} » figure déjà au registre — si l'identifiant existe réellement, NetSoins refusera l'enregistrement.`);
+  }
 
   const strategy = chooseStrategy(data);
   if (strategy.mode === 'duplicate') {
@@ -348,19 +394,7 @@ async function createAccount(data, ctx) {
       critical: true,
       label: 'Enregistrement de la fiche',
       run: async (page) => {
-        // Deux écritures possibles selon l'écran : on tente le repérage par
-        // rôle, puis le repli par texte.
-        let save = L(page, S.save).first();
-        try {
-          await save.waitFor({ timeout: 5000 });
-        } catch {
-          save = L(page, S.saveFallback).first();
-          try {
-            await save.waitFor({ timeout: 5000 });
-          } catch {
-            throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
-          }
-        }
+        const save = await findSave(page, S, ctx);
         await save.click();
         // Laisse NetSoins traiter l'enregistrement ; la capture de fin de
         // scénario sert de preuve visuelle.
@@ -526,19 +560,7 @@ async function resetPassword(data, ctx) {
       critical: true,
       label: 'Enregistrement de la fiche',
       run: async (page) => {
-        // Deux écritures possibles selon l'écran : on tente le repérage par
-        // rôle, puis le repli par texte.
-        let save = L(page, S.save).first();
-        try {
-          await save.waitFor({ timeout: 5000 });
-        } catch {
-          save = L(page, S.saveFallback).first();
-          try {
-            await save.waitFor({ timeout: 5000 });
-          } catch {
-            throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
-          }
-        }
+        const save = await findSave(page, S, ctx);
         await save.click();
         await page.waitForTimeout(2500);
         ctx.log('Fiche enregistrée.');

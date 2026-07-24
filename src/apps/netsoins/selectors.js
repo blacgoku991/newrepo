@@ -108,10 +108,14 @@ module.exports = {
     passwordConfirm: 'textbox:Confirmation',
   },
 
-  // Bouton d'enregistrement. Selon les écrans, son libellé accessible vaut
-  // « Enregistrer » ou « EnregistrerOnglet suivant » : la correspondance
-  // partielle du repérage par rôle couvre les deux. `saveFallback` sert de
-  // repli si l'élément n'expose pas le rôle « button ».
-  save: 'button:Enregistrer',
-  saveFallback: 'text=Enregistrer',
+  // Bouton d'enregistrement. Sa forme varie d'un écran à l'autre (bouton,
+  // champ de saisie, lien, conteneur « EnregistrerOnglet suivant »…) : on tente
+  // les écritures dans l'ordre et on retient la première qui répond.
+  save: [
+    'button:Enregistrer',
+    'input[value="Enregistrer" i]',
+    'text=EnregistrerOnglet suivant',
+    'text=Enregistrer',
+    '[onclick*="enregistrer" i]',
+  ],
 };
