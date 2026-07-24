@@ -131,6 +131,71 @@ async function assertPasDErreur(page, S, etape) {
 }
 
 /**
+ * Coche UN établissement dans la liste des établissements autorisés.
+ *
+ * Deux précautions :
+ *  - la case est un interrupteur : si elle est DÉJÀ cochée, cliquer la
+ *    décocherait. On lit donc son état avant d'agir ;
+ *  - le repérage est tenté par identifiant interne, puis par libellé complet,
+ *    puis par le seul nom de l'établissement — la mise en forme de l'adresse
+ *    variant d'une liste à l'autre.
+ *
+ * Si rien ne correspond, on liste les établissements réellement proposés :
+ * le journal devient un diagnostic exploitable plutôt qu'un « introuvable ».
+ */
+async function cocherEtablissement(page, S, ctx, value) {
+  const label = etabLabel(value);
+  const nom = label.split(' - ')[0].trim();
+
+  for (const selector of S.compte.etabOption(label, value, nom)) {
+    const option = L(page, selector).first();
+    let present = false;
+    try {
+      await option.waitFor({ state: 'visible', timeout: 2500 });
+      present = true;
+    } catch {
+      continue; // écriture suivante
+    }
+    if (!present) continue;
+
+    // Déjà coché ? Ne pas cliquer, sous peine de le retirer.
+    const caseACocher = L(page, selector).first().locator('xpath=../input[@type="checkbox"]');
+    let dejaCoche = false;
+    try {
+      dejaCoche = await caseACocher.first().isChecked({ timeout: 1000 });
+    } catch {
+      dejaCoche = false; // état illisible : on clique (cas nominal)
+    }
+    if (dejaCoche) {
+      ctx.log(`Établissement déjà autorisé : ${label}.`);
+      return;
+    }
+    await option.click();
+    ctx.log(`Établissement autorisé : ${label}.`);
+    return;
+  }
+
+  let proposes = [];
+  try {
+    proposes = await page
+      .locator('label.bloc_option, .bloc_option, label:has(> .checkbox)')
+      .evaluateAll((els) =>
+        els
+          .filter((e) => e.offsetParent !== null)
+          .slice(0, 15)
+          .map((e) => (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 45))
+          .filter(Boolean)
+      );
+  } catch {
+    /* le diagnostic ne doit pas masquer l'erreur d'origine */
+  }
+  throw new Error(
+    `Établissement « ${label} » introuvable dans la liste.` +
+      (proposes.length ? ` Options visibles : ${proposes.map((t) => `« ${t} »`).join(', ')}` : '')
+  );
+}
+
+/**
  * Retrouve le bouton d'enregistrement en essayant les écritures déclarées dans
  * `selectors.save`, du plus précis au plus large. En cas d'échec total, liste
  * les boutons réellement présents sur la page : le journal devient alors un
@@ -332,6 +397,11 @@ async function createAccount(data, ctx) {
   const etabsAutorises = [
     ...new Set([String(data.etablissement || ''), ...(data.etablissements_autorises || []).map(String)]),
   ].filter(Boolean);
+  // Annoncé d'emblée : on voit tout de suite ce qui sera coché, et donc si la
+  // demande contient plus d'établissements que voulu.
+  ctx.log(
+    `Établissements à autoriser (${etabsAutorises.length}) : ${etabsAutorises.map(etabLabel).join(' | ')}`
+  );
 
   steps.push(
     {
@@ -395,19 +465,12 @@ async function createAccount(data, ctx) {
         // La fiche n'a pas dû partir pendant la saisie (touche Entrée, etc.).
         await assertPasDErreur(page, S, 'accès limité / date');
 
-        // Établissements autorisés (un ou plusieurs).
+        // Établissements autorisés : STRICTEMENT ceux choisis dans le
+        // formulaire. On n'agit jamais sur le nœud parent « ADEF RESIDENCES »,
+        // qui sélectionnerait tout le groupe d'un coup.
         await L(page, S.compte.etabOpen).first().click();
-        await L(page, S.compte.etabRoot).nth(1).click().catch(() => {});
         for (const value of etabsAutorises) {
-          const label = etabLabel(value);
-          const option = L(page, S.compte.etabOption(label)).first();
-          try {
-            await option.waitFor({ timeout: 5000 });
-            await option.click();
-            ctx.log(`Établissement autorisé : ${label}.`);
-          } catch {
-            throw new Error(`Établissement « ${label} » introuvable dans la liste — sélecteur « compte.etabOption » à calibrer`);
-          }
+          await cocherEtablissement(page, S, ctx, value);
         }
       },
     },

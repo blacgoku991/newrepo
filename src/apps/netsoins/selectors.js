@@ -66,7 +66,18 @@ module.exports = {
     // termine par un suffixe aléatoire : on cible par son préfixe.
     etabOpen: '[id^="multi_champ_id_visibilite_etablissements_autorises"]',
     etabRoot: 'text="ADEF RESIDENCES"',
-    etabOption: (label) => `label:has-text("${label}") > .checkbox`,
+    // Plusieurs écritures essayées dans l'ordre : par identifiant interne quand
+    // le widget le porte, sinon par libellé complet, sinon par le seul nom de
+    // l'établissement (la partie avant le tiret) — l'adresse pouvant être mise
+    // en forme différemment d'une liste à l'autre.
+    etabOption: (label, value, nom) => [
+      `label:has(input[data="${value}"]) > .checkbox`,
+      `label:has(input[value="${value}"]) > .checkbox`,
+      `[value="${value}"] > .checkbox`,
+      `label:has-text("${label}") > .checkbox`,
+      `label:has-text("${nom}") > .checkbox`,
+      `.bloc_option:has-text("${nom}") > .checkbox`,
+    ],
   },
 
   // Onglet « Informations » : état civil et catégorie professionnelle.
