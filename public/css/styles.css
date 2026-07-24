@@ -250,6 +250,9 @@ a.app-card:hover .go svg { transform: translateX(3px); }
 .step-panel .sh-sub { color: var(--muted); font-size: .9rem; margin-bottom: 22px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 22px; margin-top: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+/* `display` sur .field l'emporterait sur l'attribut `hidden` : un champ
+   conditionnel masqué (ex. date de fin hors CDD) doit rester invisible. */
+.field[hidden] { display: none; }
 .field.full { grid-column: 1 / -1; }
 .field label { font-size: .9rem; font-weight: 650; color: var(--ink-2); }
 .field label .req { color: var(--danger); }
@@ -267,6 +270,23 @@ a.app-card:hover .go svg { transform: translateX(3px); }
 .field.invalid input,.field.invalid select,.field.invalid textarea { border-color: var(--danger); }
 .field .err { font-size: .82rem; color: var(--danger); display: none; font-weight: 600; }
 .field.invalid .err { display: block; }
+/* Choix multiple replié (listes longues : établissements…). Les cases restent
+   de vraies cases à cocher, seule la présentation est condensée. */
+.multiselect { position: relative; }
+.ms-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 46px; padding: 11px 14px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-family: inherit; font-size: .94rem; text-align: left; cursor: pointer; }
+.ms-toggle:hover { border-color: var(--gold-line); }
+.ms-toggle:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.multiselect.has-sel .ms-toggle { color: var(--text); border-color: var(--gold-line); }
+.ms-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-chev { width: 17px; height: 17px; flex: none; transition: transform .15s; }
+.ms-toggle[aria-expanded="true"] .ms-chev { transform: rotate(180deg); }
+.ms-panel { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; right: 0; padding: 10px; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.ms-search { width: 100%; padding: 9px 12px; margin-bottom: 8px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: .9rem; }
+.ms-search:focus { outline: none; border-color: var(--gold-bright); }
+.ms-options { max-height: 260px; overflow-y: auto; display: grid; gap: 6px; }
+.ms-group { font-size: .74rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--gold-bright); padding: 8px 2px 2px; }
+.ms-options .choice { padding: 8px 11px; font-size: .89rem; }
+
 .choices { display: grid; gap: 9px; }
 .choice { display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; font-size: .94rem; background: var(--surface-2); transition: border-color .15s, background .15s; }
 .choice:hover { border-color: var(--gold); }

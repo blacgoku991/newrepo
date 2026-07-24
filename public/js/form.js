@@ -147,6 +147,7 @@
     if (!isRecap) {
       restoreSectionValues(sections[current], form);
       applyConditional(sections[current], form);
+      setupMultiSelects(form);
       form.addEventListener('change', () => applyConditional(sections[current], form));
     }
 
@@ -204,6 +205,60 @@
     return `
       <h3 class="sh">${escapeHtml(section.title)}</h3>
       <div class="grid2">${section.fields.map(fieldHtml).join('')}</div>`;
+  }
+
+  /**
+   * Menus déroulants à choix multiples (listes longues : établissements…).
+   * Les cases à cocher restent de vraies cases : la lecture et la restauration
+   * des valeurs sont inchangées, seule la présentation est repliée.
+   */
+  function setupMultiSelects(form) {
+    for (const ms of form.querySelectorAll('[data-ms]')) {
+      const toggle = ms.querySelector('.ms-toggle');
+      const panel = ms.querySelector('.ms-panel');
+      const search = ms.querySelector('.ms-search');
+      const summary = ms.querySelector('.ms-summary');
+      const boxes = [...ms.querySelectorAll('input[type="checkbox"]')];
+
+      const refresh = () => {
+        const n = boxes.filter((b) => b.checked).length;
+        summary.textContent = n === 0
+          ? 'Aucun sélectionné'
+          : n === 1
+            ? (boxes.find((b) => b.checked).parentElement.textContent || '').trim()
+            : `${n} sélectionnés`;
+        ms.classList.toggle('has-sel', n > 0);
+      };
+
+      const open = (yes) => {
+        panel.hidden = !yes;
+        toggle.setAttribute('aria-expanded', String(yes));
+        if (yes) search.focus();
+      };
+
+      toggle.addEventListener('click', () => open(panel.hidden));
+      for (const b of boxes) b.addEventListener('change', refresh);
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        for (const label of ms.querySelectorAll('.choice')) {
+          label.style.display = label.textContent.toLowerCase().includes(q) ? '' : 'none';
+        }
+        // Un intitulé de groupe n'a de sens que s'il reste une option dessous.
+        for (const g of ms.querySelectorAll('.ms-group')) {
+          let visible = false;
+          for (let el = g.nextElementSibling; el && !el.classList.contains('ms-group'); el = el.nextElementSibling) {
+            if (el.style.display !== 'none') { visible = true; break; }
+          }
+          g.style.display = visible ? '' : 'none';
+        }
+      });
+      // Un clic hors du menu le referme.
+      document.addEventListener('click', (e) => {
+        if (!panel.hidden && !ms.contains(e.target)) open(false);
+      });
+
+      refresh();
+    }
   }
 
   // Champ conditionnel : visible seulement si le champ de contrôle a la bonne
@@ -281,20 +336,45 @@
               .join('')}
           </div>`;
         break;
-      case 'checkboxes':
+      case 'checkboxes': {
+        const choice = (o) => `
+          <label class="choice">
+            <input type="checkbox" name="${escapeHtml(field.name)}" value="${escapeHtml(o.value)}" />
+            <span>${escapeHtml(o.label)}</span>
+          </label>`;
+        // Liste courte : tout est affiché. Liste longue (établissements…) : on
+        // replie dans un menu déroulant avec filtre, sinon la page s'étire
+        // sur des dizaines de lignes.
+        if (field.options.length <= 10) {
+          control = `<div class="choices">${field.options.map(choice).join('')}</div>`;
+          break;
+        }
+        // Regroupement par famille quand les options portent un « group ».
+        const groups = [];
+        const byGroup = new Map();
+        for (const o of field.options) {
+          const g = o.group || '';
+          if (!byGroup.has(g)) { byGroup.set(g, []); groups.push(g); }
+          byGroup.get(g).push(o);
+        }
+        const listHtml = groups
+          .map((g) => (g
+            ? `<div class="ms-group">${escapeHtml(g)}</div>${byGroup.get(g).map(choice).join('')}`
+            : byGroup.get(g).map(choice).join('')))
+          .join('');
         control = `
-          <div class="choices">
-            ${field.options
-              .map(
-                (o) => `
-              <label class="choice">
-                <input type="checkbox" name="${escapeHtml(field.name)}" value="${escapeHtml(o.value)}" />
-                <span>${escapeHtml(o.label)}</span>
-              </label>`
-              )
-              .join('')}
+          <div class="multiselect" data-ms>
+            <button type="button" class="ms-toggle" aria-expanded="false">
+              <span class="ms-summary">Aucun sélectionné</span>
+              <svg class="ms-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="ms-panel" hidden>
+              <input type="text" class="ms-search" placeholder="Filtrer…" autocomplete="off" />
+              <div class="ms-options">${listHtml}</div>
+            </div>
           </div>`;
         break;
+      }
       case 'textarea':
         control = `<textarea name="${escapeHtml(field.name)}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>`;
         break;

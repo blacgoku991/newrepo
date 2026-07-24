@@ -58,21 +58,47 @@
         ${chips}
       </div>
 
-      <div class="esp-section-head"><h2>Faire une demande</h2><div class="acc-tabs" id="dmd-apps"></div></div>
+      <div class="esp-section-head"><h2>Faire une demande</h2></div>
+      <div id="dmd-apps"></div>
       <div class="esp-actions" id="dmd-actions"></div>
 
       <div class="esp-section-head">
         <h2>Comptes &amp; activité</h2>
         <span class="hint" id="esp-count"></span>
       </div>
-      <div class="acc-toolbar">
-        <div class="acc-tabs" id="esp-tabs"></div>
-        <label class="esp-search"><input type="text" id="esp-search-input" placeholder="Rechercher un identifiant, un nom, une référence…" autocomplete="off" /></label>
-      </div>
+      <div id="esp-tabs"></div>
+      <label class="esp-search"><input type="text" id="esp-search-input" placeholder="Rechercher un identifiant, un nom, une référence…" autocomplete="off" /></label>
       <div id="esp-view"></div>`;
 
     setupDemande(data.apps || []);
     setupViews(data);
+  }
+
+  /**
+   * Sélecteur d'application : le choix doit sauter aux yeux, et l'option
+   * retenue être reconnaissable autrement que par la couleur seule (logo de
+   * l'éditeur + coche). Cibles de 48 px minimum.
+   * @param {{key:string,label:string,visual:string}[]} items
+   */
+  function appSwitchHtml(items, activeKey, hint) {
+    const check = '<svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    return `
+      ${hint ? `<div class="app-switch-hint">${escapeHtml(hint)}</div>` : ''}
+      <div class="app-switch" role="tablist">
+        ${items.map((it) => {
+          const on = it.key === activeKey;
+          return `<button type="button" class="app-opt${on ? ' on' : ''}" role="tab" aria-selected="${on}" data-key="${escapeHtml(it.key)}">
+            <span class="lg">${it.visual}</span>
+            <span class="nm">${escapeHtml(it.label)}</span>
+            ${on ? check : ''}
+          </button>`;
+        }).join('')}
+      </div>`;
+  }
+
+  /** Pastille visuelle d'une application (logo de l'éditeur) ou icône générique. */
+  function visualFor(app) {
+    return app ? appVisual(app) : icon('clock');
   }
 
   // « Faire une demande » : les actions (créer / ajout étab. / reset) pointent
@@ -81,22 +107,28 @@
 
   function setupDemande(apps) {
     DMD.apps = apps;
-    const tabsBox = document.getElementById('dmd-apps');
     const actionsBox = document.getElementById('dmd-actions');
-    if (!apps.length) { tabsBox.innerHTML = ''; actionsBox.innerHTML = ''; return; }
+    if (!apps.length) { document.getElementById('dmd-apps').innerHTML = ''; actionsBox.innerHTML = ''; return; }
     DMD.app = apps[0].appId;
-    tabsBox.innerHTML = apps.length > 1
-      ? apps.map((a) => `<button class="acc-tab" data-app="${escapeHtml(a.appId)}">${escapeHtml(a.name)}</button>`).join('')
-      : '';
-    tabsBox.querySelectorAll('.acc-tab').forEach((b) => {
-      b.addEventListener('click', () => { DMD.app = b.dataset.app; drawDemande(); });
-    });
     drawDemande();
   }
 
   function drawDemande() {
     const app = DMD.apps.find((a) => a.appId === DMD.app) || DMD.apps[0];
-    document.querySelectorAll('#dmd-apps .acc-tab').forEach((b) => b.classList.toggle('on', b.dataset.app === DMD.app));
+    const box = document.getElementById('dmd-apps');
+    // Un seul applicatif : pas de choix à faire, on n'affiche pas de sélecteur.
+    if (DMD.apps.length > 1) {
+      box.innerHTML = appSwitchHtml(
+        DMD.apps.map((a) => ({ key: a.appId, label: a.name, visual: visualFor(a) })),
+        DMD.app,
+        'Sur quelle application ?'
+      );
+      box.querySelectorAll('.app-opt').forEach((b) => {
+        b.addEventListener('click', () => { DMD.app = b.dataset.key; drawDemande(); });
+      });
+    } else {
+      box.innerHTML = '';
+    }
     const a = encodeURIComponent(app.appId);
     const name = escapeHtml(app.name);
     document.getElementById('dmd-actions').innerHTML = `
@@ -117,7 +149,7 @@
   // Un seul espace paginé, organisé en onglets : une application par onglet
   // (BlueKanGo, NetSoins…) plus « Activité ». Évite de scroller une longue page.
   const PAGE_SIZE = 15;
-  const V = { accounts: [], activity: [], view: '', query: '', page: 1 };
+  const V = { accounts: [], activity: [], tabs: [], view: '', query: '', page: 1 };
 
   function appsOf(accounts) {
     const seen = new Map();
@@ -128,24 +160,30 @@
   function setupViews(data) {
     V.accounts = data.accounts || [];
     V.activity = data.activity || [];
-    const tabs = appsOf(V.accounts).map((a) => ({ key: a.appId, label: a.app }));
-    tabs.push({ key: '__activity', label: 'Activité' });
-    V.view = tabs[0].key;
+    // Un onglet par application (avec le logo de l'éditeur) + l'activité.
+    const byId = new Map((data.apps || []).map((a) => [a.appId, a]));
+    V.tabs = appsOf(V.accounts).map((a) => ({
+      key: a.appId,
+      label: a.app,
+      visual: visualFor(byId.get(a.appId)),
+    }));
+    V.tabs.push({ key: '__activity', label: 'Activité', visual: icon('clock') });
+    V.view = V.tabs[0].key;
     V.query = '';
     V.page = 1;
-
-    const tabsBox = document.getElementById('esp-tabs');
-    tabsBox.innerHTML = tabs
-      .map((t) => `<button class="acc-tab" data-view="${escapeHtml(t.key)}">${escapeHtml(t.label)}</button>`)
-      .join('');
-    tabsBox.querySelectorAll('.acc-tab').forEach((btn) => {
-      btn.addEventListener('click', () => { V.view = btn.dataset.view; V.page = 1; draw(); });
-    });
 
     const search = document.getElementById('esp-search-input');
     search.addEventListener('input', () => { V.query = search.value.trim().toLowerCase(); V.page = 1; draw(); });
 
     draw();
+  }
+
+  function drawTabs() {
+    const box = document.getElementById('esp-tabs');
+    box.innerHTML = appSwitchHtml(V.tabs, V.view);
+    box.querySelectorAll('.app-opt').forEach((b) => {
+      b.addEventListener('click', () => { V.view = b.dataset.key; V.page = 1; draw(); });
+    });
   }
 
   function currentList() {
@@ -234,9 +272,7 @@
   }
 
   function draw() {
-    document.querySelectorAll('#esp-tabs .acc-tab').forEach((b) => {
-      b.classList.toggle('on', b.dataset.view === V.view);
-    });
+    drawTabs();
     const isActivity = V.view === '__activity';
     const noun = isActivity ? 'demandes' : 'comptes';
     const list = currentList();

@@ -439,8 +439,15 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
   // Applications sur lesquelles le référent peut agir (celles où il a des
   // établissements), pour proposer « Faire une demande » sur chacune.
   const apps = [...byApp.keys()].map((appId) => {
-    const entry = registry.get(appId);
-    return { appId, name: entry ? entry.config.name : appId };
+    const c = (registry.get(appId) || {}).config || {};
+    return {
+      appId,
+      id: appId, // attendu par appVisual() côté client
+      name: c.name || appId,
+      logo: c.logo || null,
+      logoFallback: c.logoFallback || null,
+      color: c.color || null,
+    };
   });
 
   res.json({
