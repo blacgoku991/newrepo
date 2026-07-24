@@ -496,6 +496,7 @@ app.get('/api/admin/requests', auth.requireApi, (req, res) => {
       ssoEmail: row.sso_email || null,
       ip: row.client_ip || null,
       login: row.generated_login || null,
+      otp: { awaiting: !!row.awaiting_otp, prompt: row.otp_prompt || '' },
       progress: (() => {
         const total = row.progress_total || 0;
         const done = row.progress_done || 0;
@@ -556,6 +557,24 @@ app.post('/api/admin/requests/:id/retry', auth.requireApi, (req, res) => {
   const ok = db.requeue(Number(req.params.id));
   if (!ok) return res.status(409).json({ error: 'Seule une demande en échec peut être relancée' });
   db.audit(req.admin.username, 'relance_demande', String(req.params.id));
+  res.json({ ok: true });
+});
+
+// Saisie manuelle du code OTP (double authentification, ex. NetSoins) : le robot
+// est en pause « en attente de code ». L'admin lit le code reçu par mail et le
+// transmet ici ; le robot reprend automatiquement.
+app.post('/api/admin/requests/:id/otp', auth.requireApi, (req, res) => {
+  const row = db.getById(Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+  if (!row.awaiting_otp) return res.status(409).json({ error: 'Cette demande n\'attend pas de code' });
+  const code = String((req.body && req.body.code) || '').trim();
+  if (!/^[A-Za-z0-9]{4,8}$/.test(code)) {
+    return res.status(400).json({ error: 'Code invalide (4 à 8 caractères alphanumériques attendus)' });
+  }
+  const ok = db.submitOtp(row.id, code);
+  if (!ok) return res.status(409).json({ error: 'Cette demande n\'attend plus de code' });
+  // On ne journalise jamais le code lui-même.
+  db.audit(req.admin.username, 'saisie_otp', row.reference, '', sso.clientIp(req));
   res.json({ ok: true });
 });
 

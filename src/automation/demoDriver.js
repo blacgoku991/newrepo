@@ -42,10 +42,27 @@ async function fillField(page, field, value) {
   }
 }
 
-async function createAccount(config, data, { reference, log, progress }) {
+async function createAccount(config, data, { reference, log, progress, awaitOtp }) {
   const base = portalBaseUrl();
   const fullName = `${data.prenom || ''} ${data.nom || ''}`.trim();
   let accountId = null;
+
+  // Démonstration de la double authentification (OTP) : avec DEMO_OTP=1, le robot
+  // se met en pause après la connexion et attend un code — exactement comme la
+  // connexion NetSoins. Vous saisissez le code dans les détails de la demande
+  // (admin) et le robot reprend. Sert à tester le mécanisme sans cible réelle.
+  const otpStep = (process.env.DEMO_OTP === '1' && typeof awaitOtp === 'function')
+    ? [{
+        label: 'Double authentification — attente du code (OTP)',
+        run: async () => {
+          const code = await awaitOtp({
+            since: new Date(),
+            label: 'Démonstration : saisissez n\'importe quel code de 4 à 8 caractères (ex. 1u8fq).',
+          });
+          log(`Code OTP reçu (${code}) — reprise de la création.`);
+        },
+      }]
+    : [];
 
   const steps = [
     {
@@ -61,6 +78,7 @@ async function createAccount(config, data, { reference, log, progress }) {
         await page.waitForSelector('[data-page="users-new"]');
       },
     },
+    ...otpStep,
     ...config.formSchema.sections.map((section) => ({
       label: `Saisie — ${section.title}`,
       run: async (page) => {

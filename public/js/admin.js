@@ -168,7 +168,12 @@
       requests = data.requests || [];
       updateAppFilter();
       renderRows();
-      if (openId != null) { const c = requests.find((r) => r.id === openId); if (c) renderModal(c); }
+      if (openId != null) {
+        const c = requests.find((r) => r.id === openId);
+        // Ne pas réécrire la fenêtre pendant que l'admin saisit le code OTP.
+        const typing = document.activeElement && document.activeElement.id === 'm-otp';
+        if (c && !typing) renderModal(c);
+      }
     } catch (err) { if (err.status === 401) location.href = '/login.html'; }
   }
 
@@ -269,6 +274,21 @@
     return `<div class="adm-progress"><div class="pl"><span>${info}</span><span class="pct">${pct}%</span></div><div class="track"><div class="fill" style="width:${pct}%"></div></div></div>`;
   }
 
+  // Zone de saisie du code OTP : visible uniquement quand le robot est en pause
+  // et attend un code (double authentification, ex. NetSoins).
+  function otpBoxHtml(r) {
+    if (!(r.otp && r.otp.awaiting)) return '';
+    const prompt = r.otp.prompt
+      ? escapeHtml(r.otp.prompt)
+      : 'Une application demande un code de sécurité à usage unique reçu par e-mail.';
+    return `<div class="otp-box">
+      <div class="otp-h">🔐 Code de sécurité requis</div>
+      <p>${prompt} Le robot est en pause : saisissez le code pour qu'il reprenne automatiquement.</p>
+      <div class="otp-row"><input type="text" id="m-otp" maxlength="8" autocomplete="off" spellcheck="false" placeholder="Code (ex. 1u8fq)" /><button class="btn btn-primary btn-sm" id="m-otp-send">Valider le code</button></div>
+      <span id="m-otp-out" class="otp-out"></span>
+    </div>`;
+  }
+
   function renderModal(r) {
     const payloadRows = Object.entries(r.payload || {}).map(([k, v]) => {
       const label = k.startsWith('_demandeur_') ? k.replace('_demandeur_', 'demandeur ') : k;
@@ -289,6 +309,7 @@
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
       ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
       ${adminProgressHtml(r)}
+      ${otpBoxHtml(r)}
       ${r.login ? `<p style="margin-top:8px;font-size:.9rem">Identifiant attribué : <span class="ref" style="font-size:.9rem">${escapeHtml(r.login)}</span></p>` : ''}
       ${r.credentialLink ? `<p style="margin-top:6px;font-size:.88rem">Lien d'identifiants : ${r.credentialLink.viewedAt
           ? `<span class="badge st-terminee">Consulté</span> le ${formatDate(r.credentialLink.viewedAt)}${r.credentialLink.viewedBy ? ' par ' + escapeHtml(r.credentialLink.viewedBy) : ''}`
@@ -301,6 +322,23 @@
       <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;margin-top:8px;display:flex;gap:10px">${r.status === 'echec' ? `<button class="btn btn-ghost" id="m-retry">Relancer</button>` : ''}<button class="btn btn-primary" id="m-close">Fermer</button></div>`;
     modal.querySelector('#m-close').addEventListener('click', closeModal);
     const rt = modal.querySelector('#m-retry'); if (rt) rt.addEventListener('click', () => retry(r.id, rt));
+    const otpBtn = modal.querySelector('#m-otp-send');
+    if (otpBtn) {
+      const input = modal.querySelector('#m-otp');
+      const out = modal.querySelector('#m-otp-out');
+      const send = async () => {
+        const code = (input.value || '').trim();
+        if (!/^[A-Za-z0-9]{4,8}$/.test(code)) { out.textContent = 'Code invalide (4 à 8 caractères alphanumériques).'; return; }
+        otpBtn.disabled = true;
+        try {
+          await fetchJson(`/api/admin/requests/${r.id}/otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+          toast('Code transmis au robot');
+          refreshDashboard();
+        } catch (e) { out.textContent = e.message; otpBtn.disabled = false; }
+      };
+      otpBtn.addEventListener('click', send);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    }
     const sc = modal.querySelector('#m-showcreds');
     if (sc) sc.addEventListener('click', async () => {
       sc.disabled = true;

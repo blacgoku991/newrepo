@@ -211,6 +211,18 @@ if (!columns.includes('progress_total')) {
 if (!columns.includes('progress_label')) {
   db.exec(`ALTER TABLE requests ADD COLUMN progress_label TEXT NOT NULL DEFAULT ''`);
 }
+// Saisie d'un code OTP (double authentification, ex. NetSoins) : le robot se met
+// en pause en attendant le code reçu par e-mail. awaiting_otp = 1 pendant
+// l'attente ; otp_code = code fourni (par l'admin ou par la lecture auto).
+if (!columns.includes('awaiting_otp')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN awaiting_otp INTEGER NOT NULL DEFAULT 0`);
+}
+if (!columns.includes('otp_code')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN otp_code TEXT NOT NULL DEFAULT ''`);
+}
+if (!columns.includes('otp_prompt')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN otp_prompt TEXT NOT NULL DEFAULT ''`);
+}
 const auditCols = db.prepare(`PRAGMA table_info(audit_log)`).all().map((c) => c.name);
 if (!auditCols.includes('ip')) {
   db.exec(`ALTER TABLE audit_log ADD COLUMN ip TEXT NOT NULL DEFAULT ''`);
@@ -284,7 +296,8 @@ const api = {
     db.prepare(
       `UPDATE requests
          SET status = 'en_cours', attempts = attempts + 1, started_at = datetime('now'),
-             progress_done = 0, progress_total = 0, progress_label = ''
+             progress_done = 0, progress_total = 0, progress_label = '',
+             awaiting_otp = 0, otp_code = '', otp_prompt = ''
        WHERE id = ?`
     ).run(id);
   },
@@ -296,10 +309,46 @@ const api = {
     ).run(Math.max(0, done | 0), Math.max(0, total | 0), String(label || ''), id);
   },
 
+  /**
+   * Le robot demande un code OTP : la demande passe « en attente de code ».
+   * `prompt` = message affiché à l'admin (ex. « Code reçu sur la boîte X »).
+   */
+  requestOtp(id, prompt = '') {
+    db.prepare(
+      `UPDATE requests SET awaiting_otp = 1, otp_code = '', otp_prompt = ? WHERE id = ?`
+    ).run(String(prompt || ''), id);
+  },
+
+  /**
+   * Fournit le code OTP saisi (admin) ou lu automatiquement. Ne fait rien si la
+   * demande n'attend pas de code. Renvoie true si le code a bien été enregistré.
+   */
+  submitOtp(id, code) {
+    const info = db
+      .prepare(`UPDATE requests SET otp_code = ?, awaiting_otp = 0 WHERE id = ? AND awaiting_otp = 1`)
+      .run(String(code || ''), id);
+    return info.changes > 0;
+  },
+
+  /** État de la saisie OTP (polling du robot + affichage admin). */
+  otpState(id) {
+    return db
+      .prepare(`SELECT awaiting_otp, otp_code, otp_prompt FROM requests WHERE id = ?`)
+      .get(id) || null;
+  },
+
+  /** Annule toute attente d'OTP (fin du scénario, timeout…). */
+  clearOtp(id) {
+    db.prepare(
+      `UPDATE requests SET awaiting_otp = 0, otp_code = '', otp_prompt = '' WHERE id = ?`
+    ).run(id);
+  },
+
   markFinished(id, success, message, logs, artifacts = []) {
     db.prepare(
       `UPDATE requests
-         SET status = ?, result_message = ?, logs = ?, artifacts = ?, finished_at = datetime('now')
+         SET status = ?, result_message = ?, logs = ?, artifacts = ?, finished_at = datetime('now'),
+             awaiting_otp = 0, otp_code = ''
        WHERE id = ?`
     ).run(success ? 'terminee' : 'echec', message, JSON.stringify(logs), JSON.stringify(artifacts), id);
   },

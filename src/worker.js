@@ -11,6 +11,7 @@
 
 const db = require('./db');
 const registry = require('./registry');
+const otp = require('./otp');
 
 const POLL_INTERVAL = Number(process.env.WORKER_POLL_MS || 3000);
 const TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 180000);
@@ -54,13 +55,34 @@ async function processOne(request) {
     try { db.setProgress(request.id, done, total, label); } catch { /* la progression est un bonus */ }
   };
 
+  // Chien de garde ré-armable : on interrompt un robot réellement bloqué, mais
+  // une attente LÉGITIME (saisie manuelle d'un OTP par l'admin) ré-arme le
+  // minuteur via ctx.keepAlive() pour ne pas être tuée à tort.
+  let watchdogTimer;
+  let watchdogReject;
+  const armWatchdog = () => {
+    clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(
+      () => watchdogReject && watchdogReject(new Error('Délai maximum dépassé (timeout)')),
+      TIMEOUT_MS
+    );
+  };
+  const watchdog = new Promise((_, reject) => { watchdogReject = reject; });
+
+  // Contexte passé au scénario. `awaitOtp` récupère un code OTP (lecture auto par
+  // mail si configurée, sinon saisie manuelle par l'admin).
+  const ctx = {
+    log,
+    reference: request.reference,
+    progress,
+    keepAlive: armWatchdog,
+    awaitOtp: (opts = {}) =>
+      otp.awaitOtp({ requestId: request.id, log, keepAlive: armWatchdog, ...opts }),
+  };
+
   try {
-    const result = await Promise.race([
-      action(data, { log, reference: request.reference, progress }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Délai maximum dépassé (timeout)')), TIMEOUT_MS)
-      ),
-    ]);
+    armWatchdog();
+    const result = await Promise.race([action(data, ctx), watchdog]);
 
     const artifacts = (result && result.artifacts) || [];
     if (result && result.success) {
@@ -120,6 +142,8 @@ async function processOne(request) {
     log(`Erreur : ${err.message}`);
     db.markFinished(request.id, false, `Erreur pendant l'automatisation : ${err.message}`, logs);
     db.audit('robot', 'echec_creation', request.reference, String(err.message));
+  } finally {
+    clearTimeout(watchdogTimer);
   }
 }
 
