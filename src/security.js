@@ -19,7 +19,9 @@ const CSP = [
   // Styles : fichiers locaux + attributs style inline + Google Fonts.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   'font-src https://fonts.gstatic.com data:',
-  "img-src 'self' data:",
+  // Images locales + logos officiels des éditeurs (chargés par le navigateur
+  // du poste ADEF depuis les sites des éditeurs — jamais de script, juste des images).
+  "img-src 'self' data: https://algonis.net https://app.bluekango.com https://adef.netsoins.com",
   "connect-src 'self'",
   // Le portail ne doit jamais être affiché dans une iframe (clickjacking).
   "frame-ancestors 'none'",

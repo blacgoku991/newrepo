@@ -37,11 +37,11 @@
         <span class="name"><b>Algonis</b> <span>Accès applications</span></span>
       </a>
       <nav class="topnav">
-        <a href="/">Applications</a>
-        <a href="/demarches.html" class="active">Démarches</a>
-        <a href="/espace" class="nav-espace" hidden>Mon espace</a>
-        <a href="/suivi.html">Suivre une demande</a>
-        <a href="/admin.html" class="admin-link">Administration</a>
+        <a href="/" data-nav="apps">Applications</a>
+        <a href="/demarches.html" class="active" data-nav="demarches">Démarches</a>
+        <a href="/espace" class="nav-espace" data-nav="espace" hidden>Mon espace</a>
+        <a href="/suivi.html" data-nav="suivi">Suivre une demande</a>
+        <a href="/admin.html" class="admin-link" data-nav="admin">Administration</a>
       </nav>
     </div>
   </header>
@@ -82,12 +82,7 @@
     </div>
   </main>
 
-  <footer class="footer">
-    <div class="inner">
-      <span>© Algonis — création automatisée de comptes sur les applications métiers.</span>
-      <span><a href="/suivi.html">Suivi</a> · <a href="/admin.html">Administration</a></span>
-    </div>
-  </footer>
+  <footer id="site-footer"></footer>
   <script src="/js/common.js"></script>
 </body>
 </html>

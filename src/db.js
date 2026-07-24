@@ -164,6 +164,15 @@ db.exec(`
     PRIMARY KEY (referent_id, app_id, etab_value),
     FOREIGN KEY (referent_id) REFERENCES referents(id) ON DELETE CASCADE
   );
+
+  -- Réglages divers du portail (clé -> valeur JSON), éditables depuis l'admin.
+  -- Ex. « site_nav » : onglets visibles dans le menu du site public.
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT NOT NULL DEFAULT ''
+  );
 `);
 
 // Migration : ajoute les colonnes récentes aux bases créées avant leur introduction.
@@ -625,6 +634,21 @@ const api = {
           ORDER BY id DESC`
       )
       .all(appId, ...values);
+  },
+
+  // --- Réglages du portail (clé/valeur JSON) --------------------------------
+
+  getSetting(key, fallback = null) {
+    const row = db.prepare(`SELECT value FROM app_settings WHERE key = ?`).get(key);
+    if (!row) return fallback;
+    try { return JSON.parse(row.value); } catch { return fallback; }
+  },
+
+  setSetting(key, value, by = '') {
+    db.prepare(
+      `INSERT INTO app_settings (key, value, updated_by, updated_at) VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = datetime('now')`
+    ).run(key, JSON.stringify(value), by);
   },
 
   // --- Application de démonstration -----------------------------------------

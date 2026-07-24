@@ -23,6 +23,18 @@ const security = require('./security');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
+// Onglets du menu du site public que l'admin peut afficher/masquer.
+// « admin » (lien Administration) est masqué par défaut : l'accès se fait par
+// /admin.html directement. Les autres onglets sont visibles par défaut.
+const NAV_KEYS = ['apps', 'demarches', 'espace', 'suivi', 'admin'];
+const NAV_DEFAULT = { apps: true, demarches: true, espace: true, suivi: true, admin: false };
+function siteNav() {
+  const saved = db.getSetting('site_nav', {}) || {};
+  const out = {};
+  for (const k of NAV_KEYS) out[k] = saved[k] === undefined ? NAV_DEFAULT[k] : saved[k] !== false;
+  return out;
+}
+
 app.disable('x-powered-by');
 app.use(security.securityHeaders);
 app.use(express.json({ limit: '100kb' }));
@@ -108,6 +120,7 @@ app.get('/api/sso/me', (req, res) => {
     user: sso.currentUser(req),
     referent: !!ref,
     referentEnforced: referents.enforced(),
+    nav: siteNav(),
   });
 });
 
@@ -666,6 +679,7 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
     automationMode: process.env.AUTOMATION_MODE === 'production' ? 'production' : 'demo',
     smtp: mailer.smtpConfigured(),
     sso: { configured: sso.configured(), required: sso.required(), tenant: process.env.M365_TENANT_ID || null },
+    nav: siteNav(),
     security: {
       defaultAdminPassword,
       cookieSecure: process.env.ADMIN_COOKIE_SECURE === 'true',
@@ -673,6 +687,16 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
     },
     apps,
   });
+});
+
+// Affichage/masquage des onglets du menu du site public.
+app.put('/api/admin/site-nav', auth.requireApi, (req, res) => {
+  const body = req.body || {};
+  const cfg = {};
+  for (const k of NAV_KEYS) cfg[k] = body[k] !== false; // tout ce qui n'est pas explicitement false reste visible
+  db.setSetting('site_nav', cfg, req.admin.username);
+  db.audit(req.admin.username, 'maj_navigation', '', JSON.stringify(cfg));
+  res.json({ ok: true, nav: cfg });
 });
 
 app.get('/api/admin/audit', auth.requireApi, (req, res) => {

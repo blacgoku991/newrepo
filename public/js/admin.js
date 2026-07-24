@@ -37,8 +37,6 @@
     requests: { ic: 'list', label: 'Demandes', h1: 'Demandes', sub: 'Toutes les demandes et leur traitement' },
     accounts: { ic: 'users', label: 'Comptes créés', h1: 'Comptes créés', sub: 'Identifiants attribués automatiquement' },
     emails: { ic: 'inbox', label: 'E-mails', h1: "E-mails d'identifiants", sub: "Boîte d'envoi des identifiants de connexion" },
-    forms: { ic: 'briefcase', label: 'Formulaires', h1: 'Éditeur de formulaires', sub: 'Champs demandés pour chaque application' },
-    scenarios: { ic: 'bot', label: 'Scénarios', h1: 'Éditeur de scénarios', sub: 'Étapes d’automatisation par application' },
     referents: { ic: 'building', label: 'Référents', h1: 'Référents autorisés', sub: 'Habilitations par établissement & espaces personnels' },
     users: { ic: 'users', label: 'Comptes admin', h1: 'Comptes administrateurs', sub: 'Accès à cet espace' },
     settings: { ic: 'lock', label: 'Réglages', h1: 'Réglages', sub: 'Mode d’exécution, e-mail, configuration' },
@@ -87,8 +85,6 @@
     if (view === 'overview' || view === 'requests') { refreshDashboard(); refreshTimer = setInterval(refreshDashboard, 5000); }
     else if (view === 'accounts') loadAccounts();
     else if (view === 'emails') loadEmails();
-    else if (view === 'forms') loadFormsEditor();
-    else if (view === 'scenarios') loadScenariosEditor();
     else if (view === 'referents') loadReferents();
     else if (view === 'users') loadUsers();
     else if (view === 'settings') loadSettings();
@@ -784,8 +780,17 @@
     if (sec.defaultAdminPassword) secAlerts.push('Le compte « admin » utilise encore le mot de passe par défaut : changez-le immédiatement (Comptes admin → Mot de passe).');
     if (!sec.https) secAlerts.push('Le portail n’est pas servi en HTTPS : à activer impérativement en production (certificat + reverse proxy).');
     if (sec.https && !sec.cookieSecure) secAlerts.push('HTTPS détecté mais ADMIN_COOKIE_SECURE n’est pas à true : les cookies devraient être marqués « Secure ».');
+    const navMeta = [['apps', 'Applications'], ['demarches', 'Démarches'], ['espace', 'Mon espace'], ['suivi', 'Suivre une demande'], ['admin', 'Administration']];
+    const nav = s.nav || {};
     el('settings-body').innerHTML = `
       ${secAlerts.length ? `<div class="alert alert-err" style="margin-bottom:18px"><b>Sécurité :</b><ul style="margin:6px 0 0 18px">${secAlerts.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>` : ''}
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Navigation du site public</h3><span class="hint">onglets visibles dans le menu</span></div><div class="cb">
+        <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px">Décochez un onglet pour le masquer du menu du site public (l'accès direct par l'URL reste possible). « Administration » est masqué par défaut. « Mon espace » n'apparaît de toute façon que pour les référents.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${navMeta.map(([k, label]) => `<label style="display:flex;align-items:center;gap:10px;font-size:.92rem;cursor:pointer"><input type="checkbox" class="nav-toggle" data-key="${k}" ${nav[k] !== false ? 'checked' : ''} /> <span>${label}</span></label>`).join('')}
+        </div>
+        <button class="btn btn-primary btn-sm" id="nav-save" style="margin-top:16px">Enregistrer la navigation</button>
+      </div></div>
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Automatisation</h3></div><div class="cb">
         <p style="font-size:.92rem">Mode d'automatisation : <b>${s.automationMode === 'production' ? 'Production (vraies applications)' : 'Démonstration (console factice)'}</b></p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Se règle via la variable d'environnement <code>AUTOMATION_MODE</code> côté serveur.</p>
@@ -801,5 +806,13 @@
       <div class="card"><div class="ch"><h3>Applications</h3><span class="hint">configuration du mode production</span></div><div class="cb">
         ${s.apps.map((a) => `<div class="settings-app"><div style="flex:1"><b>${escapeHtml(a.name)}</b>${a.comingSoon ? ' <span class="badge st-en_attente">Bientôt</span>' : ''}<div style="font-size:.8rem;color:var(--muted);margin-top:3px">${a.vars.map((v) => `${v.name}: ${v.set ? '✔' : '—'}`).join(' · ') || 'aucune variable'}</div></div><div class="st">${a.comingSoon ? '' : badge(a.configured)}</div></div>`).join('')}
       </div></div>`;
+
+    const navSave = el('nav-save');
+    if (navSave) navSave.addEventListener('click', async () => {
+      const cfg = {};
+      for (const c of document.querySelectorAll('.nav-toggle')) cfg[c.dataset.key] = c.checked;
+      try { await fetchJson('/api/admin/site-nav', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }); toast('Navigation mise à jour'); }
+      catch (e) { toast(e.message, true); }
+    });
   }
 })();

@@ -346,6 +346,27 @@ a.app-card:hover .go svg { transform: translateX(3px); }
 .footer a { color: var(--muted); }
 .footer a:hover { color: var(--gold-bright); }
 
+/* Pied de page complet (logos éditeurs + mentions légales). */
+.site-footer { background: var(--bg-deep); color: var(--faint); margin-top: 56px; border-top: 1px solid var(--line); }
+.site-footer .ft-inner { max-width: 1180px; margin: 0 auto; padding: 44px 24px 0; }
+.site-footer .ft-top { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 40px; padding-bottom: 34px; }
+.site-footer .ft-brand .ft-logo { height: 30px; width: auto; margin-bottom: 14px; }
+.site-footer .ft-brand .ft-logo-txt { font-family: var(--ui); font-weight: 700; font-size: 1.3rem; color: #fff; margin-bottom: 14px; display: inline-block; }
+.site-footer .ft-brand p { font-size: .88rem; line-height: 1.6; max-width: 40ch; color: var(--muted); }
+.site-footer .ft-h { display: block; font-family: var(--ui); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-bright); font-weight: 600; margin-bottom: 14px; }
+.site-footer .ft-links { display: flex; flex-direction: column; gap: 9px; }
+.site-footer .ft-links a { color: var(--muted); font-size: .9rem; }
+.site-footer .ft-links a:hover { color: var(--gold-bright); }
+.site-footer .ft-logos { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.site-footer .ft-logos .ed { display: flex; align-items: center; justify-content: center; height: 46px; padding: 0 14px; background: #fff; border-radius: 10px; border: 1px solid var(--line-2); }
+.site-footer .ft-logos .ed img { max-height: 26px; max-width: 128px; width: auto; }
+.site-footer .ft-logos .ed .ed-txt { color: #1a2540; font-weight: 700; font-size: .85rem; font-family: var(--ui); }
+.site-footer .ft-bottom { border-top: 1px solid var(--line); padding: 18px 0 26px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .82rem; }
+.site-footer .ft-bottom .ft-legal { display: flex; gap: 16px; flex-wrap: wrap; }
+.site-footer .ft-bottom a { color: var(--muted); }
+.site-footer .ft-bottom a:hover { color: var(--gold-bright); }
+@media (max-width: 760px) { .site-footer .ft-top { grid-template-columns: 1fr; gap: 28px; } }
+
 @media (max-width: 960px) {
   .hero .hero-grid { grid-template-columns: 1fr; gap: 40px; padding: 48px 20px 52px; }
   .hero-panel { max-width: 520px; }

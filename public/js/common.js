@@ -84,16 +84,80 @@ function formatDate(iso) {
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-/* Affiche le lien « Mon espace » dans la barre de navigation pour les référents. */
+/* Pied de page commun : logos éditeurs, plan du portail, mentions légales.
+ * Injecté dans tout élément <footer id="site-footer"> présent sur la page.
+ * Les logos officiels sont chargés depuis les sites des éditeurs ; en cas
+ * d'indisponibilité, un repli texte s'affiche. */
+function renderFooter() {
+  const host = document.getElementById('site-footer');
+  if (!host) return;
+  const year = new Date().getFullYear();
+  // Repli texte géré par écouteur (aucun gestionnaire inline : CSP stricte).
+  const logoImg = (src, name, cls) =>
+    `<img${cls ? ` class="${cls}"` : ''} src="${escapeHtml(src)}" alt="${escapeHtml(name)}" loading="lazy" data-fallback="${escapeHtml(name)}" data-fallback-cls="${name === 'Algonis' ? 'ft-logo-txt' : 'ed-txt'}" />`;
+  host.className = 'site-footer';
+  host.innerHTML = `
+    <div class="ft-inner">
+      <div class="ft-top">
+        <div class="ft-brand">
+          ${logoImg('https://algonis.net/wp-content/uploads/2022/10/cropped-LogoAlgonis-1.png', 'Algonis', 'ft-logo')}
+          <p>Portail interne d'ADEF Résidences pour la création automatisée des comptes sur les applications métiers, avec suivi et remise sécurisée des identifiants.</p>
+        </div>
+        <div>
+          <span class="ft-h">Le portail</span>
+          <div class="ft-links">
+            <a href="/">Applications</a>
+            <a href="/demarches.html">Démarches</a>
+            <a href="/espace">Mon espace</a>
+            <a href="/suivi.html">Suivre une demande</a>
+          </div>
+        </div>
+        <div>
+          <span class="ft-h">Applications gérées</span>
+          <div class="ft-logos">
+            <span class="ed">${logoImg('https://app.bluekango.com/BMS_EARLY/images/bkg_logo.png', 'BlueKanGo')}</span>
+            <span class="ed">${logoImg('https://adef.netsoins.com/images/orisha_socialcare_teranga.png', 'NetSoins')}</span>
+          </div>
+        </div>
+      </div>
+      <div class="ft-bottom">
+        <span>© ${year} Algonis · ADEF Résidences — Tous droits réservés.</span>
+        <span class="ft-legal">
+          <a href="/mentions-legales.html">Mentions légales</a>
+          <a href="/mentions-legales.html#confidentialite">Confidentialité</a>
+          <a href="/mentions-legales.html#donnees">Protection des données</a>
+        </span>
+      </div>
+    </div>`;
+  for (const img of host.querySelectorAll('img[data-fallback]')) {
+    img.addEventListener('error', () => {
+      const span = document.createElement('span');
+      span.className = img.dataset.fallbackCls || '';
+      span.textContent = img.dataset.fallback;
+      img.replaceWith(span);
+    });
+  }
+}
+document.addEventListener('DOMContentLoaded', renderFooter);
+
+/* Barre de navigation du site public :
+ *  - masque les onglets désactivés depuis l'admin (config « nav ») ;
+ *  - n'affiche « Mon espace » que pour les référents. */
 document.addEventListener('DOMContentLoaded', async () => {
-  const link = document.querySelector('.nav-espace');
-  if (!link) return;
+  const navLinks = document.querySelectorAll('.topnav [data-nav]');
+  if (!navLinks.length) return;
+  let me = {};
   try {
-    const res = await fetch('/api/sso/me');
-    const me = await res.json();
-    if (me && me.referent) link.hidden = false;
+    me = await (await fetch('/api/sso/me')).json();
   } catch {
-    /* sans SSO : lien masqué */
+    /* sans SSO : configuration par défaut (tout visible) */
+  }
+  const nav = (me && me.nav) || {};
+  for (const link of navLinks) {
+    const key = link.dataset.nav;
+    if (nav[key] === false) { link.remove(); continue; }
+    // « Mon espace » : réservé aux référents (et non masqué).
+    if (key === 'espace') link.hidden = !(me && me.referent);
   }
 });
 
