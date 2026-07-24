@@ -214,15 +214,23 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
       ? effectiveExtensionSchema(entry.config)
       : effectiveSchema(entry.config);
   if (!schema) return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
-  const { data, errors } = validate(schema, req.body || {});
+
+  // Connexion SSO : l'identité du demandeur (nom + e-mail) vient du compte
+  // Microsoft et fait foi — on la renseigne d'office avant validation, la
+  // personne n'a jamais à la retaper.
+  const ssoUser = sso.currentUser(req);
+  const body = { ...(req.body || {}) };
+  if (ssoUser) {
+    body._demandeur_nom = ssoUser.name || `${ssoUser.prenom} ${ssoUser.nom}`.trim() || ssoUser.email;
+    body._demandeur_email = ssoUser.email;
+  }
+  const { data, errors } = validate(schema, body);
   if (Object.keys(errors).length > 0) {
     return res.status(422).json({ error: 'Formulaire invalide', fields: errors });
   }
 
-  // Traçabilité : l'identité Microsoft 365 (si SSO actif) fait foi sur le
-  // demandeur déclaré, et l'adresse IP d'origine est conservée.
+  // Traçabilité : l'adresse IP d'origine et l'identité Microsoft 365 sont conservées.
   const ip = sso.clientIp(req);
-  const ssoUser = sso.currentUser(req);
   const demandeur = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : requesterLabel(data);
   const reference = db.createRequest(
     entry.config.id,

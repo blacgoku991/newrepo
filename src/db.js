@@ -104,6 +104,8 @@ db.exec(`
     token TEXT PRIMARY KEY,
     email TEXT NOT NULL,
     name TEXT NOT NULL DEFAULT '',
+    given_name TEXT NOT NULL DEFAULT '',
+    family_name TEXT NOT NULL DEFAULT '',
     oid TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     expires_at TEXT NOT NULL
@@ -169,6 +171,13 @@ if (!columns.includes('request_type')) {
 const auditCols = db.prepare(`PRAGMA table_info(audit_log)`).all().map((c) => c.name);
 if (!auditCols.includes('ip')) {
   db.exec(`ALTER TABLE audit_log ADD COLUMN ip TEXT NOT NULL DEFAULT ''`);
+}
+const ssoCols = db.prepare(`PRAGMA table_info(sso_sessions)`).all().map((c) => c.name);
+if (!ssoCols.includes('given_name')) {
+  db.exec(`ALTER TABLE sso_sessions ADD COLUMN given_name TEXT NOT NULL DEFAULT ''`);
+}
+if (!ssoCols.includes('family_name')) {
+  db.exec(`ALTER TABLE sso_sessions ADD COLUMN family_name TEXT NOT NULL DEFAULT ''`);
 }
 
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
@@ -401,10 +410,10 @@ const api = {
 
   // --- Sessions SSO Microsoft 365 -------------------------------------------
 
-  createSsoSession(token, email, name, oid, expiresAt) {
+  createSsoSession(token, email, name, oid, expiresAt, givenName = '', familyName = '') {
     db.prepare(
-      `INSERT INTO sso_sessions (token, email, name, oid, expires_at) VALUES (?, ?, ?, ?, ?)`
-    ).run(token, email, name || '', oid || '', expiresAt);
+      `INSERT INTO sso_sessions (token, email, name, given_name, family_name, oid, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(token, email, name || '', givenName || '', familyName || '', oid || '', expiresAt);
   },
 
   getSsoSession(token) {

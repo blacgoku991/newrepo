@@ -71,7 +71,9 @@ function currentUser(req) {
   const token = parseCookies(req)[COOKIE];
   if (!token) return null;
   const session = db.getSsoSession(token);
-  return session ? { email: session.email, name: session.name, oid: session.oid } : null;
+  return session
+    ? { email: session.email, name: session.name, prenom: session.given_name || '', nom: session.family_name || '', oid: session.oid }
+    : null;
 }
 
 // --- Routes ---------------------------------------------------------------
@@ -140,13 +142,15 @@ async function callbackRoute(req, res) {
     if (payload.exp && payload.exp * 1000 < Date.now()) throw new Error('Jeton expiré');
 
     const email = String(payload.preferred_username || payload.email || payload.upn || '').toLowerCase();
-    const name = String(payload.name || email);
+    const givenName = String(payload.given_name || '');
+    const familyName = String(payload.family_name || '');
+    const name = String(payload.name || `${givenName} ${familyName}`.trim() || email);
     if (!email) throw new Error('Adresse e-mail absente du jeton Microsoft');
 
     const token = b64url(crypto.randomBytes(32));
     const expires = new Date(Date.now() + SESSION_TTL_H * 3600 * 1000)
       .toISOString().slice(0, 19).replace('T', ' ');
-    db.createSsoSession(token, email, name, String(payload.oid || ''), expires);
+    db.createSsoSession(token, email, name, String(payload.oid || ''), expires, givenName, familyName);
     db.audit(`${name} <${email}>`, 'connexion_sso', '', '', clientIp(req));
 
     const secure = String(process.env.COOKIE_SECURE || 'false') === 'true';
