@@ -25,8 +25,11 @@ module.exports = {
     passwordLabel: 'Mot de passe',
     submitLabel: 'Connexion',
     // Après connexion, BlueKanGo affiche parfois une page de choix de profil
-    // (lien "Prénom Nom SIEGE") : on clique le premier lien correspondant.
-    profileLinkPattern: /SIEGE/i,
+    // (lien « Prénom Nom ÉTABLISSEMENT », ex. « Achraf Maatoug COMBS LA VILLE »).
+    // L'établissement du compte admin varie : on clique le premier profil
+    // affiché (≥ 3 mots), peu importe lequel — l'établissement demandé par le
+    // client est ensuite sélectionné à l'étape de bascule.
+    profileLinkPattern: /\S+\s+\S+\s+\S+/,
   },
 
   nav: {
@@ -60,8 +63,5 @@ module.exports = {
     // champ est saisi par le robot (la date de début reste celle de BlueKanGo).
     dateFinRowLabel: 'Date de fin de validité',
     validerLabel: 'Valider',                    // bouton dans le cadre principal
-    // Avertissement BlueKanGo quand l'identifiant existe déjà (autre établissement).
-    loginTakenText: 'déjà défini sur un autre établissement',
-    warningOkLabel: 'OK',
   },
 };
