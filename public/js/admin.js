@@ -132,6 +132,8 @@
     acces_identifiants_refuse: 'Accès aux identifiants refusé',
     depot_reinit_mdp: 'Réinitialisation de mdp déposée',
     reinit_mdp: 'Mot de passe réinitialisé (robot)',
+    depot_ajout_etab: 'Ajout d’établissement déposé',
+    ajout_etab: 'Établissement ajouté (robot)',
   };
   let journalEntries = [];
   async function loadJournal() {
@@ -217,7 +219,7 @@
     if (!vis.length) { el('rows').innerHTML = `<tr><td colspan="7" class="loading">${requests.length ? 'Aucune demande ne correspond aux filtres.' : 'Aucune demande.'}</td></tr>`; return; }
     el('rows').innerHTML = vis.map((r) => `<tr>
       <td><span class="ref">${escapeHtml(r.reference)}</span></td>
-      <td>${escapeHtml(r.app)}${r.type === 'reset_mdp' ? ' <span class="badge st-en_cours" style="font-size:.68rem">Réinit. mdp</span>' : ''}</td>
+      <td>${escapeHtml(r.app)}${r.type === 'reset_mdp' ? ' <span class="badge st-en_cours" style="font-size:.68rem">Réinit. mdp</span>' : r.type === 'ajout_etab' ? ' <span class="badge st-en_attente" style="font-size:.68rem">Ajout étab.</span>' : ''}</td>
       <td><span class="who">${escapeHtml(who(r.payload))}<small>${escapeHtml(r.payload?.email || '')}</small></span></td>
       <td>${escapeHtml(r.demandeur || '—')}</td>
       <td>${formatDate(r.createdAt)}</td>
@@ -246,7 +248,7 @@
     const shots = (r.artifacts || []).length ? `<h4>Captures d'écran du robot</h4><div class="shots">${r.artifacts.map((f) => { const u = `/artifacts/${encodeURIComponent(r.reference)}/${encodeURIComponent(f)}`; return `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${escapeHtml(f)}" loading="lazy"/><span class="cap">${escapeHtml(f)}</span></a>`; }).join('')}</div>` : '';
     const emails = (r.emails || []).length ? `<h4>E-mail d'identifiants</h4>${r.emails.map((e) => `<div style="font-size:.88rem;padding:6px 0">${escapeHtml(e.to)} — ${statusBadge2(e.status)}</div>`).join('')}` : '';
     modal.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${r.type === 'reset_mdp' ? 'Réinitialisation de mot de passe' : 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${r.type === 'reset_mdp' ? 'Réinitialisation de mot de passe' : r.type === 'ajout_etab' ? "Ajout d'établissement" : 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
       ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
       ${r.login ? `<p style="margin-top:8px;font-size:.9rem">Identifiant attribué : <span class="ref" style="font-size:.9rem">${escapeHtml(r.login)}</span></p>` : ''}

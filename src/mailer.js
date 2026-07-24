@@ -21,7 +21,9 @@ function smtpConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-function buildMessage(appName, data, reference, storedLogin, credentialLink, isReset = false) {
+function buildMessage(appName, data, reference, storedLogin, credentialLink, type = 'creation') {
+  const isReset = type === 'reset_mdp';
+  const isExtension = type === 'ajout_etab';
   const beneficiaire = `${data.prenom || ''} ${data.nom || ''}`.trim();
   const frDate = (iso) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
@@ -33,7 +35,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, isR
     '',
     isReset
       ? `Le mot de passe de votre compte ${appName} a été réinitialisé.`
-      : `Votre compte ${appName} a été créé.`,
+      : isExtension
+        ? `Un nouvel établissement a été ajouté à votre compte ${appName}.`
+        : `Votre compte ${appName} a été créé.`,
     '',
     `Application    : ${appName}`,
   ];
@@ -63,7 +67,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, isR
   return {
     subject: isReset
       ? `Votre mot de passe ${appName} a été réinitialisé — récupérez vos identifiants`
-      : `Votre compte ${appName} est prêt — récupérez vos identifiants`,
+      : isExtension
+        ? `Nouvel établissement ajouté à votre compte ${appName}`
+        : `Votre compte ${appName} est prêt — récupérez vos identifiants`,
     text: lines.join('\n'),
   };
 }
@@ -84,7 +90,7 @@ async function sendCredentials(request, credentialLink = null) {
 
   const appEntry = registry.get(request.app_id);
   const appName = appEntry ? appEntry.config.name : request.app_id;
-  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login, credentialLink, request.request_type === 'reset_mdp');
+  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login, credentialLink, request.request_type || 'creation');
 
   const outboxId = db.createOutbox(request.id, to, subject, text);
   await deliver(outboxId);

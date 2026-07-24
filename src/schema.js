@@ -111,6 +111,12 @@ function effectiveResetSchema(config) {
   return { ...config.resetSchema, sections: [...config.resetSchema.sections, REQUESTER_SECTION] };
 }
 
+/** Schéma d'ajout d'établissement : extensionSchema + section demandeur. */
+function effectiveExtensionSchema(config) {
+  if (!config.extensionSchema) return null;
+  return { ...config.extensionSchema, sections: [...config.extensionSchema.sections, REQUESTER_SECTION] };
+}
+
 /** Compat : augmente un schéma brut (sans surcharges) — utilisé par la console démo. */
 function augmentSchema(formSchema) {
   return { ...formSchema, sections: [...formSchema.sections, REQUESTER_SECTION] };
@@ -159,6 +165,7 @@ module.exports = {
   augmentSchema,
   effectiveSchema,
   effectiveResetSchema,
+  effectiveExtensionSchema,
   mergeSchema,
   validateOverrides,
   requesterLabel,

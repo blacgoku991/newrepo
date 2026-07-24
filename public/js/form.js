@@ -12,9 +12,10 @@
   const content = document.getElementById('content');
   const params = new URLSearchParams(location.search);
   const appId = params.get('app');
-  // Mode « réinitialisation de mot de passe » (mot de passe oublié).
+  // Modes : création (défaut), réinitialisation de mot de passe, ajout d'établissement.
   const resetMode = params.get('type') === 'reset';
-  const typeQS = resetMode ? '?type=reset' : '';
+  const extensionMode = params.get('type') === 'extension';
+  const typeQS = resetMode ? '?type=reset' : extensionMode ? '?type=extension' : '';
 
   if (!appId) {
     content.innerHTML = `<div class="alert alert-error">Aucune application sélectionnée. <a href="/">Retour à l'accueil</a></div>`;
@@ -31,7 +32,7 @@
 
   // Le schéma vient de l'API (source unique de vérité : le backend inclut
   // déjà la section « demandeur »). Aucun schéma local dupliqué.
-  document.title = `${app.name} — ${resetMode ? 'Réinitialisation de mot de passe' : 'Demande de compte'}`;
+  document.title = `${app.name} — ${resetMode ? 'Réinitialisation de mot de passe' : extensionMode ? 'Ajout d’établissement' : 'Demande de compte'}`;
 
   const sections = app.schema.sections;
   const stepCount = sections.length + 1; // + récapitulatif
@@ -96,13 +97,15 @@
             ${appVisual(app)}
             <div>
               <h2>${escapeHtml(app.name)}</h2>
-              <div class="cat">${resetMode ? 'Réinitialisation de mot de passe' : escapeHtml(app.category)}</div>
+              <div class="cat">${resetMode ? 'Réinitialisation de mot de passe' : extensionMode ? 'Ajout d’établissement' : escapeHtml(app.category)}</div>
             </div>
           </div>
           ${stepperHtml()}
           <div class="aside-note">${resetMode
-            ? `Le robot Algonis recherche le compte dans ${escapeHtml(app.name)} et remplace son mot de passe par un mot de passe provisoire, remis par lien sécurisé.`
-            : `Le robot Algonis saisit ces informations telles quelles dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.`}</div>
+            ? `Le robot Algonis vérifie l'identifiant sur la fiche ${escapeHtml(app.name)} puis remplace le mot de passe par un provisoire, remis par lien sécurisé.`
+            : extensionMode
+              ? `Le robot Algonis rattache l'établissement supplémentaire au compte existant (identifiant vérifié), avec les droits de la fonction indiquée.`
+              : `Le robot Algonis saisit ces informations telles quelles dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.`}</div>
         </aside>
         <div class="panel form-main">
         ${current === 0 && app.schema.intro ? `<div class="intro">${escapeHtml(app.schema.intro)}</div>` : ''}

@@ -62,10 +62,9 @@ module.exports = {
             required: true,
             options: [
               { value: 'premier', label: 'Non — c’est son premier compte BlueKanGo' },
-              { value: 'ajout', label: 'Oui — elle a déjà un compte (autre établissement) et doit accéder à celui-ci EN PLUS' },
               { value: 'homonyme', label: 'Non, mais une AUTRE personne du même nom a déjà un compte (homonyme)' },
             ],
-            help: 'Mot de passe oublié ? N’utilisez pas ce formulaire : passez par l’onglet « Mot de passe oublié ».',
+            help: 'Si la personne a DÉJÀ un compte : utilisez « Ajouter un établissement » ou « Mot de passe oublié » depuis la page Démarches.',
           },
         ],
       },
@@ -209,13 +208,25 @@ module.exports = {
 // ---------------------------------------------------------------------------
 const etabField = module.exports.formSchema.sections[1].fields.find((f) => f.name === 'etablissement');
 
+const identifiantField = {
+  name: 'identifiant',
+  label: 'Identifiant BlueKanGo du compte',
+  type: 'text',
+  required: true,
+  placeholder: 'mdupont',
+  pattern: '^[a-zA-Z0-9._-]{2,60}$',
+  patternMessage: 'Identifiant invalide (lettres/chiffres/._-)',
+  help: 'Généralement : 1re lettre du prénom + nom (ex. Marie Dupont → mdupont). Le robot vérifie que la fiche trouvée porte bien cet identifiant avant d’agir.',
+};
+
 module.exports.resetSchema = {
   intro:
-    'Le robot recherche le compte dans l’établissement indiqué (nom et prénom EXACTEMENT comme sur le compte BlueKanGo), remplace le mot de passe par un mot de passe provisoire, et vous le transmet par lien sécurisé.',
+    'Le robot recherche le compte (nom et prénom EXACTS), vérifie que la fiche porte bien l’identifiant fourni, remplace le mot de passe par un mot de passe provisoire et vous le transmet par lien sécurisé.',
   sections: [
     {
       title: 'Compte concerné',
       fields: [
+        { ...identifiantField },
         { ...etabField, help: 'Établissement auquel le compte est rattaché.' },
         { name: 'nom', label: 'Nom (exact)', type: 'text', required: true, placeholder: 'DUPONT' },
         { name: 'prenom', label: 'Prénom (exact)', type: 'text', required: true, placeholder: 'Marie' },
@@ -227,6 +238,38 @@ module.exports.resetSchema = {
           placeholder: 'marie.dupont@adef-residences.com',
           help: 'Pour recevoir le lien sécurisé de récupération du nouveau mot de passe.',
         },
+      ],
+    },
+  ],
+};
+
+// Ajout d'un établissement à un compte EXISTANT : le robot duplique un
+// utilisateur de l'établissement cible (héritage des droits de la fonction)
+// et rattache la fiche à l'identifiant existant fourni.
+module.exports.extensionSchema = {
+  intro:
+    'Pour donner accès à un établissement SUPPLÉMENTAIRE à une personne qui a déjà un compte BlueKanGo. Le robot confirme l’avertissement « compte déjà défini » avec l’identifiant existant : le compte est rattaché au nouvel établissement.',
+  sections: [
+    {
+      title: 'Compte existant',
+      fields: [
+        { ...identifiantField },
+        { name: 'nom', label: 'Nom (exact)', type: 'text', required: true, placeholder: 'DUPONT' },
+        { name: 'prenom', label: 'Prénom (exact)', type: 'text', required: true, placeholder: 'Marie' },
+        {
+          name: 'email',
+          label: 'E-mail du titulaire',
+          type: 'email',
+          required: false,
+          placeholder: 'marie.dupont@adef-residences.com',
+        },
+      ],
+    },
+    {
+      title: 'Établissement à ajouter',
+      fields: [
+        { ...etabField, label: 'Nouvel établissement', help: 'L’établissement auquel donner accès en plus.' },
+        { ...module.exports.formSchema.sections[1].fields.find((f) => f.name === 'fonction') },
       ],
     },
   ],

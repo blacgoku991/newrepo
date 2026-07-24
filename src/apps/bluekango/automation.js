@@ -87,10 +87,11 @@ async function findEtabSelect(page, timeout = 20000) {
 }
 
 async function createAccount(data, ctx) {
-  // Identifiant unique : 1re lettre du prénom + nom, en ajoutant des lettres du
-  // prénom si l'identifiant est déjà pris (voir identifiants.js).
-  const login = pickUniqueLogin(data.prenom, data.nom, (l) => db.loginExists(config.id, l));
-  ctx.log(`Identifiant retenu : « ${login} »`);
+  // Identifiant : imposé (ajout d'établissement à un compte existant) ou
+  // généré unique (1re lettre du prénom + nom, lettres supplémentaires si pris).
+  const fixedLogin = (data.identifiant || '').trim().toLowerCase();
+  const login = fixedLogin || pickUniqueLogin(data.prenom, data.nom, (l) => db.loginExists(config.id, l));
+  ctx.log(fixedLogin ? `Identifiant existant fourni : « ${login} »` : `Identifiant retenu : « ${login} »`);
   const account = { login, prenom: data.prenom, nom: data.nom };
 
   // BlueKanGo peut refuser l'identifiant (« déjà défini sur un autre
@@ -260,8 +261,11 @@ async function createAccount(data, ctx) {
         run: async () => {
           await fancy().locator(S.form.nom).fill(data.nom.toUpperCase());
           await fancy().locator(S.form.prenom).fill(data.prenom);
-          const cell = fancy().getByRole('cell', { name: S.form.civiliteCellPattern }).first();
-          await cell.getByRole('radio').nth(S.form.civiliteIndex[data.civilite]).check();
+          // Civilité absente (ex. ajout d'établissement) : on laisse celle de la fiche.
+          if (data.civilite && S.form.civiliteIndex[data.civilite] !== undefined) {
+            const cell = fancy().getByRole('cell', { name: S.form.civiliteCellPattern }).first();
+            await cell.getByRole('radio').nth(S.form.civiliteIndex[data.civilite]).check();
+          }
         },
       },
       {
@@ -511,12 +515,21 @@ async function resetPassword(data, ctx) {
     },
     {
       id: 'nouveau-mdp',
-      label: 'Saisie du nouveau mot de passe provisoire',
+      label: 'Vérification de l’identifiant puis saisie du nouveau mot de passe',
       run: async () => {
         await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
-        // L'identifiant du compte, pour le lien sécurisé de récupération.
+        // Sécurité : la fiche trouvée doit porter EXACTEMENT l'identifiant
+        // fourni dans la demande — sinon on ne touche à rien.
         login = await fancy().locator(S.form.loginField).inputValue().catch(() => null);
-        if (login) ctx.log(`Identifiant du compte : « ${login} »`);
+        const expected = (data.identifiant || '').trim().toLowerCase();
+        if (expected && String(login || '').trim().toLowerCase() !== expected) {
+          throw new Error(
+            `La fiche trouvée pour « ${fullName} » porte l'identifiant « ${login || '?'} », ` +
+              `différent de celui fourni (« ${data.identifiant} »). Aucune modification effectuée — ` +
+              `vérifiez l'identifiant, le nom exact et l'établissement.`
+          );
+        }
+        if (login) ctx.log(`Identifiant vérifié : « ${login} »`);
         await fancy().locator(S.form.password).fill(newPassword);
         await fancy().locator(S.form.password2).fill(newPassword);
         // L'utilisateur devra choisir son propre mot de passe au premier login.
@@ -545,4 +558,29 @@ async function resetPassword(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, resetPassword, STEPS_META };
+/**
+ * Ajout d'un établissement à un compte EXISTANT : même parcours que la
+ * création (duplication pour hériter des droits de la fonction sur le nouvel
+ * établissement) mais avec l'identifiant existant imposé — l'avertissement
+ * « déjà défini sur un autre établissement » est attendu et confirmé.
+ */
+async function addEstablishment(data, ctx) {
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const etabLabel =
+      config.formSchema.sections[1].fields[0].options.find((o) => o.value === data.etablissement)
+        ?.label || data.etablissement;
+    for (const step of ['Connexion au compte administrateur', `Bascule sur « ${etabLabel} »`, `Duplication d'un utilisateur « ${data.fonction} »`, `Avertissement « compte déjà défini » confirmé avec « ${data.identifiant} »`, 'Fiche validée']) {
+      await new Promise((r) => setTimeout(r, 700));
+      ctx.log(step);
+    }
+    return {
+      success: true,
+      message: `Compte existant « ${data.identifiant} » rattaché à l'établissement ${etabLabel} (démonstration)`,
+      account: { login: String(data.identifiant || '').toLowerCase(), prenom: data.prenom, nom: data.nom },
+    };
+  }
+  return createAccount({ ...data, compte_existant: 'ajout' }, ctx);
+}
+
+module.exports = { createAccount, resetPassword, addEstablishment, STEPS_META };

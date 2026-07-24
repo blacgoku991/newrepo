@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Démarches — Algonis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23101731'/><text x='50' y='70' font-size='54' text-anchor='middle' fill='%23E9C05C' font-family='Arial' font-weight='bold'>A</text></svg>" />
+  <style>
+    .dm-wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 72px; }
+    .dm-head { text-align: center; margin-bottom: 36px; }
+    .dm-head h1 { font-size: clamp(1.7rem, 3vw, 2.3rem); color: #fff; }
+    .dm-head p { color: var(--muted); margin-top: 10px; font-size: 1.02rem; }
+    .dm-cards { display: flex; flex-direction: column; gap: 16px; }
+    .dm-card { display: grid; grid-template-columns: 64px 1fr auto; gap: 20px; align-items: center;
+               background: var(--surface); border: 1px solid var(--line); border-left: 3px solid transparent;
+               border-radius: var(--radius-lg); padding: 26px 28px; color: inherit;
+               transition: border-color .16s, box-shadow .16s, transform .16s, background .16s; }
+    .dm-card:hover { border-left-color: var(--gold); border-color: var(--line-2); background: var(--surface-3); box-shadow: var(--shadow); transform: translateX(2px); text-decoration: none; }
+    .dm-card .ic { width: 56px; height: 56px; border-radius: 15px; display: grid; place-items: center; background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }
+    .dm-card .ic svg { width: 26px; height: 26px; }
+    .dm-card h2 { font-size: 1.18rem; color: #fff; }
+    .dm-card p { color: var(--muted); font-size: .93rem; margin-top: 5px; max-width: 52ch; }
+    .dm-card .arrow { color: var(--gold-bright); font-weight: 650; white-space: nowrap; }
+    .dm-note { text-align: center; margin-top: 26px; font-size: .86rem; color: var(--faint); }
+    @media (max-width: 640px) { .dm-card { grid-template-columns: 1fr; } .dm-card .arrow { display: none; } }
+  </style>
+</head>
+<body class="public">
+  <header class="topbar">
+    <div class="inner">
+      <a class="brand" href="/">
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="name"><b>Algonis</b> <span>Accès applications</span></span>
+      </a>
+      <nav class="topnav">
+        <a href="/">Applications</a>
+        <a href="/demarches.html" class="active">Démarches</a>
+        <a href="/suivi.html">Suivre une demande</a>
+        <a href="/admin.html" class="admin-link">Administration</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="dm-wrap">
+      <div class="dm-head">
+        <h1>Que voulez-vous faire&nbsp;?</h1>
+        <p>Choisissez la démarche qui correspond à votre situation — le robot fait le reste.</p>
+      </div>
+      <div class="dm-cards">
+        <a class="dm-card" href="/#apps">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>
+          <span>
+            <h2>Créer un premier compte</h2>
+            <p>La personne n'a <b>jamais eu</b> de compte sur l'application. Un identifiant lui sera attribué automatiquement.</p>
+          </span>
+          <span class="arrow">Choisir l'application →</span>
+        </a>
+        <a class="dm-card" href="/demande.html?app=bluekango&type=extension">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/><path d="M9 9h1M9 13h1M9 17h1"/></svg></span>
+          <span>
+            <h2>Ajouter un établissement</h2>
+            <p>La personne a <b>déjà un compte BlueKanGo</b> et doit accéder à un établissement <b>en plus</b>. Son identifiant existant est requis.</p>
+          </span>
+          <span class="arrow">Commencer →</span>
+        </a>
+        <a class="dm-card" href="/demande.html?app=bluekango&type=reset">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <span>
+            <h2>Mot de passe oublié</h2>
+            <p>La personne a un compte mais <b>ne peut plus se connecter</b>. Un mot de passe provisoire lui sera remis par lien sécurisé.</p>
+          </span>
+          <span class="arrow">Commencer →</span>
+        </a>
+      </div>
+      <p class="dm-note">Un doute sur la situation ? En cas d'erreur, le robot s'arrête sans rien modifier et la demande vous guide vers la bonne démarche.</p>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="inner">
+      <span>© Algonis — création automatisée de comptes sur les applications métiers.</span>
+      <span><a href="/suivi.html">Suivi</a> · <a href="/admin.html">Administration</a></span>
+    </div>
+  </footer>
+  <script src="/js/common.js"></script>
+</body>
+</html>
