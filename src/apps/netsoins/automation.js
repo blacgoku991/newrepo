@@ -109,13 +109,16 @@ async function createAccount(data, ctx) {
       run: async (page) => {
         const f = F(page);
         // Le formulaire vit dans l'iframe : on clique avant de saisir (le champ
-        // n'accepte la frappe qu'une fois focalisé).
-        await f.locator(S.login.user).click();
-        await f.locator(S.login.user).fill(process.env.NETSOINS_ADMIN_USER);
-        await f.locator(S.login.password).click();
-        await f.locator(S.login.password).fill(process.env.NETSOINS_ADMIN_PASSWORD);
+        // n'accepte la frappe qu'une fois focalisé). `.first()` évite l'échec
+        // « strict mode » si un libellé apparaît à plusieurs endroits.
+        const user = f.locator(S.login.user).first();
+        const pass = f.locator(S.login.password).first();
+        await user.click();
+        await user.fill(process.env.NETSOINS_ADMIN_USER);
+        await pass.click();
+        await pass.fill(process.env.NETSOINS_ADMIN_PASSWORD);
         otpSince = new Date(); // le code OTP part au moment de la validation
-        await f.locator(S.login.submit).click();
+        await f.locator(S.login.submit).first().click();
       },
     },
     {
@@ -124,7 +127,7 @@ async function createAccount(data, ctx) {
       label: 'Double authentification — récupération du code',
       run: async (page) => {
         const f = F(page);
-        const field = f.locator(S.login.otpInput);
+        const field = f.locator(S.login.otpInput).first();
         await field.waitFor();
         // Récupère le code (lecture auto par e-mail si configurée, sinon saisie
         // manuelle par l'admin dans les détails de la demande).
@@ -132,13 +135,31 @@ async function createAccount(data, ctx) {
           since: otpSince,
           label: 'Code de connexion NetSoins reçu par e-mail — saisissez-le ici.',
         });
+
+        ctx.log('Saisie du code dans NetSoins…');
         await field.click();
         await field.fill(code);
-        await f.locator(S.login.otpSubmit).click();
-        // Fenêtre d'accueil affichée après connexion : on la ferme.
+        ctx.log('Validation du code (bouton OK)…');
+        await f.locator(S.login.otpSubmit).first().click();
+
+        // Le code est-il accepté ? Si le champ OTP est toujours là, c'est qu'il
+        // a été refusé (code erroné ou expiré) : on le dit clairement.
+        await page.waitForTimeout(1500);
+        if (await field.isVisible().catch(() => false)) {
+          throw new Error('Code refusé par NetSoins (code erroné ou expiré) — relancez la demande pour recevoir un nouveau code');
+        }
+        ctx.log('Code accepté.');
+
+        // Fenêtre d'accueil affichée après connexion : on la ferme si présente
+        // (elle n'apparaît pas systématiquement — son absence n'est pas un échec).
         const close = f.locator(S.login.closePopup).first();
-        await close.waitFor();
-        await close.click();
+        try {
+          await close.waitFor({ timeout: 8000 });
+          await close.click();
+          ctx.log('Fenêtre d’accueil fermée.');
+        } catch {
+          ctx.log('Pas de fenêtre d’accueil à fermer.');
+        }
         ctx.log('Connexion NetSoins établie.');
       },
     },

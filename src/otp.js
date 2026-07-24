@@ -70,9 +70,12 @@ async function awaitOtp({
 
 async function awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive }) {
   if (!requestId) throw new Error('Saisie manuelle de l\'OTP impossible : demande inconnue');
-  const deadline = Date.now() + Number(timeoutMs || env('OTP_MANUAL_TIMEOUT_MS', 300000));
+  // 15 minutes par défaut : le temps d'ouvrir sa boîte mail sans se presser.
+  const total = Number(timeoutMs || env('OTP_MANUAL_TIMEOUT_MS', 900000));
+  const deadline = Date.now() + total;
   db.requestOtp(requestId, label);
   log('En attente du code OTP — à saisir dans les détails de la demande (admin)…');
+  let lastPing = Date.now();
   try {
     while (Date.now() < deadline) {
       if (typeof keepAlive === 'function') keepAlive(); // l'attente est légitime
@@ -81,12 +84,17 @@ async function awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive }) {
         log('Code OTP reçu (saisie manuelle).');
         return state.otp_code;
       }
+      // Rappel périodique : montre que le robot est toujours en attente.
+      if (Date.now() - lastPing >= 30000) {
+        lastPing = Date.now();
+        log(`Toujours en attente du code OTP (${Math.ceil((deadline - Date.now()) / 60000)} min restantes)…`);
+      }
       await sleep(2000);
     }
   } finally {
     db.clearOtp(requestId);
   }
-  throw new Error('Code OTP non saisi dans le délai imparti');
+  throw new Error('Code OTP non saisi dans le délai imparti (15 min) — relancez la demande');
 }
 
 module.exports = { awaitOtp, mailReadConfigured };
