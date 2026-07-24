@@ -43,6 +43,7 @@ module.exports = {
     duplicateButton: '[id^="duplicate-user-"]', // bouton Dupliquer d'une ligne
     // Affichage de 200 résultats/page (role listbox) + tri par la colonne
     // « Fonctions ADEF Résidences » pour retrouver la fonction à dupliquer.
+    searchLabel: 'mots',                        // champ « Recherche par mots clés » (autocomplete)
   },
 
   form: {

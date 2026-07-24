@@ -10,7 +10,11 @@
 
 (async function () {
   const content = document.getElementById('content');
-  const appId = new URLSearchParams(location.search).get('app');
+  const params = new URLSearchParams(location.search);
+  const appId = params.get('app');
+  // Mode « réinitialisation de mot de passe » (mot de passe oublié).
+  const resetMode = params.get('type') === 'reset';
+  const typeQS = resetMode ? '?type=reset' : '';
 
   if (!appId) {
     content.innerHTML = `<div class="alert alert-error">Aucune application sélectionnée. <a href="/">Retour à l'accueil</a></div>`;
@@ -19,7 +23,7 @@
 
   let app;
   try {
-    app = await fetchJson(`/api/apps/${encodeURIComponent(appId)}/schema`);
+    app = await fetchJson(`/api/apps/${encodeURIComponent(appId)}/schema${typeQS}`);
   } catch (err) {
     content.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}. <a href="/">Retour à l'accueil</a></div>`;
     return;
@@ -27,7 +31,7 @@
 
   // Le schéma vient de l'API (source unique de vérité : le backend inclut
   // déjà la section « demandeur »). Aucun schéma local dupliqué.
-  document.title = `${app.name} — Demande de compte`;
+  document.title = `${app.name} — ${resetMode ? 'Réinitialisation de mot de passe' : 'Demande de compte'}`;
 
   const sections = app.schema.sections;
   const stepCount = sections.length + 1; // + récapitulatif
@@ -92,11 +96,13 @@
             ${appVisual(app)}
             <div>
               <h2>${escapeHtml(app.name)}</h2>
-              <div class="cat">${escapeHtml(app.category)}</div>
+              <div class="cat">${resetMode ? 'Réinitialisation de mot de passe' : escapeHtml(app.category)}</div>
             </div>
           </div>
           ${stepperHtml()}
-          <div class="aside-note">Le robot Algonis saisit ces informations telles quelles dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.</div>
+          <div class="aside-note">${resetMode
+            ? `Le robot Algonis recherche le compte dans ${escapeHtml(app.name)} et remplace son mot de passe par un mot de passe provisoire, remis par lien sécurisé.`
+            : `Le robot Algonis saisit ces informations telles quelles dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.`}</div>
         </aside>
         <div class="panel form-main">
         ${current === 0 && app.schema.intro ? `<div class="intro">${escapeHtml(app.schema.intro)}</div>` : ''}
@@ -389,7 +395,7 @@
       const compte = comptes[i];
       const who = `${compte.prenom || ''} ${compte.nom || ''}`.trim() || `compte ${i + 1}`;
       try {
-        const result = await fetchJson(`/api/apps/${encodeURIComponent(app.id)}/requests`, {
+        const result = await fetchJson(`/api/apps/${encodeURIComponent(app.id)}/requests${typeQS}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(compte),

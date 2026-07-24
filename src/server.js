@@ -12,7 +12,7 @@ const auth = require('./auth');
 const sso = require('./sso');
 const stats = require('./stats');
 const { validate } = require('./validate');
-const { augmentSchema, effectiveSchema, validateOverrides, requesterLabel } = require('./schema');
+const { augmentSchema, effectiveSchema, effectiveResetSchema, validateOverrides, requesterLabel } = require('./schema');
 const { validateScenarioOverrides } = require('./automation/scenarioRuntime');
 const mailer = require('./mailer');
 const worker = require('./worker');
@@ -192,6 +192,12 @@ app.get('/api/apps/:id/schema', sso.requireApi, (req, res) => {
     return res.status(409).json({ error: 'Application bientôt disponible' });
   }
   const { id, name, category, description, icon, color, logo } = entry.config;
+  // ?type=reset → formulaire de réinitialisation de mot de passe (si proposé).
+  if (req.query.type === 'reset') {
+    const schema = effectiveResetSchema(entry.config);
+    if (!schema) return res.status(404).json({ error: 'Réinitialisation indisponible pour cette application' });
+    return res.json({ id, name, category, description, icon, color, logo: logo || null, schema, type: 'reset' });
+  }
   res.json({ id, name, category, description, icon, color, logo: logo || null, schema: effectiveSchema(entry.config) });
 });
 
@@ -200,7 +206,10 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const entry = registry.getAvailable(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue ou indisponible' });
 
-  const { data, errors } = validate(effectiveSchema(entry.config), req.body || {});
+  const isReset = req.query.type === 'reset';
+  const schema = isReset ? effectiveResetSchema(entry.config) : effectiveSchema(entry.config);
+  if (!schema) return res.status(404).json({ error: 'Réinitialisation indisponible pour cette application' });
+  const { data, errors } = validate(schema, req.body || {});
   if (Object.keys(errors).length > 0) {
     return res.status(422).json({ error: 'Formulaire invalide', fields: errors });
   }
@@ -212,13 +221,20 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const demandeur = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : requesterLabel(data);
   const reference = db.createRequest(
     entry.config.id,
-    entry.config.referencePrefix,
+    isReset ? 'MDP' : entry.config.referencePrefix,
     data,
     demandeur,
     ssoUser ? ssoUser.email : '',
+    ip,
+    isReset ? 'reset_mdp' : 'creation'
+  );
+  db.audit(
+    demandeur,
+    isReset ? 'depot_reinit_mdp' : 'depot_demande',
+    reference,
+    `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim(),
     ip
   );
-  db.audit(demandeur, 'depot_demande', reference, `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim(), ip);
   res.status(201).json({ reference });
 });
 
@@ -332,6 +348,7 @@ app.get('/api/admin/requests', auth.requireApi, (req, res) => {
       reference: row.reference,
       app: appEntry ? appEntry.config.name : row.app_id,
       appId: row.app_id,
+      type: row.request_type || 'creation',
       status: row.status,
       message: row.result_message,
       attempts: row.attempts,

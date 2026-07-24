@@ -338,4 +338,150 @@ async function createAccount(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, STEPS_META };
+/**
+ * Réinitialisation du mot de passe d'un compte existant (mot de passe oublié).
+ * Calibré sur enregistrement codegen : connexion admin → bascule
+ * d'établissement → Utilisateurs → recherche par mots clés (autocomplete)
+ * « PRENOM NOM » → fiche → onglet Authentification → nouveau mot de passe
+ * provisoire (BLUEKANGO_DEFAULT_PASSWORD) + réinitialisation au 1er login →
+ * Valider.
+ */
+async function resetPassword(data, ctx) {
+  const fullName = `${data.prenom} ${data.nom}`.trim();
+  const newPassword = process.env.BLUEKANGO_DEFAULT_PASSWORD;
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    for (const step of ['Connexion au compte administrateur', `Bascule sur l'établissement`, `Recherche du compte « ${fullName} »`, 'Nouveau mot de passe provisoire saisi', 'Fiche validée']) {
+      await new Promise((r) => setTimeout(r, 700));
+      ctx.log(step);
+    }
+    return {
+      success: true,
+      message: `Mot de passe réinitialisé pour ${fullName} (démonstration)`,
+      account: { login: require('../../automation/identifiants').generateLogin(data.prenom, data.nom), prenom: data.prenom, nom: data.nom },
+    };
+  }
+
+  if (!newPassword) {
+    return { success: false, message: 'BLUEKANGO_DEFAULT_PASSWORD manquant dans le .env : impossible de définir le mot de passe provisoire.' };
+  }
+
+  const base = process.env.BLUEKANGO_URL.replace(/\/$/, '');
+  const etabLabel =
+    config.formSchema.sections[1].fields[0].options.find((o) => o.value === data.etablissement)
+      ?.label || data.etablissement;
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+
+  let page;
+  let login = null;
+  const main = () => page.frameLocator(S.frames.main);
+  const fancy = () => main().frameLocator(S.frames.fancybox);
+  const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const steps = [
+    {
+      id: 'ouverture',
+      label: 'Ouverture de BlueKanGo',
+      run: (p) => { page = p; return page.goto(`${base}/index.php?`); },
+    },
+    {
+      id: 'connexion',
+      label: 'Connexion avec le compte administrateur',
+      run: async () => {
+        await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
+        await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
+        await page.getByRole('button', { name: S.login.submitLabel }).click();
+        const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
+        await profile.click({ timeout: 8000 }).catch(() => {});
+        await page.getByText(S.nav.administration).first().waitFor();
+      },
+    },
+    {
+      id: 'menu-utilisateurs',
+      label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
+      run: async () => {
+        await page.getByText(S.nav.administration).first().click();
+        await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+        await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+      },
+    },
+    {
+      id: 'etablissement',
+      label: `Bascule sur l'établissement « ${etabLabel} »`,
+      run: async () => {
+        const select = await findEtabSelect(page);
+        if (!select) throw new Error(`Sélecteur d'établissement introuvable dans les frames de la page.`);
+        const current = await select.inputValue().catch(() => null);
+        if (current !== data.etablissement) {
+          await select.selectOption(data.etablissement);
+          await page.waitForLoadState('networkidle');
+          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+        } else {
+          ctx.log(`Déjà sur « ${etabLabel} »`);
+        }
+      },
+    },
+    {
+      id: 'recherche',
+      label: `Recherche du compte « ${fullName} »`,
+      run: async () => {
+        const list = main().frameLocator(S.frames.userList);
+        const search = list.getByRole('textbox', { name: S.userList.searchLabel }).first();
+        await search.waitFor({ timeout: 20000 });
+        await search.fill(fullName);
+        await page.waitForTimeout(2000).catch(() => {});
+        // Suggestion « PRENOM NOM » de l'autocomplete (insensible casse/accents partiels).
+        let option = list.getByRole('option', { name: new RegExp(`${esc(data.prenom)}.*${esc(data.nom)}`, 'i') }).first();
+        if (!(await option.count().catch(() => 0))) {
+          option = list.getByRole('option', { name: new RegExp(esc(data.nom), 'i') }).first();
+        }
+        try {
+          await option.waitFor({ timeout: 12000 });
+        } catch {
+          throw new Error(
+            `Aucun compte « ${fullName} » trouvé dans « ${etabLabel} ». Vérifiez l'orthographe ` +
+              `EXACTE du nom et du prénom, et l'établissement de rattachement.`
+          );
+        }
+        await option.click();
+      },
+    },
+    {
+      id: 'nouveau-mdp',
+      label: 'Saisie du nouveau mot de passe provisoire',
+      run: async () => {
+        await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
+        // L'identifiant du compte, pour le lien sécurisé de récupération.
+        login = await fancy().locator(S.form.loginField).inputValue().catch(() => null);
+        if (login) ctx.log(`Identifiant du compte : « ${login} »`);
+        await fancy().locator(S.form.password).fill(newPassword);
+        await fancy().locator(S.form.password2).fill(newPassword);
+        // L'utilisateur devra choisir son propre mot de passe au premier login.
+        await fancy().locator(S.form.reinitCheckbox).check().catch(() => {});
+      },
+    },
+    {
+      id: 'enregistrement',
+      label: 'Enregistrement de la fiche',
+      run: async () => {
+        await main().getByRole('button', { name: S.form.validerLabel }).click();
+        await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+      },
+    },
+  ];
+
+  const result = await runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    successMessage: `Mot de passe réinitialisé pour ${fullName} — établissement ${etabLabel}`,
+    steps,
+  });
+  if (result.success) {
+    result.account = { login: login || '', prenom: data.prenom, nom: data.nom };
+  }
+  return result;
+}
+
+module.exports = { createAccount, resetPassword, STEPS_META };

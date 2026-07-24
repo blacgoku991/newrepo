@@ -162,6 +162,10 @@ if (!columns.includes('sso_email')) {
 if (!columns.includes('client_ip')) {
   db.exec(`ALTER TABLE requests ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`);
 }
+// Type de demande : creation (défaut) | reset_mdp (réinitialisation de mot de passe).
+if (!columns.includes('request_type')) {
+  db.exec(`ALTER TABLE requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'creation'`);
+}
 const auditCols = db.prepare(`PRAGMA table_info(audit_log)`).all().map((c) => c.name);
 if (!auditCols.includes('ip')) {
   db.exec(`ALTER TABLE audit_log ADD COLUMN ip TEXT NOT NULL DEFAULT ''`);
@@ -180,15 +184,15 @@ function generateReference(prefix) {
 const api = {
   ARTIFACTS_DIR,
 
-  createRequest(appId, prefix, payload, demandeur = '', ssoEmail = '', clientIp = '') {
+  createRequest(appId, prefix, payload, demandeur = '', ssoEmail = '', clientIp = '', type = 'creation') {
     const stmt = db.prepare(
-      `INSERT INTO requests (reference, app_id, payload, demandeur, sso_email, client_ip) VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO requests (reference, app_id, payload, demandeur, sso_email, client_ip, request_type) VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     // La référence est aléatoire : on réessaie en cas de collision (extrêmement rare).
     for (let i = 0; i < 5; i++) {
       const reference = generateReference(prefix);
       try {
-        stmt.run(reference, appId, JSON.stringify(payload), demandeur, ssoEmail, clientIp);
+        stmt.run(reference, appId, JSON.stringify(payload), demandeur, ssoEmail, clientIp, type);
         return reference;
       } catch (err) {
         if (!String(err.message).includes('UNIQUE')) throw err;

@@ -35,9 +35,17 @@ async function processOne(request) {
 
   const data = JSON.parse(request.payload);
 
+  // Type de demande : création de compte ou réinitialisation de mot de passe.
+  const isReset = request.request_type === 'reset_mdp';
+  const action = isReset ? app.automation.resetPassword : app.automation.createAccount;
+  if (!action) {
+    db.markFinished(request.id, false, `Cette application ne prend pas en charge : ${request.request_type}`, logs);
+    return;
+  }
+
   try {
     const result = await Promise.race([
-      app.automation.createAccount(data, { log, reference: request.reference }),
+      action(data, { log, reference: request.reference }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Délai maximum dépassé (timeout)')), TIMEOUT_MS)
       ),
@@ -46,8 +54,8 @@ async function processOne(request) {
     const artifacts = (result && result.artifacts) || [];
     if (result && result.success) {
       log('Compte créé avec succès');
-      db.markFinished(request.id, true, result.message || 'Compte créé avec succès', logs, artifacts);
-      db.audit('robot', 'creation_compte', request.reference, result.message || '');
+      db.markFinished(request.id, true, result.message || (isReset ? 'Mot de passe réinitialisé' : 'Compte créé avec succès'), logs, artifacts);
+      db.audit('robot', isReset ? 'reinit_mdp' : 'creation_compte', request.reference, result.message || '');
       // Mémorise l'identifiant généré (unicité future + affichage admin + e-mail).
       if (result.account && result.account.login) {
         db.setRequestLogin(request.id, result.account.login);

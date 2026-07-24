@@ -21,7 +21,7 @@ function smtpConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-function buildMessage(appName, data, reference, storedLogin, credentialLink) {
+function buildMessage(appName, data, reference, storedLogin, credentialLink, isReset = false) {
   const beneficiaire = `${data.prenom || ''} ${data.nom || ''}`.trim();
   const frDate = (iso) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
@@ -31,7 +31,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink) {
   const lines = [
     `Bonjour${beneficiaire ? ' ' + beneficiaire : ''},`,
     '',
-    `Votre compte ${appName} a été créé.`,
+    isReset
+      ? `Le mot de passe de votre compte ${appName} a été réinitialisé.`
+      : `Votre compte ${appName} a été créé.`,
     '',
     `Application    : ${appName}`,
   ];
@@ -59,7 +61,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink) {
   lines.push('Cet e-mail est généré automatiquement par Algonis, le portail de création de comptes ADEF Résidences.');
 
   return {
-    subject: `Votre compte ${appName} est prêt — récupérez vos identifiants`,
+    subject: isReset
+      ? `Votre mot de passe ${appName} a été réinitialisé — récupérez vos identifiants`
+      : `Votre compte ${appName} est prêt — récupérez vos identifiants`,
     text: lines.join('\n'),
   };
 }
@@ -80,7 +84,7 @@ async function sendCredentials(request, credentialLink = null) {
 
   const appEntry = registry.get(request.app_id);
   const appName = appEntry ? appEntry.config.name : request.app_id;
-  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login, credentialLink);
+  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login, credentialLink, request.request_type === 'reset_mdp');
 
   const outboxId = db.createOutbox(request.id, to, subject, text);
   await deliver(outboxId);

@@ -105,6 +105,12 @@ function effectiveSchema(config) {
   return { ...merged, sections: [...merged.sections, REQUESTER_SECTION] };
 }
 
+/** Schéma de réinitialisation de mot de passe : resetSchema + section demandeur. */
+function effectiveResetSchema(config) {
+  if (!config.resetSchema) return null;
+  return { ...config.resetSchema, sections: [...config.resetSchema.sections, REQUESTER_SECTION] };
+}
+
 /** Compat : augmente un schéma brut (sans surcharges) — utilisé par la console démo. */
 function augmentSchema(formSchema) {
   return { ...formSchema, sections: [...formSchema.sections, REQUESTER_SECTION] };
@@ -152,6 +158,7 @@ function validateOverrides(config, overrides) {
 module.exports = {
   augmentSchema,
   effectiveSchema,
+  effectiveResetSchema,
   mergeSchema,
   validateOverrides,
   requesterLabel,

@@ -190,3 +190,32 @@ module.exports = {
     ],
   },
 };
+
+// ---------------------------------------------------------------------------
+// Réinitialisation de mot de passe (mot de passe oublié).
+// Même liste d'établissements que le formulaire de création (référence unique).
+// ---------------------------------------------------------------------------
+const etabField = module.exports.formSchema.sections[1].fields.find((f) => f.name === 'etablissement');
+
+module.exports.resetSchema = {
+  intro:
+    'Le robot recherche le compte dans l’établissement indiqué (nom et prénom EXACTEMENT comme sur le compte BlueKanGo), remplace le mot de passe par un mot de passe provisoire, et vous le transmet par lien sécurisé.',
+  sections: [
+    {
+      title: 'Compte concerné',
+      fields: [
+        { ...etabField, help: 'Établissement auquel le compte est rattaché.' },
+        { name: 'nom', label: 'Nom (exact)', type: 'text', required: true, placeholder: 'DUPONT' },
+        { name: 'prenom', label: 'Prénom (exact)', type: 'text', required: true, placeholder: 'Marie' },
+        {
+          name: 'email',
+          label: 'E-mail du titulaire',
+          type: 'email',
+          required: false,
+          placeholder: 'marie.dupont@adef-residences.com',
+          help: 'Pour recevoir le lien sécurisé de récupération du nouveau mot de passe.',
+        },
+      ],
+    },
+  ],
+};
