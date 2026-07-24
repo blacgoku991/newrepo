@@ -109,6 +109,23 @@ db.exec(`
     expires_at TEXT NOT NULL
   );
 
+  -- Liens sécurisés de récupération d'identifiants (usage unique).
+  -- Le jeton n'est stocké que haché ; le secret est chiffré (AES-256-GCM).
+  CREATE TABLE IF NOT EXISTS credential_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    login TEXT NOT NULL,
+    secret_enc TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    viewed_at TEXT,
+    viewed_by TEXT NOT NULL DEFAULT '',
+    viewed_ip TEXT NOT NULL DEFAULT '',
+    revoked INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_credlinks_request ON credential_links(request_id);
+
   -- Boîte d'envoi des e-mails d'identifiants.
   CREATE TABLE IF NOT EXISTS outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -398,6 +415,39 @@ const api = {
 
   purgeExpiredSsoSessions() {
     db.prepare(`DELETE FROM sso_sessions WHERE expires_at <= datetime('now')`).run();
+  },
+
+  // --- Liens de récupération d'identifiants ---------------------------------
+
+  createCredentialLink(requestId, tokenHash, login, secretEnc, expiresAt) {
+    // Un seul lien actif par demande : les précédents sont révoqués.
+    db.prepare(`UPDATE credential_links SET revoked = 1 WHERE request_id = ?`).run(requestId);
+    const info = db
+      .prepare(
+        `INSERT INTO credential_links (request_id, token_hash, login, secret_enc, expires_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(requestId, tokenHash, login, secretEnc, expiresAt);
+    return info.lastInsertRowid;
+  },
+
+  getCredentialLinkByHash(tokenHash) {
+    return db.prepare(`SELECT * FROM credential_links WHERE token_hash = ?`).get(tokenHash);
+  },
+
+  markCredentialLinkViewed(id, viewer, ip) {
+    db.prepare(
+      `UPDATE credential_links SET viewed_at = datetime('now'), viewed_by = ?, viewed_ip = ? WHERE id = ?`
+    ).run(viewer || '', ip || '', id);
+  },
+
+  credentialLinkForRequest(requestId) {
+    return db
+      .prepare(
+        `SELECT id, created_at, expires_at, viewed_at, viewed_by, revoked
+           FROM credential_links WHERE request_id = ? AND revoked = 0 ORDER BY id DESC LIMIT 1`
+      )
+      .get(requestId);
   },
 
   // --- Boîte d'envoi des e-mails --------------------------------------------

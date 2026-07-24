@@ -99,9 +99,34 @@
       </div>
       ${timelineHtml(req)}
       ${
+        req.status === 'terminee'
+          ? `<div style="margin-top:6px;padding-top:18px;border-top:1px solid var(--line)">
+               <button class="btn btn-primary" id="get-creds">${icon('check')} Récupérer les identifiants</button>
+               <p style="color:var(--muted);font-size:0.83rem;margin-top:10px">Affichage sécurisé, une seule fois — réservé au demandeur ou au bénéficiaire.</p>
+               <p id="creds-err" style="color:var(--danger);font-size:0.86rem;margin-top:8px"></p>
+             </div>`
+          : ''
+      }
+      ${
         req.status === 'en_attente' || req.status === 'en_cours'
           ? '<p style="color:var(--faint);font-size:0.83rem">Cette page se met à jour automatiquement toutes les 3 secondes.</p>'
           : ''
       }`;
+
+    const credsBtn = document.getElementById('get-creds');
+    if (credsBtn) {
+      credsBtn.addEventListener('click', async () => {
+        credsBtn.disabled = true;
+        credsBtn.innerHTML = '<span class="spinner"></span> Préparation…';
+        try {
+          const out = await fetchJson(`/api/requests/${encodeURIComponent(req.reference)}/credentials-access`, { method: 'POST' });
+          location.href = out.path;
+        } catch (err) {
+          document.getElementById('creds-err').textContent = err.message;
+          credsBtn.disabled = false;
+          credsBtn.textContent = 'Récupérer les identifiants';
+        }
+      });
+    }
   }
 })();

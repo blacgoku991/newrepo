@@ -59,10 +59,26 @@ async function processOne(request) {
           request.reference
         );
       }
-      // Envoi (ou mise en boîte d'envoi) de l'e-mail d'identifiants.
+      // Lien sécurisé de récupération des identifiants (usage unique) : le
+      // mot de passe ne circule jamais en clair dans l'e-mail.
+      let credentialLink = null;
+      if (result.account && result.account.login) {
+        try {
+          const credentials = require('./credentials');
+          credentialLink = credentials.createLink(
+            request.id,
+            result.account.login,
+            credentials.initialPasswordFor(request.app_id)
+          );
+          log(`Lien de récupération des identifiants généré (valide ${credentialLink.ttlDays} jours)`);
+        } catch (linkErr) {
+          log(`Génération du lien d'identifiants impossible : ${linkErr.message}`);
+        }
+      }
+      // Envoi (ou mise en boîte d'envoi) de l'e-mail d'invitation.
       try {
         const mailer = require('./mailer');
-        const outcome = await mailer.sendCredentials(db.getById(request.id));
+        const outcome = await mailer.sendCredentials(db.getById(request.id), credentialLink);
         if (outcome) {
           log(outcome.sent ? 'E-mail d’identifiants envoyé' : 'E-mail d’identifiants mis en boîte d’envoi (SMTP non configuré)');
         } else {

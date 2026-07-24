@@ -245,6 +245,10 @@
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
       ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
       ${r.login ? `<p style="margin-top:8px;font-size:.9rem">Identifiant attribué : <span class="ref" style="font-size:.9rem">${escapeHtml(r.login)}</span></p>` : ''}
+      ${r.credentialLink ? `<p style="margin-top:6px;font-size:.88rem">Lien d'identifiants : ${r.credentialLink.viewedAt
+          ? `<span class="badge st-terminee">Consulté</span> le ${formatDate(r.credentialLink.viewedAt)}${r.credentialLink.viewedBy ? ' par ' + escapeHtml(r.credentialLink.viewedBy) : ''}`
+          : `<span class="badge st-en_attente">Non consulté</span> — expire le ${formatDate(r.credentialLink.expiresAt)}`}</p>` : ''}
+      ${r.status === 'terminee' && r.login ? `<p style="margin-top:6px"><button class="btn btn-ghost btn-sm" id="m-newlink">Régénérer un lien d'identifiants</button> <span id="m-newlink-out" style="font-size:.82rem;color:var(--muted)"></span></p>` : ''}
       ${r.message ? `<p style="margin-top:8px;font-size:.9rem"><strong>Résultat :</strong> ${escapeHtml(r.message)}</p>` : ''}
       <h4>Informations saisies</h4><dl class="kv">${payloadRows}</dl>
       ${emails}
@@ -252,6 +256,18 @@
       <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;margin-top:8px;display:flex;gap:10px">${r.status === 'echec' ? `<button class="btn btn-ghost" id="m-retry">Relancer</button>` : ''}<button class="btn btn-primary" id="m-close">Fermer</button></div>`;
     modal.querySelector('#m-close').addEventListener('click', closeModal);
     const rt = modal.querySelector('#m-retry'); if (rt) rt.addEventListener('click', () => retry(r.id, rt));
+    const nl = modal.querySelector('#m-newlink');
+    if (nl) nl.addEventListener('click', async () => {
+      nl.disabled = true;
+      try {
+        const out = await fetchJson(`/api/admin/requests/${r.id}/credential-link`, { method: 'POST' });
+        const target = modal.querySelector('#m-newlink-out');
+        target.innerHTML = `Nouveau lien (valide ${out.ttlDays} j) copié dans le presse-papier — l'ancien est révoqué.`;
+        try { await navigator.clipboard.writeText(out.url); } catch { target.innerHTML = `Nouveau lien : <span style="user-select:all">${escapeHtml(out.url)}</span>`; }
+        refreshDashboard();
+      } catch (e) { toast(e.message, true); }
+      nl.disabled = false;
+    });
   }
 
   const EMAIL_LABELS = { a_envoyer: 'À envoyer', envoye: 'Envoyé', erreur: 'Erreur' };

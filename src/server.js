@@ -108,6 +108,42 @@ app.get('/connexion', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'connexion.html'));
 });
 
+// ---------------------------------------------------------------------------
+// Récupération sécurisée des identifiants (lien à usage unique).
+// La page et l'API sont derrière la porte SSO globale comme tout le site.
+// ---------------------------------------------------------------------------
+const credentials = require('./credentials');
+
+app.get('/identifiants/:token', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'identifiants.html'));
+});
+
+// La révélation est un POST explicite (bouton) : un préchargement de lien par
+// un antivirus/messagerie ne peut pas consommer l'usage unique.
+app.post('/api/identifiants/reveal', security.rateLimit('reveal', 20, 10 * 60 * 1000), (req, res) => {
+  const token = String((req.body || {}).token || '');
+  if (!token) return res.status(400).json({ error: 'Jeton manquant' });
+  const ssoUser = sso.currentUser(req);
+  const viewer = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : 'sans SSO';
+  const result = credentials.reveal(token, viewer, sso.clientIp(req));
+  if (!result.ok) {
+    const messages = {
+      inconnu: 'Ce lien est invalide.',
+      expire: 'Ce lien a expiré. Contactez votre administrateur pour en recevoir un nouveau.',
+      consulte: 'Ces identifiants ont déjà été consultés. Contactez votre administrateur si ce n\'était pas vous.',
+      revoque: 'Ce lien a été remplacé par un lien plus récent.',
+    };
+    return res.status(410).json({ error: messages[result.reason] || 'Lien indisponible', reason: result.reason, viewedAt: result.viewedAt || null });
+  }
+  const appEntry = registry.get(result.appId);
+  res.json({
+    login: result.login,
+    password: result.password || null,
+    reference: result.reference,
+    app: appEntry ? appEntry.config.name : result.appId,
+  });
+});
+
 // Pages/fichiers d'administration protégés (avant le service statique global).
 app.get(['/admin.html', '/admin'], auth.requirePage, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
@@ -202,6 +238,33 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
   });
 });
 
+// Depuis la page de suivi : accès aux identifiants d'une demande terminée.
+// Génère un lien frais (l'ancien est révoqué) et renvoie son chemin.
+// Avec SSO actif, réservé au déposant ou au bénéficiaire de la demande.
+app.post('/api/requests/:reference/credentials-access', security.rateLimit('credaccess', 15, 10 * 60 * 1000), sso.requireApi, (req, res) => {
+  const row = db.getByReference(String(req.params.reference).toUpperCase());
+  if (!row) return res.status(404).json({ error: 'Référence inconnue' });
+  if (row.status !== 'terminee' || !row.generated_login) {
+    return res.status(409).json({ error: 'Le compte n\'est pas encore créé' });
+  }
+  const ssoUser = sso.currentUser(req);
+  if (sso.required()) {
+    const email = (ssoUser?.email || '').toLowerCase();
+    const data = JSON.parse(row.payload);
+    const allowed = [row.sso_email, data.email, data._demandeur_email]
+      .map((e) => String(e || '').toLowerCase())
+      .filter(Boolean);
+    if (!email || !allowed.includes(email)) {
+      db.audit(ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : 'inconnu', 'acces_identifiants_refuse', row.reference, '', sso.clientIp(req));
+      return res.status(403).json({ error: 'Ces identifiants sont réservés au demandeur ou au bénéficiaire de la demande.' });
+    }
+  }
+  const link = credentials.createLink(row.id, row.generated_login, credentials.initialPasswordFor(row.app_id), req);
+  const actor = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : row.demandeur || 'suivi';
+  db.audit(actor, 'lien_identifiants_regenere', row.reference, row.generated_login, sso.clientIp(req));
+  res.json({ path: link.path });
+});
+
 // ---------------------------------------------------------------------------
 // Authentification
 // ---------------------------------------------------------------------------
@@ -280,12 +343,35 @@ app.get('/api/admin/requests', auth.requireApi, (req, res) => {
       logs: JSON.parse(row.logs),
       artifacts: JSON.parse(row.artifacts || '[]'),
       emails: db.outboxForRequest(row.id).map((o) => ({ id: o.id, to: o.to_email, status: o.status, sentAt: o.sent_at })),
+      credentialLink: (() => {
+        const l = db.credentialLinkForRequest(row.id);
+        if (!l) return null;
+        return { viewedAt: l.viewed_at, viewedBy: l.viewed_by, expiresAt: l.expires_at, createdAt: l.created_at };
+      })(),
       createdAt: row.created_at,
       startedAt: row.started_at,
       finishedAt: row.finished_at,
     };
   });
   res.json({ stats: db.stats(), requests: rows });
+});
+
+// Régénère un lien d'identifiants (l'ancien est révoqué). Le nouveau lien est
+// montré une seule fois à l'admin, pour transmission au bénéficiaire.
+app.post('/api/admin/requests/:id/credential-link', auth.requireApi, (req, res) => {
+  const row = db.getById(Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+  if (row.status !== 'terminee' || !row.generated_login) {
+    return res.status(409).json({ error: 'Le compte de cette demande n\'a pas été créé' });
+  }
+  const link = credentials.createLink(
+    row.id,
+    row.generated_login,
+    credentials.initialPasswordFor(row.app_id),
+    req
+  );
+  db.audit(req.admin.username, 'lien_identifiants_regenere', row.reference, row.generated_login, sso.clientIp(req));
+  res.json({ ok: true, url: link.url, expiresAt: link.expiresAt, ttlDays: link.ttlDays });
 });
 
 app.post('/api/admin/requests/:id/retry', auth.requireApi, (req, res) => {

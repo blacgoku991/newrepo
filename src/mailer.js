@@ -21,13 +21,12 @@ function smtpConfigured() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-function buildMessage(appName, data, reference, storedLogin) {
-  // On privilégie l'identifiant RÉELLEMENT attribué par le robot (unique) ;
-  // à défaut on recalcule la forme de base.
-  const login = storedLogin || (data.prenom && data.nom ? generateLogin(data.prenom, data.nom) : null);
-  // Le mot de passe initial dépend de l'application (BlueKanGo pour l'instant).
-  const initialPassword = process.env.BLUEKANGO_DEFAULT_PASSWORD || null;
+function buildMessage(appName, data, reference, storedLogin, credentialLink) {
   const beneficiaire = `${data.prenom || ''} ${data.nom || ''}`.trim();
+  const frDate = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+  };
 
   const lines = [
     `Bonjour${beneficiaire ? ' ' + beneficiaire : ''},`,
@@ -36,25 +35,31 @@ function buildMessage(appName, data, reference, storedLogin) {
     '',
     `Application    : ${appName}`,
   ];
-  if (login) lines.push(`Identifiant    : ${login}`);
-  if (initialPassword) lines.push(`Mot de passe   : ${initialPassword}`);
-  const frDate = (iso) => {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
-    return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
-  };
   if (frDate(data.date_debut)) lines.push(`Valide du      : ${frDate(data.date_debut)}`);
   if (frDate(data.date_fin)) lines.push(`Valide jusqu'au: ${frDate(data.date_fin)}`);
   lines.push(`Référence      : ${reference}`);
   lines.push('');
-  if (initialPassword) {
-    lines.push('⚠ Ce mot de passe est provisoire : il vous sera demandé de le');
-    lines.push('  changer lors de votre première connexion.');
+
+  if (credentialLink) {
+    // AUCUN secret dans l'e-mail : lien sécurisé à usage unique.
+    lines.push('Récupérez votre identifiant et votre mot de passe provisoire ici :');
     lines.push('');
+    lines.push(`    ${credentialLink.url}`);
+    lines.push('');
+    lines.push(`⚠ Ce lien ne peut être consulté qu'UNE SEULE fois et expire dans ${credentialLink.ttlDays} jours.`);
+    lines.push('  Le mot de passe est provisoire : il devra être changé à la première connexion.');
+    lines.push('  Lien déjà utilisé ou expiré ? Contactez votre administrateur pour en recevoir un nouveau.');
+  } else {
+    // Repli (aucun lien généré) : on ne divulgue que l'identifiant.
+    const login = storedLogin || (data.prenom && data.nom ? generateLogin(data.prenom, data.nom) : null);
+    if (login) lines.push(`Identifiant    : ${login}`);
+    lines.push('Le mot de passe initial vous sera communiqué par votre administrateur.');
   }
+  lines.push('');
   lines.push('Cet e-mail est généré automatiquement par Algonis, le portail de création de comptes ADEF Résidences.');
 
   return {
-    subject: `Votre compte ${appName} — identifiants de connexion`,
+    subject: `Votre compte ${appName} est prêt — récupérez vos identifiants`,
     text: lines.join('\n'),
   };
 }
@@ -68,14 +73,14 @@ function pickRecipient(data) {
  * Prépare et tente l'envoi de l'e-mail d'identifiants pour une demande terminée.
  * Retourne { queuedId, sent } ou null si aucun destinataire.
  */
-async function sendCredentials(request) {
+async function sendCredentials(request, credentialLink = null) {
   const data = JSON.parse(request.payload);
   const to = pickRecipient(data);
   if (!to) return null;
 
   const appEntry = registry.get(request.app_id);
   const appName = appEntry ? appEntry.config.name : request.app_id;
-  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login);
+  const { subject, text } = buildMessage(appName, data, request.reference, request.generated_login, credentialLink);
 
   const outboxId = db.createOutbox(request.id, to, subject, text);
   await deliver(outboxId);
