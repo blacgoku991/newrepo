@@ -132,11 +132,21 @@ async function callbackRoute(req, res) {
       throw new Error(tokens.error_description || 'Échange du code refusé par Microsoft');
     }
 
-    // Le jeton vient DIRECTEMENT de Microsoft via TLS (flux code côté serveur) :
-    // on vérifie les revendications essentielles (émetteur, audience, expiration, nonce).
+    // Le jeton vient DIRECTEMENT de Microsoft via TLS (flux « code » côté
+    // serveur, avec secret client et PKCE) : il ne transite jamais par le
+    // navigateur, ce qui rend sa falsification impossible sans casser TLS. On
+    // vérifie néanmoins toutes les revendications essentielles.
     const payload = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64url').toString('utf8'));
     if (payload.aud !== process.env.M365_CLIENT_ID) throw new Error('Jeton reçu pour une autre application');
-    if (!String(payload.iss || '').includes('login.microsoftonline.com')) throw new Error('Émetteur du jeton inattendu');
+    // Émetteur ET tenant : un contrôle relâché laisserait passer un jeton émis
+    // pour un autre annuaire si l'application venait à être déclarée multi-tenant.
+    const tenant = String(process.env.M365_TENANT_ID || '');
+    if (!String(payload.iss || '').startsWith('https://login.microsoftonline.com/')) {
+      throw new Error('Émetteur du jeton inattendu');
+    }
+    if (payload.tid && tenant && payload.tid !== tenant) {
+      throw new Error("Jeton émis pour un autre annuaire Microsoft 365");
+    }
     if (payload.nonce !== pending.nonce) throw new Error('Nonce du jeton invalide');
     if (payload.exp && payload.exp * 1000 < Date.now()) throw new Error('Jeton expiré');
 
