@@ -413,7 +413,7 @@
   }
 
   function showConfirmation(references) {
-    document.title = 'Demande envoyée — Portail Comptes';
+    document.title = 'Demande envoyée — Algonis';
     const many = references.length > 1;
     content.innerHTML = `
       <div class="panel result">

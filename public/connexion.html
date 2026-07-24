@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Connexion — Portail Comptes</title>
+  <title>Connexion — Algonis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="/css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%232f5fda'/><text x='50' y='70' font-size='54' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>P</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231E40AF'/><text x='50' y='70' font-size='54' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>A</text></svg>" />
   <style>
     .sso-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
     .sso-card { max-width: 430px; width: 100%; background: var(--panel, #fff); border: 1px solid var(--border, #e5e8ef);
@@ -18,15 +18,16 @@
     .btn-ms { display: inline-flex; align-items: center; gap: 12px; width: 100%; justify-content: center;
               padding: 12px 18px; border-radius: 9px; border: 1px solid #d3d8e2; background: #fff; color: #1b1f27;
               font-weight: 600; font-size: .95rem; cursor: pointer; text-decoration: none; transition: box-shadow .15s, border-color .15s; }
-    .btn-ms:hover { border-color: #2f5fda; box-shadow: 0 4px 14px rgba(47, 95, 218, .12); }
+    .btn-ms:hover { border-color: #1e40af; box-shadow: 0 4px 14px rgba(30, 64, 175, .12); }
     .sso-note { margin-top: 22px; font-size: .8rem; color: var(--muted, #5b6472); }
   </style>
 </head>
 <body>
   <div class="sso-wrap">
     <div class="sso-card">
-      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#2f5fda" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <h1>Portail de création de comptes</h1>
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <h1>Algonis</h1>
+      <p style="margin:-4px 0 0;font-size:.85rem;color:#64748b">Portail de création de comptes</p>
       <p>L'accès est réservé aux collaborateurs <strong>ADEF Résidences</strong>.<br/>
       Connectez-vous avec votre compte professionnel Microsoft 365.</p>
       <a class="btn-ms" id="ms-btn" href="/auth/sso/login">

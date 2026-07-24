@@ -51,7 +51,7 @@ function buildMessage(appName, data, reference, storedLogin) {
     lines.push('  changer lors de votre première connexion.');
     lines.push('');
   }
-  lines.push('Cet e-mail est généré automatiquement par le portail de création de comptes.');
+  lines.push('Cet e-mail est généré automatiquement par Algonis, le portail de création de comptes ADEF Résidences.');
 
   return {
     subject: `Votre compte ${appName} — identifiants de connexion`,
