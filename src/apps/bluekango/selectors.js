@@ -24,10 +24,9 @@ module.exports = {
     userLabel: 'Compte utilisateur',
     passwordLabel: 'Mot de passe',
     submitLabel: 'Connexion',
-    // Après connexion, BlueKanGo peut afficher une page de choix de profil
-    // (lien « Prénom Nom ÉTABLISSEMENT ») : selectProfile() clique le premier
-    // profil qui s'affiche, peu importe lequel — l'établissement demandé par le
-    // client est ensuite sélectionné via le menu #change_etab.
+    // Après connexion, BlueKanGo affiche parfois une page de choix de profil
+    // (lien "Prénom Nom SIEGE") : on clique le premier lien correspondant.
+    profileLinkPattern: /SIEGE/i,
   },
 
   nav: {

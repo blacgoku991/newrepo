@@ -61,20 +61,6 @@ function toFrDate(iso) {
 }
 
 /**
- * Clique le profil sur la page de choix (si elle apparaît). Peu importe lequel :
- * l'établissement demandé par le client est sélectionné juste après (étape
- * « etablissement » via le menu #change_etab). Non bloquant.
- */
-async function selectProfile(page, log) {
-  const link = page.getByRole('link', { name: /\S+\s+\S+\s+\S+/ }).first();
-  if (await link.isVisible().catch(() => false)) {
-    const label = await link.textContent().catch(() => '');
-    await link.click({ timeout: 8000 }).catch(() => {});
-    if (log && label) log(`Profil sélectionné : « ${label.trim()} »`);
-  }
-}
-
-/**
  * Recherche le select d'établissement (« Etablissements : XXX » en haut à
  * droite) dans TOUTES les frames de la page. BlueKanGo classique utilise
  * d'anciens <frame> (frameset), pas des <iframe> : on itère donc sur
@@ -164,8 +150,10 @@ async function createAccount(data, ctx) {
           await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
           await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
           await page.getByRole('button', { name: S.login.submitLabel }).click();
-          // Page de choix de profil éventuelle (« Prénom Nom ÉTABLISSEMENT »).
-          await selectProfile(page, ctx.log);
+          // Page de choix de profil éventuelle ("Prénom Nom SIEGE").
+          const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
+          await profile.click({ timeout: 8000 }).catch(() => {});
+          await page.getByText(S.nav.administration).first().waitFor();
         },
       },
       {
@@ -173,7 +161,6 @@ async function createAccount(data, ctx) {
         critical: true,
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
-          // Comme le codegen : le clic attend tout seul que « Administration » soit prêt.
           await page.getByText(S.nav.administration).first().click();
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
@@ -473,7 +460,9 @@ async function resetPassword(data, ctx) {
         await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
         await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
         await page.getByRole('button', { name: S.login.submitLabel }).click();
-        await selectProfile(page, ctx.log);
+        const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
+        await profile.click({ timeout: 8000 }).catch(() => {});
+        await page.getByText(S.nav.administration).first().waitFor();
       },
     },
     {
