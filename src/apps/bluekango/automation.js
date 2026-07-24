@@ -25,7 +25,7 @@ const db = require('../../db');
 const { getMode } = require('../../automation/helpers');
 const { runScenario } = require('../../automation/engine');
 const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
-const { pickUniqueLogin } = require('../../automation/identifiants');
+const { pickUniqueLogin, candidateLogins } = require('../../automation/identifiants');
 const demo = require('../../automation/demoDriver');
 const config = require('./config');
 const BASE_SELECTORS = require('./selectors');
@@ -92,6 +92,20 @@ async function createAccount(data, ctx) {
   const login = pickUniqueLogin(data.prenom, data.nom, (l) => db.loginExists(config.id, l));
   ctx.log(`Identifiant retenu : « ${login} »`);
   const account = { login, prenom: data.prenom, nom: data.nom };
+
+  // BlueKanGo peut refuser l'identifiant (« déjà défini sur un autre
+  // établissement ») pour des comptes que le portail ne connaît pas :
+  // currentLogin évolue alors vers le candidat suivant pendant le scénario.
+  let currentLogin = login;
+  const tried = new Set([login]);
+  const nextLogin = () => {
+    for (const c of candidateLogins(data.prenom, data.nom)) {
+      if (!tried.has(c) && !db.loginExists(config.id, c)) { tried.add(c); return c; }
+    }
+    const fallback = `${login}${Date.now().toString().slice(-4)}`;
+    tried.add(fallback);
+    return fallback;
+  };
 
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
@@ -256,7 +270,7 @@ async function createAccount(data, ctx) {
         label: `Création des identifiants de connexion (identifiant « ${login} »)`,
         run: async () => {
           await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
-          await fancy().locator(S.form.loginField).fill(login);
+          await fancy().locator(S.form.loginField).fill(currentLogin);
           await fancy().locator(S.form.password).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
           await fancy().locator(S.form.password2).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
           // L'utilisateur devra choisir son propre mot de passe au premier login.
@@ -299,12 +313,36 @@ async function createAccount(data, ctx) {
         critical: true,
         label: 'Enregistrement de la fiche',
         run: async () => {
-          await main().getByRole('button', { name: S.form.validerLabel }).click();
-          // La fenêtre de la fiche se ferme quand l'enregistrement est accepté.
-          await main()
-            .locator(S.frames.fancybox)
-            .waitFor({ state: 'detached', timeout: 20000 })
-            .catch(() => {});
+          const takenRe = new RegExp(S.form.loginTakenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+          // BlueKanGo peut refuser l'identifiant s'il existe déjà sur un AUTRE
+          // établissement (compte inconnu du portail) : on clique OK, on passe
+          // au candidat suivant, et on revalide — jusqu'à un identifiant libre.
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            await main().getByRole('button', { name: S.form.validerLabel }).click();
+            await page.waitForTimeout(2500).catch(() => {});
+            const warnFancy = await fancy().getByText(takenRe).first().isVisible().catch(() => false);
+            const warnMain = !warnFancy && (await main().getByText(takenRe).first().isVisible().catch(() => false));
+            if (!warnFancy && !warnMain) {
+              // Pas d'avertissement : la fiche se ferme, l'enregistrement est accepté.
+              await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+              return;
+            }
+            // Mémorise l'identifiant occupé pour ne plus jamais le proposer.
+            db.recordAccount(config.id, currentLogin, data.nom, data.prenom, 'existant');
+            const scope = warnFancy ? fancy() : main();
+            await scope.getByRole('button', { name: S.form.warningOkLabel }).first().click().catch(() => {});
+            const next = nextLogin();
+            ctx.log(`Identifiant « ${currentLogin} » déjà utilisé sur un autre établissement — nouvel essai avec « ${next} »`);
+            currentLogin = next;
+            await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click().catch(() => {});
+            await fancy().locator(S.form.loginField).fill(currentLogin);
+            await fancy().locator(S.form.password).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+            await fancy().locator(S.form.password2).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+          }
+          throw new Error(
+            'Impossible de trouver un identifiant libre après 6 tentatives : ' +
+              'tous les candidats existent déjà sur d\'autres établissements.'
+          );
         },
       },
   ];
@@ -318,7 +356,15 @@ async function createAccount(data, ctx) {
       (data.date_fin ? ` — valide jusqu'au ${toFrDate(data.date_fin)}` : ''),
     steps: composeSteps(config.id, nativeSteps, data, ctx.log),
   });
-  if (result.success) result.account = account;
+  if (result.success) {
+    // L'identifiant final peut différer de celui prévu (refus BlueKanGo).
+    account.login = currentLogin;
+    if (currentLogin !== login) {
+      result.message = String(result.message || '').replace(`« ${login} »`, `« ${currentLogin} »`);
+      ctx.log(`Identifiant définitif : « ${currentLogin} »`);
+    }
+    result.account = account;
+  }
   return result;
 }
 

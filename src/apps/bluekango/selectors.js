@@ -60,5 +60,8 @@ module.exports = {
     // champ est saisi par le robot (la date de début reste celle de BlueKanGo).
     dateFinRowLabel: 'Date de fin de validité',
     validerLabel: 'Valider',                    // bouton dans le cadre principal
+    // Avertissement BlueKanGo quand l'identifiant existe déjà (autre établissement).
+    loginTakenText: 'déjà défini sur un autre établissement',
+    warningOkLabel: 'OK',
   },
 };
