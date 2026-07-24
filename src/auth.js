@@ -39,13 +39,23 @@ function verifyPassword(password, stored) {
 function ensureSeedAdmin() {
   if (db.countAdmins() > 0) return;
   const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'admin';
   const displayName = process.env.ADMIN_DISPLAY_NAME || 'Administrateur';
+
+  // Sans ADMIN_PASSWORD, on NE crée PAS un couple devinable (« admin »/« admin ») :
+  // une mise en ligne faite dans la précipitation ouvrirait le panneau
+  // d'administration à quiconque connaît ce grand classique. On tire un mot de
+  // passe aléatoire, affiché une seule fois au démarrage.
+  const generated = !process.env.ADMIN_PASSWORD;
+  const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url');
+
   db.createAdmin(username, displayName, hashPassword(password), 'admin');
-  if (!process.env.ADMIN_PASSWORD) {
+
+  if (generated) {
     console.warn(
-      '[auth] ⚠ Aucun ADMIN_PASSWORD défini : compte « admin » / « admin » créé. ' +
-        'Changez-le dès que possible (voir .env.example).'
+      `\n[auth] ⚠ Aucun ADMIN_PASSWORD défini. Compte « ${username} » créé avec ce mot de passe :\n` +
+        `\n        ${password}\n\n` +
+        "        Notez-le maintenant : il n'est affiché qu'une fois.\n" +
+        '        Définissez ADMIN_PASSWORD dans .env pour en choisir un (voir .env.example).\n'
     );
   } else {
     console.log(`[auth] Compte administrateur initial « ${username} » créé.`);

@@ -13,6 +13,9 @@
 const fs = require('fs');
 const zlib = require('zlib');
 
+// Taille maximale d'une entrée décompressée (garde-fou « zip bomb »).
+const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
+
 /** Décompresse toutes les entrées d'un ZIP -> Map(nom -> Buffer). */
 function unzip(buf) {
   const files = new Map();
@@ -40,10 +43,18 @@ function unzip(buf) {
     const lFnLen = buf.readUInt16LE(localOff + 26);
     const lExtraLen = buf.readUInt16LE(localOff + 28);
     const dataStart = localOff + 30 + lFnLen + lExtraLen;
+    // On ne décompresse QUE les entrées utiles : inutile de dérouler tout le
+    // classeur, et cela réduit d'autant la surface d'attaque.
+    if (!/^xl\/(sharedStrings\.xml|worksheets\/sheet\d+\.xml)$/.test(name)) {
+      p += 46 + fnLen + extraLen + commentLen;
+      continue;
+    }
     const raw = buf.subarray(dataStart, dataStart + compSize);
     let content;
     if (method === 0) content = Buffer.from(raw); // stored
-    else if (method === 8) content = zlib.inflateRawSync(raw); // deflate
+    // Plafond de décompression : une archive piégée peut se déplier en
+    // plusieurs gigaoctets et saturer la mémoire (« zip bomb »).
+    else if (method === 8) content = zlib.inflateRawSync(raw, { maxOutputLength: MAX_ENTRY_BYTES });
     else throw new Error(`Compression ZIP non gérée (méthode ${method})`);
     files.set(name, content);
 
