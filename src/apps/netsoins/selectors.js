@@ -4,9 +4,9 @@
  * Sélecteurs de l'interface NetSoins (instance ADEF), relevés au codegen.
  *
  * ⚠️ Deux contextes différents :
- *   - `login.*`  → DANS l'iframe (page de connexion + code OTP) ;
- *   - `menu.*` / `form.*` → sur la PAGE DE PREMIER NIVEAU (après connexion,
- *     NetSoins sort de l'iframe).
+ *   - `login.*` → DANS l'iframe (page de connexion + code OTP) ;
+ *   - tout le reste → sur la PAGE DE PREMIER NIVEAU : une fois connecté,
+ *     NetSoins sort de l'iframe.
  *
  * Ces sélecteurs sont modifiables depuis le panel admin (éditeur de scénario)
  * sans toucher au code.
@@ -30,32 +30,47 @@ module.exports = {
   closePopup: '.button_close > .fa-times',
 
   menu: {
-    administratif: '#menu-links span:has-text("Administratif")',
+    administratif: '#menu-links >> text=Administratif',
     intervenant: 'text="Intervenant"',
   },
 
-  form: {
+  // Onglet « Compte » : identifiants, accès, droits, établissements.
+  compte: {
     login: 'role=textbox[name="Identifiant"]',
     password: 'role=textbox[name="Mot de passe"]',
     passwordConfirm: 'role=textbox[name="Confirmation"]',
-    nom: 'role=textbox[name="Nom"]',
-    prenom: 'role=textbox[name="Prénom"]',
-    email: 'role=textbox[name="Mail"]',
 
-    // Accès limité dans le temps (CDD) : bouton radio « oui », puis date limite.
+    // Accès limité dans le temps (CDD) : bouton « Oui », puis la date limite.
     accesLimite:
       'div:nth-child(6) > span > .p > .page_widgets > span > span > span:nth-child(2) > label > .radio',
-    dateLimite: 'role=textbox[name="Date limite d\'accès"]',
+    dateLimite: "role=textbox[name=\"Date limite d'accès\"]",
 
-    // Profil de droits : un lien ouvre la liste, puis on coche l'option voulue
-    // (repérée par l'identifiant interne NetSoins, attribut `data`).
+    // Profil de droits : un lien ouvre la liste, on coche l'option voulue —
+    // repérée par son identifiant interne NetSoins (attribut `data`), jamais
+    // par sa position dans la liste.
+    profilZone: 'div:nth-child(9) > span > .p',
     profilOpen: 'role=link[name="Non renseigné"]',
     profilOption: (id) => `label.bloc_option:has(input[data="${id}"]) > .checkbox`,
 
-    // Catégorie de personnel (liste déroulante recherchable).
-    categorieOpen: '.selectsearchhandle .selectsearchinput',
-    categorieOption: (label) => `.selectsearchchoice:text-is("${label}")`,
-
-    save: 'text="Enregistrer"',
+    // Établissements autorisés (multi-sélection). L'identifiant du widget se
+    // termine par un suffixe aléatoire : on cible par son préfixe.
+    etabOpen: '[id^="multi_champ_id_visibilite_etablissements_autorises"]',
+    etabRoot: 'text="ADEF RESIDENCES"',
+    etabOption: (label) => `label:has-text("${label}") > .checkbox`,
   },
+
+  // Onglet « Informations » : état civil et catégorie professionnelle.
+  informations: {
+    tab: '#onglet_informations >> text=Informations',
+    categorieOpen: 'role=link[name="Choisissez..."]',
+    categorieOption: (label) => `.selectsearchchoice:text-is("${label}")`,
+    // ⚠️ Sélecteurs positionnels relevés au codegen : à confirmer sur l'instance
+    // (l'un vaut « Masculin », l'autre « Féminin »).
+    sexeMasculin: 'span:nth-child(3) > span > span:nth-child(2) > label > .radio',
+    sexeFeminin: 'span > span:nth-child(2) > span > span:nth-child(2) > label > .radio',
+    nomNaissance: 'input[placeholder="Nom de naissance"]',
+    premierPrenom: 'input[placeholder="Premier prénom"]',
+  },
+
+  save: 'text="EnregistrerOnglet suivant"',
 };

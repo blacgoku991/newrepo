@@ -17,7 +17,7 @@ module.exports = {
   logoFallback: '/img/netsoins',
   referencePrefix: 'NS',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
-  robotFields: ['nom', 'prenom', 'email', 'etablissement', 'categorie_personnel', 'profil_droit', 'date_debut', 'type_contrat', 'date_fin'],
+  robotFields: ['nom', 'prenom', 'sexe', 'email', 'etablissement', 'etablissements_autorises', 'categorie_personnel', 'profil_droit', 'date_debut', 'type_contrat', 'date_fin'],
 
   formSchema: {
     intro:
@@ -26,8 +26,18 @@ module.exports = {
       {
         title: 'Identité de l’intervenant',
         fields: [
-          { name: 'nom', label: 'Nom', type: 'text', required: true, placeholder: 'MARTIN' },
-          { name: 'prenom', label: 'Prénom', type: 'text', required: true, placeholder: 'Paul' },
+          { name: 'nom', label: 'Nom de naissance', type: 'text', required: true, placeholder: 'MARTIN' },
+          { name: 'prenom', label: 'Premier prénom', type: 'text', required: true, placeholder: 'Paul' },
+          {
+            name: 'sexe',
+            label: 'Sexe',
+            type: 'radio',
+            required: true,
+            options: [
+              { value: 'masculin', label: 'Masculin' },
+              { value: 'feminin', label: 'Féminin' },
+            ],
+          },
           {
             name: 'email',
             label: 'E-mail professionnel',
@@ -46,7 +56,15 @@ module.exports = {
             type: 'select',
             required: true,
             options: ETABLISSEMENTS,
-            help: 'Établissement de rattachement de l’intervenant.',
+            help: 'Établissement de rattachement principal de l’intervenant.',
+          },
+          {
+            name: 'etablissements_autorises',
+            label: 'Autres établissements autorisés',
+            type: 'checkboxes',
+            required: false,
+            options: ETABLISSEMENTS,
+            help: 'À cocher si l’intervenant doit accéder à plusieurs établissements (l’établissement principal est déjà inclus).',
           },
           {
             name: 'categorie_personnel',
@@ -89,26 +107,6 @@ module.exports = {
             required: true,
             showIf: { field: 'type_contrat', equals: 'cdd' },
             help: 'Dernier jour d’accès au compte.',
-          },
-          {
-            name: 'type_contrat',
-            label: 'Type de contrat',
-            type: 'radio',
-            required: true,
-            options: [
-              { value: 'cdi', label: 'CDI (compte sans date de fin)' },
-              { value: 'cdd', label: 'CDD / Intérim / Stage (compte à durée limitée)' },
-            ],
-            help: 'Un CDD impose une date de fin de validité : le compte est désactivé automatiquement à cette date.',
-          },
-          {
-            name: 'date_fin',
-            label: 'Date de fin de validité',
-            type: 'date',
-            required: true,
-            // Affiché et exigé uniquement pour un contrat à durée déterminée.
-            showIf: { field: 'type_contrat', equals: 'cdd' },
-            help: 'Le robot coche « fin de validité » dans NetSoins et renseigne cette date.',
           },
         ],
       },

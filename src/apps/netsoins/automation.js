@@ -7,19 +7,23 @@
  * - Mode production : AUTOMATION_MODE=production + NETSOINS_URL,
  *   NETSOINS_ADMIN_USER, NETSOINS_ADMIN_PASSWORD dans l'environnement.
  *
- * Deux stratégies de création, comme pour BlueKanGo :
- *   1. DUPLICATION — s'il existe déjà un compte du MÊME établissement et du MÊME
- *      profil de droit, on le duplique (droits identiques, plus rapide et plus
- *      sûr) puis on ne change que l'identité.
- *   2. FORMULAIRE — sinon, on remplit une fiche neuve (établissement, catégorie
- *      de personnel, profil de droit, dates).
+ * Parcours (relevé sur l'instance ADEF) :
+ *   connexion (dans l'iframe) → code OTP → l'application sort de l'iframe →
+ *   Administratif > Intervenant →
+ *   onglet Compte : identifiant, mot de passe + confirmation, accès limité
+ *     (CDD) + date limite, profil de droits, établissements autorisés →
+ *   onglet Informations : catégorie professionnelle, sexe, nom de naissance,
+ *     premier prénom →
+ *   Enregistrer.
  *
  * Identifiant attribué : « NOM PRÉNOM » en majuscules (voir ./login.js).
  *
  * Connexion : NetSoins envoie un code OTP par e-mail. Le robot le récupère via
  * ctx.awaitOtp (lecture auto si configurée, sinon saisie manuelle par l'admin).
  *
- * ⚠️ Les sélecteurs (./selectors.js) restent à calibrer sur l'instance réelle.
+ * La création par duplication d'un compte existant n'est pas encore relevée :
+ * `chooseStrategy` la détecte et le signale, mais la création passe par le
+ * formulaire (résultat identique).
  */
 
 const { getMode } = require('../../automation/helpers');
@@ -29,7 +33,7 @@ const demo = require('../../automation/demoDriver');
 const db = require('../../db');
 const config = require('./config');
 const { pickUniqueLogin } = require('./login');
-const { PROFILS_DROIT } = require('./data');
+const { PROFILS_DROIT, ETABLISSEMENTS } = require('./data');
 const BASE_SELECTORS = require('./selectors');
 
 const ENV = ['NETSOINS_URL', 'NETSOINS_ADMIN_USER', 'NETSOINS_ADMIN_PASSWORD'];
@@ -37,10 +41,11 @@ const ENV = ['NETSOINS_URL', 'NETSOINS_ADMIN_USER', 'NETSOINS_ADMIN_PASSWORD'];
 const STEPS_META = [
   { id: 'ouverture', label: 'Ouverture de NetSoins', critical: true, selectorKeys: [] },
   { id: 'connexion', label: 'Connexion administrateur', critical: true, selectorKeys: ['login.user', 'login.password', 'login.submit'] },
-  { id: 'otp', label: 'Double authentification (code par e-mail)', critical: true, selectorKeys: ['login.otpInput', 'login.otpSubmit'] },
+  { id: 'otp', label: 'Double authentification (code par e-mail)', critical: true, selectorKeys: ['login.otpInput', 'login.otpSubmit', 'closePopup'] },
   { id: 'creation', label: 'Ouverture de la fiche intervenant', critical: true, selectorKeys: ['menu.administratif', 'menu.intervenant'] },
-  { id: 'fiche', label: 'Saisie de la fiche', critical: true, selectorKeys: ['form.login', 'form.password', 'form.passwordConfirm', 'form.accesLimite', 'form.dateLimite', 'form.profilOpen'] },
-  { id: 'enregistrement', label: 'Enregistrement de la fiche', critical: true, selectorKeys: ['form.save'] },
+  { id: 'compte', label: 'Onglet Compte (identifiants, droits, etablissements)', critical: true, selectorKeys: ['compte.login', 'compte.password', 'compte.passwordConfirm', 'compte.accesLimite', 'compte.dateLimite', 'compte.profilOpen', 'compte.etabOpen'] },
+  { id: 'informations', label: 'Onglet Informations (etat civil, categorie)', critical: true, selectorKeys: ['informations.tab', 'informations.categorieOpen', 'informations.sexeMasculin', 'informations.nomNaissance', 'informations.premierPrenom'] },
+  { id: 'enregistrement', label: 'Enregistrement de la fiche', critical: true, selectorKeys: ['save'] },
 ];
 
 /** Décide de la stratégie de création à partir des comptes déjà connus. */
@@ -61,6 +66,12 @@ function frDate(iso) {
 function profilLabel(id) {
   const found = PROFILS_DROIT.find((p) => p.value === String(id));
   return found ? found.label : String(id);
+}
+
+/** Libellé d'un établissement — c'est par ce texte qu'on le coche dans NetSoins. */
+function etabLabel(value) {
+  const found = ETABLISSEMENTS.find((e) => e.value === String(value));
+  return found ? found.label : String(value);
 }
 
 async function createAccount(data, ctx) {
@@ -104,18 +115,6 @@ async function createAccount(data, ctx) {
   // connecté, l'application occupe la page de premier niveau.
   const F = (page) => page.frameLocator(S.frame);
 
-  /** Remplit un champ s'il existe sur cette instance ; sinon le signale. */
-  const fillIfPresent = async (page, selector, value, label) => {
-    if (!value) return;
-    const el = page.locator(selector).first();
-    try {
-      await el.waitFor({ timeout: 2000 });
-      await el.fill(value);
-      ctx.log(`${label} renseigné.`);
-    } catch {
-      ctx.log(`Champ « ${label} » absent de la fiche — ignoré.`);
-    }
-  };
 
   const steps = [
     {
@@ -188,6 +187,12 @@ async function createAccount(data, ctx) {
     },
   ];
 
+  // Établissements à autoriser : le principal, plus les éventuels autres cochés
+  // dans le formulaire (sans doublon).
+  const etabsAutorises = [
+    ...new Set([String(data.etablissement || ''), ...(data.etablissements_autorises || []).map(String)]),
+  ].filter(Boolean);
+
   steps.push(
     {
       id: 'creation',
@@ -198,90 +203,120 @@ async function createAccount(data, ctx) {
         await page.locator(S.menu.administratif).first().click();
         ctx.log('Menu « Administratif » ouvert.');
         await page.locator(S.menu.intervenant).first().click();
-        await page.locator(S.form.login).first().waitFor();
+        await page.locator(S.compte.login).first().waitFor();
         ctx.log('Formulaire « Intervenant » ouvert.');
       },
     },
     {
-      id: 'fiche',
+      id: 'compte',
       critical: true,
-      label: `Saisie de la fiche (${fullName})`,
+      label: `Onglet Compte — identifiants et droits (${login})`,
       run: async (page) => {
         // Identifiant + mot de passe initial (le mot de passe vient de .env,
         // jamais du code ; il n'est jamais journalisé).
-        const id = page.locator(S.form.login).first();
+        const id = page.locator(S.compte.login).first();
         await id.click();
         await id.fill(login);
         ctx.log(`Identifiant saisi : « ${login} ».`);
 
-        const pw = page.locator(S.form.password).first();
+        const pw = page.locator(S.compte.password).first();
         await pw.click();
         await pw.fill(initialPassword);
-        const pwc = page.locator(S.form.passwordConfirm).first();
+        const pwc = page.locator(S.compte.passwordConfirm).first();
         await pwc.click();
         await pwc.fill(initialPassword);
         ctx.log('Mot de passe initial et confirmation saisis.');
 
-        // Champs d'identité complémentaires : présents selon la configuration
-        // de l'instance — on les remplit s'ils existent.
-        await fillIfPresent(page, S.form.nom, data.nom, 'Nom');
-        await fillIfPresent(page, S.form.prenom, data.prenom, 'Prénom');
-        await fillIfPresent(page, S.form.email, data.email, 'Mail');
-
-        // CDD : on active « accès limité dans le temps » puis la date limite.
-        // Un CDI reste sans date de fin.
+        // CDD : « accès limité dans le temps » puis la date limite.
+        // Un CDI reste sans date limite.
         if (data.type_contrat === 'cdd' && data.date_fin) {
-          await page.locator(S.form.accesLimite).first().click();
-          const dl = page.locator(S.form.dateLimite).first();
+          await page.locator(S.compte.accesLimite).first().click();
+          const dl = page.locator(S.compte.dateLimite).first();
           await dl.click();
           await dl.press('ControlOrMeta+a');
           await dl.fill(frDate(data.date_fin));
+          await dl.press('Enter');
           ctx.log(`Contrat à durée déterminée : accès limité au ${frDate(data.date_fin)}.`);
         } else {
           ctx.log('Contrat à durée indéterminée : aucune date limite d’accès.');
         }
 
-        // Profil de droits : un lien ouvre la liste, on coche l'option voulue
-        // (repérée par son identifiant interne NetSoins).
-        if (data.profil_droit) {
-          await page.locator(S.form.profilOpen).first().click();
-          await page.locator(S.form.profilOption(data.profil_droit)).first().click();
-          ctx.log(`Profil de droits appliqué (${profilLabel(data.profil_droit)}).`);
-        }
+        // Profil de droits : un lien ouvre la liste, on coche l'option voulue —
+        // repérée par son identifiant interne, jamais par sa position.
+        await page.locator(S.compte.profilZone).first().click().catch(() => {});
+        await page.locator(S.compte.profilOpen).first().click();
+        await page.locator(S.compte.profilOption(data.profil_droit)).first().click();
+        ctx.log(`Profil de droits appliqué : ${profilLabel(data.profil_droit)}.`);
 
-        // Catégorie de personnel (liste recherchable) : optionnelle tant que le
-        // sélecteur n'est pas confirmé sur l'instance.
-        if (data.categorie_personnel) {
+        // Établissements autorisés (un ou plusieurs).
+        await page.locator(S.compte.etabOpen).first().click();
+        await page.locator(S.compte.etabRoot).nth(1).click().catch(() => {});
+        for (const value of etabsAutorises) {
+          const label = etabLabel(value);
+          const option = page.locator(S.compte.etabOption(label)).first();
           try {
-            await page.locator(S.form.categorieOpen).first().fill(data.categorie_personnel);
-            await page.locator(S.form.categorieOption(data.categorie_personnel)).first().click();
-            ctx.log(`Catégorie de personnel : ${data.categorie_personnel}.`);
+            await option.waitFor({ timeout: 5000 });
+            await option.click();
+            ctx.log(`Établissement autorisé : ${label}.`);
           } catch {
-            ctx.log(`Catégorie de personnel non renseignée automatiquement (${data.categorie_personnel}) — à compléter.`);
+            throw new Error(`Établissement « ${label} » introuvable dans la liste — sélecteur « compte.etabOption » à calibrer`);
           }
         }
       },
+    },
+    {
+      id: 'informations',
+      critical: true,
+      label: `Onglet Informations — état civil (${fullName})`,
+      run: async (page) => {
+        await page.locator(S.informations.tab).first().click();
+        ctx.log('Onglet « Informations » ouvert.');
+
+        // Catégorie professionnelle (liste recherchable).
+        await page.locator(S.informations.categorieOpen).first().click();
+        const cat = page.locator(S.informations.categorieOption(data.categorie_personnel)).first();
+        try {
+          await cat.waitFor({ timeout: 5000 });
+          await cat.click();
+          ctx.log(`Catégorie professionnelle : ${data.categorie_personnel}.`);
+        } catch {
+          throw new Error(`Catégorie « ${data.categorie_personnel} » introuvable dans la liste — sélecteur « informations.categorieOption » à calibrer`);
+        }
+
+        // Sexe.
+        const sexeSel = data.sexe === 'feminin' ? S.informations.sexeFeminin : S.informations.sexeMasculin;
+        await page.locator(sexeSel).first().click();
+        ctx.log(`Sexe : ${data.sexe === 'feminin' ? 'féminin' : 'masculin'}.`);
+
+        // État civil.
+        const nom = page.locator(S.informations.nomNaissance).first();
+        await nom.click();
+        await nom.fill(data.nom);
+        const prenom = page.locator(S.informations.premierPrenom).first();
+        await prenom.click();
+        await prenom.fill(data.prenom);
+        ctx.log('Nom de naissance et premier prénom renseignés.');
+      },
+    },
+    {
+      id: 'enregistrement',
+      critical: true,
+      label: 'Enregistrement de la fiche',
+      run: async (page) => {
+        const save = page.locator(S.save).first();
+        try {
+          await save.waitFor({ timeout: 5000 });
+        } catch {
+          throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
+        }
+        await save.click();
+        // Laisse NetSoins traiter l'enregistrement ; la capture de fin de
+        // scénario sert de preuve visuelle.
+        await page.waitForTimeout(2500);
+        ctx.log('Fiche enregistrée.');
+      },
     }
   );
-
-  steps.push({
-    id: 'enregistrement',
-    critical: true,
-    label: 'Enregistrement de la fiche',
-    run: async (page) => {
-      const save = page.locator(S.form.save).first();
-      try {
-        await save.waitFor({ timeout: 5000 });
-      } catch {
-        throw new Error('Bouton d’enregistrement introuvable — sélecteur « form.save » à calibrer sur l’instance');
-      }
-      await save.click();
-      // Laisse NetSoins traiter l'enregistrement ; la capture de fin de scénario
-      // sert de preuve visuelle.
-      await page.waitForTimeout(2500);
-      ctx.log('Fiche enregistrée.');
-    },
-  });
 
   const result = await runScenario({
     reference: ctx.reference,
