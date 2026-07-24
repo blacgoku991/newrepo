@@ -199,14 +199,22 @@ const etabField = module.exports.formSchema.sections[1].fields.find((f) => f.nam
 
 module.exports.resetSchema = {
   intro:
-    'Le robot recherche le compte dans l’établissement indiqué (nom et prénom EXACTEMENT comme sur le compte BlueKanGo), remplace le mot de passe par un mot de passe provisoire, et vous le transmet par lien sécurisé.',
+    'Le robot recherche le compte par son identifiant exact dans l’établissement indiqué, vérifie qu’il existe, remplace le mot de passe par un mot de passe provisoire, et vous le transmet par lien sécurisé (à changer à la première connexion).',
   sections: [
     {
       title: 'Compte concerné',
       fields: [
+        {
+          name: 'identifiant',
+          label: 'Identifiant BlueKanGo (exact)',
+          type: 'text',
+          required: true,
+          placeholder: 'mdupont',
+          pattern: '^[a-zA-Z0-9._-]{2,60}$',
+          patternMessage: 'Identifiant invalide (lettres/chiffres/._-)',
+          help: 'Le nom d’utilisateur exact du compte (souvent 1re lettre du prénom + nom, ex. mdupont). Le robot le recherche et le modifie uniquement s’il le trouve.',
+        },
         { ...etabField, help: 'Établissement auquel le compte est rattaché.' },
-        { name: 'nom', label: 'Nom (exact)', type: 'text', required: true, placeholder: 'DUPONT' },
-        { name: 'prenom', label: 'Prénom (exact)', type: 'text', required: true, placeholder: 'Marie' },
         {
           name: 'email',
           label: 'E-mail du titulaire',

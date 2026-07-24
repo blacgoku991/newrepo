@@ -348,19 +348,20 @@ async function createAccount(data, ctx) {
  * Valider.
  */
 async function resetPassword(data, ctx) {
-  const fullName = `${data.prenom} ${data.nom}`.trim();
+  // Identifiant EXACT du compte à réinitialiser (saisi dans le formulaire).
+  const identifiant = String(data.identifiant || '').trim();
   const newPassword = process.env.BLUEKANGO_DEFAULT_PASSWORD;
 
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
-    for (const step of ['Connexion au compte administrateur', `Bascule sur l'établissement`, `Recherche du compte « ${fullName} »`, 'Nouveau mot de passe provisoire saisi', 'Fiche validée']) {
+    for (const step of ['Connexion au compte administrateur', `Bascule sur l'établissement`, `Recherche du compte « ${identifiant} »`, 'Compte trouvé — bouton Modifier', 'Nouveau mot de passe provisoire saisi', 'Fiche validée']) {
       await new Promise((r) => setTimeout(r, 700));
       ctx.log(step);
     }
     return {
       success: true,
-      message: `Mot de passe réinitialisé pour ${fullName} (démonstration)`,
-      account: { login: require('../../automation/identifiants').generateLogin(data.prenom, data.nom), prenom: data.prenom, nom: data.nom },
+      message: `Mot de passe réinitialisé pour « ${identifiant} » (démonstration)`,
+      account: { login: identifiant, prenom: '', nom: '' },
     };
   }
 
@@ -375,10 +376,8 @@ async function resetPassword(data, ctx) {
   const S = applySelectorPatches(BASE_SELECTORS, config.id);
 
   let page;
-  let login = null;
   const main = () => page.frameLocator(S.frames.main);
   const fancy = () => main().frameLocator(S.frames.fancybox);
-  const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const steps = [
     {
@@ -426,37 +425,44 @@ async function resetPassword(data, ctx) {
     },
     {
       id: 'recherche',
-      label: `Recherche du compte « ${fullName} »`,
+      label: `Recherche du compte « ${identifiant} »`,
       run: async () => {
         const list = main().frameLocator(S.frames.userList);
+        // 1. Saisir l'identifiant dans le champ « mots » et lancer la recherche.
         const search = list.getByRole('textbox', { name: S.userList.searchLabel }).first();
         await search.waitFor({ timeout: 20000 });
-        await search.fill(fullName);
-        await page.waitForTimeout(2000).catch(() => {});
-        // Suggestion « PRENOM NOM » de l'autocomplete (insensible casse/accents partiels).
-        let option = list.getByRole('option', { name: new RegExp(`${esc(data.prenom)}.*${esc(data.nom)}`, 'i') }).first();
-        if (!(await option.count().catch(() => 0))) {
-          option = list.getByRole('option', { name: new RegExp(esc(data.nom), 'i') }).first();
-        }
+        await search.fill(identifiant);
+        await list.getByTitle(S.userList.searchTriggerTitle).first().click().catch(() => {});
+        await page.waitForTimeout(2500).catch(() => {});
+        // 2. Vérifier que le compte existe : cellule contenant l'identifiant exact.
+        const cell = list.getByRole('gridcell', { name: new RegExp(`^\\s*${identifiant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i') }).first();
         try {
-          await option.waitFor({ timeout: 12000 });
+          await cell.waitFor({ timeout: 15000 });
         } catch {
           throw new Error(
-            `Aucun compte « ${fullName} » trouvé dans « ${etabLabel} ». Vérifiez l'orthographe ` +
-              `EXACTE du nom et du prénom, et l'établissement de rattachement.`
+            `Aucun compte « ${identifiant} » trouvé dans « ${etabLabel} ». Vérifiez l'identifiant ` +
+              `EXACT et l'établissement de rattachement — aucune modification effectuée.`
           );
         }
-        await option.click();
+        await cell.click();
+        // 3. Ouvrir la fiche via le bouton « Modifier ».
+        await list.getByRole('button', { name: S.userList.modifyButton }).first().click();
       },
     },
     {
       id: 'nouveau-mdp',
-      label: 'Saisie du nouveau mot de passe provisoire',
+      label: 'Vérification de l’identifiant puis saisie du nouveau mot de passe',
       run: async () => {
         await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
-        // L'identifiant du compte, pour le lien sécurisé de récupération.
-        login = await fancy().locator(S.form.loginField).inputValue().catch(() => null);
-        if (login) ctx.log(`Identifiant du compte : « ${login} »`);
+        // Sécurité : la fiche ouverte doit bien porter l'identifiant demandé.
+        const onFiche = await fancy().locator(S.form.loginField).inputValue().catch(() => null);
+        if (onFiche && onFiche.trim().toLowerCase() !== identifiant.toLowerCase()) {
+          throw new Error(
+            `La fiche ouverte porte l'identifiant « ${onFiche} », différent de « ${identifiant} ». ` +
+              `Aucune modification effectuée.`
+          );
+        }
+        ctx.log(`Identifiant confirmé : « ${identifiant} »`);
         await fancy().locator(S.form.password).fill(newPassword);
         await fancy().locator(S.form.password2).fill(newPassword);
         // L'utilisateur devra choisir son propre mot de passe au premier login.
@@ -476,11 +482,11 @@ async function resetPassword(data, ctx) {
   const result = await runScenario({
     reference: ctx.reference,
     log: ctx.log,
-    successMessage: `Mot de passe réinitialisé pour ${fullName} — établissement ${etabLabel}`,
+    successMessage: `Mot de passe réinitialisé pour « ${identifiant} » — établissement ${etabLabel} (à changer à la première connexion)`,
     steps,
   });
   if (result.success) {
-    result.account = { login: login || '', prenom: data.prenom, nom: data.nom };
+    result.account = { login: identifiant, prenom: '', nom: '' };
   }
   return result;
 }
