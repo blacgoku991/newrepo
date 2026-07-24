@@ -25,10 +25,9 @@ module.exports = {
     passwordLabel: 'Mot de passe',
     submitLabel: 'Connexion',
     // Après connexion, BlueKanGo peut afficher une page de choix de profil
-    // (lien « Prénom Nom ÉTABLISSEMENT », ex. « Achraf Maatoug COMBS LA VILLE »).
-    // L'établissement du compte admin varie : le profil est repéré par le nom
-    // de l'établissement (voir profileLinkPattern() dans automation.js), avec
-    // possibilité de forcer un libellé exact via BLUEKANGO_PROFILE_LINK.
+    // (lien « Prénom Nom ÉTABLISSEMENT ») : selectProfile() clique le premier
+    // profil qui s'affiche, peu importe lequel — l'établissement demandé par le
+    // client est ensuite sélectionné via le menu #change_etab.
   },
 
   nav: {

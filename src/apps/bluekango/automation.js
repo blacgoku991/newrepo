@@ -61,42 +61,16 @@ function toFrDate(iso) {
 }
 
 /**
- * Motif du lien de choix de profil affiché après connexion
- * (« Prénom Nom ÉTABLISSEMENT »). L'établissement du compte admin varie :
- *  - BLUEKANGO_PROFILE_LINK (env) permet de forcer un libellé exact ;
- *  - sinon on reconnaît le lien par le NOM de l'établissement, dérivé de la
- *    liste des établissements du config (partie avant « - »). Ainsi le lien
- *    « Achraf Maatoug COMBS LA VILLE » correspond via « COMBS LA VILLE ».
- */
-function profileLinkPattern() {
-  if (process.env.BLUEKANGO_PROFILE_LINK) {
-    return new RegExp(process.env.BLUEKANGO_PROFILE_LINK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-  }
-  const noms = config.formSchema.sections[1].fields
-    .find((f) => f.name === 'etablissement').options
-    .map((o) => o.label.split(' - ')[0].trim())
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length) // les libellés longs d'abord (spécificité)
-    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  return new RegExp(`(${noms.join('|')})`, 'i');
-}
-
-/**
- * Clique un profil sur la page de choix (si elle apparaît). Peu importe LEQUEL :
- * l'établissement demandé par le client est sélectionné ensuite (étape
+ * Clique le profil sur la page de choix (si elle apparaît). Peu importe lequel :
+ * l'établissement demandé par le client est sélectionné juste après (étape
  * « etablissement » via le menu #change_etab). Non bloquant.
  */
 async function selectProfile(page, log) {
-  // 1) Repérage par nom d'établissement (ou BLUEKANGO_PROFILE_LINK forcé).
-  let link = page.getByRole('link', { name: profileLinkPattern() }).first();
-  // 2) Repli générique : un lien « Prénom Nom ÉTABLISSEMENT » (≥ 3 mots).
-  if (!(await link.isVisible().catch(() => false))) {
-    link = page.getByRole('link', { name: /\S+\s+\S+\s+\S+/ }).first();
-  }
+  const link = page.getByRole('link', { name: /\S+\s+\S+\s+\S+/ }).first();
   if (await link.isVisible().catch(() => false)) {
     const label = await link.textContent().catch(() => '');
     await link.click({ timeout: 8000 }).catch(() => {});
-    if (log && label) log(`Profil sélectionné : « ${label.trim()} » (l'établissement demandé sera choisi ensuite)`);
+    if (log && label) log(`Profil sélectionné : « ${label.trim()} »`);
   }
 }
 
