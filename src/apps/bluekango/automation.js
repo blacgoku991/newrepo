@@ -314,9 +314,13 @@ async function createAccount(data, ctx) {
         label: 'Enregistrement de la fiche',
         run: async () => {
           const takenRe = new RegExp(S.form.loginTakenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-          // BlueKanGo peut refuser l'identifiant s'il existe déjà sur un AUTRE
-          // établissement (compte inconnu du portail) : on clique OK, on passe
-          // au candidat suivant, et on revalide — jusqu'à un identifiant libre.
+          // L'avertissement « déjà défini sur un autre établissement » se gère
+          // selon la réponse du formulaire (compte_existant) :
+          //  - ajout     : MÊME personne → on garde l'identifiant, OK puis
+          //                revalidation (rattachement au nouvel établissement) ;
+          //  - homonyme  : AUTRE personne → identifiant suivant puis revalidation ;
+          //  - premier   : situation inattendue → échec explicite, un humain tranche.
+          const mode = data.compte_existant || 'premier';
           for (let attempt = 1; attempt <= 6; attempt++) {
             await main().getByRole('button', { name: S.form.validerLabel }).click();
             await page.waitForTimeout(2500).catch(() => {});
@@ -327,21 +331,44 @@ async function createAccount(data, ctx) {
               await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
               return;
             }
-            // Mémorise l'identifiant occupé pour ne plus jamais le proposer.
-            db.recordAccount(config.id, currentLogin, data.nom, data.prenom, 'existant');
             const scope = warnFancy ? fancy() : main();
-            await scope.getByRole('button', { name: S.form.warningOkLabel }).first().click().catch(() => {});
-            const next = nextLogin();
-            ctx.log(`Identifiant « ${currentLogin} » déjà utilisé sur un autre établissement — nouvel essai avec « ${next} »`);
-            currentLogin = next;
-            await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click().catch(() => {});
-            await fancy().locator(S.form.loginField).fill(currentLogin);
-            await fancy().locator(S.form.password).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
-            await fancy().locator(S.form.password2).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+
+            if (mode === 'ajout') {
+              // Même personne : l'avertissement est attendu — on confirme avec
+              // le MÊME identifiant pour rattacher ce nouvel établissement.
+              ctx.log(`Avertissement attendu (compte existant) : rattachement de l'établissement avec l'identifiant « ${currentLogin} »`);
+              await scope.getByRole('button', { name: S.form.warningOkLabel }).first().click().catch(() => {});
+              await page.waitForTimeout(1200).catch(() => {});
+              continue; // revalide tel quel
+            }
+
+            if (mode === 'homonyme') {
+              // Autre personne du même nom : identifiant suivant.
+              db.recordAccount(config.id, currentLogin, data.nom, data.prenom, 'existant');
+              await scope.getByRole('button', { name: S.form.warningOkLabel }).first().click().catch(() => {});
+              const next = nextLogin();
+              ctx.log(`Identifiant « ${currentLogin} » déjà utilisé (homonyme) — nouvel essai avec « ${next} »`);
+              currentLogin = next;
+              await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click().catch(() => {});
+              await fancy().locator(S.form.loginField).fill(currentLogin);
+              await fancy().locator(S.form.password).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+              await fancy().locator(S.form.password2).fill(process.env.BLUEKANGO_DEFAULT_PASSWORD);
+              continue;
+            }
+
+            // mode 'premier' : la personne est censée ne pas avoir de compte,
+            // or l'identifiant existe déjà → on n'invente rien, un humain tranche.
+            throw new Error(
+              `BlueKanGo signale que « ${currentLogin} » est déjà défini sur un autre établissement, ` +
+                `alors que la demande indique « premier compte ». Aucune fiche n'a été enregistrée. ` +
+                `Selon le cas réel : refaites la demande en choisissant « déjà un compte (ajout d'établissement) » ` +
+                `ou « homonyme » — ou passez par « Mot de passe oublié » si la personne a simplement perdu ses accès.`
+            );
           }
           throw new Error(
-            'Impossible de trouver un identifiant libre après 6 tentatives : ' +
-              'tous les candidats existent déjà sur d\'autres établissements.'
+            mode === 'ajout'
+              ? 'L\'avertissement persiste après confirmation : le rattachement d\'établissement n\'a pas été accepté par BlueKanGo.'
+              : 'Impossible de trouver un identifiant libre après 6 tentatives.'
           );
         },
       },
@@ -362,6 +389,10 @@ async function createAccount(data, ctx) {
     if (currentLogin !== login) {
       result.message = String(result.message || '').replace(`« ${login} »`, `« ${currentLogin} »`);
       ctx.log(`Identifiant définitif : « ${currentLogin} »`);
+    }
+    if (data.compte_existant === 'ajout') {
+      result.message = `Compte BlueKanGo existant « ${currentLogin} » rattaché à l'établissement ${etabLabel} pour ${fullName}` +
+        (data.date_fin ? ` — valide jusqu'au ${toFrDate(data.date_fin)}` : '');
     }
     result.account = account;
   }

@@ -24,7 +24,7 @@ module.exports = {
   logo: '/img/bluekango',
   referencePrefix: 'BKG',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.
-  robotFields: ['civilite', 'nom', 'prenom', 'etablissement', 'fonction', 'date_fin'],
+  robotFields: ['civilite', 'nom', 'prenom', 'etablissement', 'fonction', 'date_fin', 'compte_existant'],
 
   formSchema: {
     intro:
@@ -54,6 +54,18 @@ module.exports = {
             required: false,
             placeholder: 'marie.dupont@adef-residences.com',
             help: 'Pour le suivi de la demande. L’identifiant BlueKanGo est généré automatiquement (1re lettre du prénom + nom).',
+          },
+          {
+            name: 'compte_existant',
+            label: 'Cette personne a-t-elle déjà un compte BlueKanGo ?',
+            type: 'radio',
+            required: true,
+            options: [
+              { value: 'premier', label: 'Non — c’est son premier compte BlueKanGo' },
+              { value: 'ajout', label: 'Oui — elle a déjà un compte (autre établissement) et doit accéder à celui-ci EN PLUS' },
+              { value: 'homonyme', label: 'Non, mais une AUTRE personne du même nom a déjà un compte (homonyme)' },
+            ],
+            help: 'Mot de passe oublié ? N’utilisez pas ce formulaire : passez par l’onglet « Mot de passe oublié ».',
           },
         ],
       },
