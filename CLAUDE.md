@@ -26,6 +26,22 @@ sans script inline, rate limiting, anti-CSRF, requêtes SQL paramétrées,
 `escapeHtml()` sur tout contenu dynamique, secrets uniquement en `.env`,
 mots de passe jamais stockés ni journalisés.
 
+### Économie de tokens — travailler optimisé
+- **Cibler avant de lire** : chercher avec Grep/Glob, puis ne lire que les
+  lignes utiles (offset/limit) — jamais un gros fichier en entier si une
+  section suffit. Ne jamais relire un fichier déjà en contexte.
+- **Filtrer les sorties de commandes** : `| tail`, `| head`, `grep`, formats
+  courts (`--oneline`, `--short`) ; jamais de sortie brute volumineuse
+  (logs complets, `node_modules`, JSON entiers non filtrés).
+- **Grouper** : plusieurs modifications d'un même fichier en une seule passe ;
+  appels d'outils indépendants en parallèle ; un seul commit par lot cohérent.
+- **Tester ciblé** : vérifier la fonctionnalité touchée (curl de la route,
+  test unitaire du module), pas tout le parcours à chaque fois ; captures
+  d'écran seulement quand le visuel est le sujet.
+- **Réponses courtes** : résultat + l'essentiel, sans re-raconter le contexte.
+- **Skills** : charger un skill seulement quand la tâche le concerne
+  vraiment (pas de chargement systématique « au cas où »).
+
 ### Invariants du projet (ne pas casser)
 - Porte SSO Microsoft 365 « fermé par défaut » (`src/server.js`) : toute
   nouvelle route est protégée automatiquement — ne pas ajouter d'exception
