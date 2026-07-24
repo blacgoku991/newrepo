@@ -209,12 +209,14 @@
       ? '<span class="badge st-terminee acc-src">Créé ici</span>'
       : '<span class="badge st-en_attente acc-src">Existant</span>';
     const inactif = a.actif === false ? ' <span class="badge st-echec acc-src">Inactif</span>' : '';
+    // `data-label` : sous 640 px, chaque ligne devient une fiche et ces
+    // intitulés remplacent l'en-tête du tableau.
     return `<tr>
-      <td>${escapeHtml(who)}</td>
-      <td><span class="ref">${escapeHtml(a.login)}</span></td>
-      <td>${escapeHtml(a.etablissementLabel || '—')}</td>
-      <td>${escapeHtml(a.fonction || '—')}</td>
-      <td>${src}${inactif}</td>
+      <td data-label="Bénéficiaire">${escapeHtml(who)}</td>
+      <td data-label="Identifiant"><span class="ref">${escapeHtml(a.login)}</span></td>
+      <td data-label="Établissement">${escapeHtml(a.etablissementLabel || '—')}</td>
+      <td data-label="Fonction">${escapeHtml(a.fonction || '—')}</td>
+      <td data-label="État">${src}${inactif}</td>
       <td class="acc-row-actions">
         <a class="btn btn-ghost btn-sm" href="${resetUrl}" title="Réinitialiser le mot de passe">${icon('lock')}<span>Réinit.</span></a>
         <a class="btn btn-ghost btn-sm" href="${extUrl}" title="Ajouter un établissement">${icon('building')}<span>Étab.</span></a>
@@ -233,13 +235,13 @@
     return `<div class="tablecard"><table class="data">
       <thead><tr><th>Référence</th><th>Type</th><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Déposée le</th><th>Statut</th></tr></thead>
       <tbody>${rows.map((r) => `<tr>
-        <td><a class="ref" href="/suivi.html?ref=${encodeURIComponent(r.reference)}">${escapeHtml(r.reference)}</a></td>
-        <td>${escapeHtml(TYPE_LABELS[r.type] || r.type)}</td>
-        <td>${escapeHtml(r.who || '—')}</td>
-        <td>${r.login ? `<span class="ref">${escapeHtml(r.login)}</span>` : '—'}</td>
-        <td>${escapeHtml(r.etablissementLabel || '—')}</td>
-        <td>${formatDate(r.createdAt)}</td>
-        <td>${statusBadge(r.status)}</td>
+        <td data-label="Référence"><a class="ref" href="/suivi.html?ref=${encodeURIComponent(r.reference)}">${escapeHtml(r.reference)}</a></td>
+        <td data-label="Type">${escapeHtml(TYPE_LABELS[r.type] || r.type)}</td>
+        <td data-label="Bénéficiaire">${escapeHtml(r.who || '—')}</td>
+        <td data-label="Identifiant">${r.login ? `<span class="ref">${escapeHtml(r.login)}</span>` : '—'}</td>
+        <td data-label="Établissement">${escapeHtml(r.etablissementLabel || '—')}</td>
+        <td data-label="Déposée le">${formatDate(r.createdAt)}</td>
+        <td data-label="Statut">${statusBadge(r.status)}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
   }

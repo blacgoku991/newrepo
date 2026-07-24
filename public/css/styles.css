@@ -638,3 +638,86 @@ body.auth { min-height: 100vh; background: var(--bg); margin: 0; }
 .login .field { margin-bottom: 16px; }
 .login .foot { margin-top: 22px; text-align: center; font-size: .82rem; color: var(--faint); }
 body.auth.center { display: grid; place-items: center; padding: 24px; }
+
+/* ===========================================================================
+   Adaptation aux petits écrans
+   ---------------------------------------------------------------------------
+   Relevé au navigateur sur 360 / 390 / 768 / 1024 px. Aucune page ne débordait
+   horizontalement ; les défauts portaient sur la taille du texte saisi et sur
+   les zones tactiles.
+   =========================================================================== */
+
+@media (max-width: 768px) {
+  /* iOS agrandit brutalement la page dès qu'on met le doigt dans un champ dont
+     le texte fait moins de 16 px. On force donc 16 px sur tout ce qui se
+     saisit — la mise en page, elle, ne bouge pas. */
+  .field input[type=text], .field input[type=email], .field input[type=tel],
+  .field input[type=date], .field input[type=password], .field input[type=number],
+  .field select, .field textarea,
+  .inp, input.inp, select.inp, textarea.inp,
+  .ms-search, .esp-search input, .search input, input[type=search] {
+    font-size: 16px;
+  }
+
+  /* Zones tactiles : un lien de 21 px de haut se rate une fois sur deux.
+     On élargit sans changer l'apparence (padding, pas de bordure). */
+  .site-footer .ft-links a,
+  .site-footer .ft-bottom a,
+  .legal-wrap a,
+  .back-link {
+    display: inline-block;
+    padding: 12px 0;
+    line-height: 1.4;
+  }
+  .site-footer .ft-links { gap: 0; }
+  .site-footer .ft-bottom .ft-legal { gap: 20px; }
+
+  .topnav a { min-height: 44px; display: inline-flex; align-items: center; }
+
+  /* Cases à cocher et boutons radio : la pastille visible reste petite, mais
+     la zone cliquable (le libellé) doit atteindre la taille du doigt. */
+  .choice { min-height: 44px; align-items: center; }
+  .ms-options .choice { min-height: 40px; }
+}
+
+/* Tableaux : sous 640 px, chaque ligne devient une fiche empilée. Le défilement
+   horizontal fonctionnait, mais obligeait à balayer un tableau de 760 px sur un
+   écran de 360. Chaque cellule porte son intitulé via `data-label`. */
+@media (max-width: 640px) {
+  table.data { min-width: 0; font-size: .92rem; }
+  table.data thead { display: none; }
+  table.data tbody tr {
+    display: block;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  table.data tbody tr:last-child { border-bottom: none; }
+  table.data td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 14px;
+    padding: 5px 0;
+    border: none;
+    text-align: right;
+  }
+  table.data td::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--muted);
+    font-size: .76rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    text-align: left;
+  }
+  /* Cellule sans intitulé (colonne d'actions) : on laisse toute la largeur. */
+  table.data td:not([data-label])::before { content: none; }
+  table.data td:not([data-label]) { justify-content: flex-end; padding-top: 10px; }
+  .acc-row-actions { justify-content: flex-end; width: 100%; }
+  .acc-row-actions .btn { min-height: 40px; }
+  .acc-row-actions .btn span { display: inline; }
+}
+
+/* Lien de retour en tête de formulaire. */
+.back-link { display: inline-block; font-size: .9rem; margin-bottom: 16px; }
