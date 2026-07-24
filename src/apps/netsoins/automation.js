@@ -56,6 +56,23 @@ function chooseStrategy(data) {
     : { mode: 'form' };
 }
 
+/**
+ * Résout un sélecteur du fichier ./selectors.js.
+ *
+ * « role:libellé » → repérage par rôle + libellé accessible (getByRole), tel
+ * que le produit le codegen Playwright : la correspondance est PARTIELLE et
+ * insensible à la casse, ce qui absorbe l'astérisque des champs obligatoires
+ * de NetSoins (« Identifiant* », « Mot de passe* »…).
+ * Toute autre chaîne est un sélecteur CSS/texte Playwright classique.
+ *
+ * `scope` est une page ou une frame : les deux exposent locator() et getByRole().
+ */
+const ROLE_SELECTOR = /^(textbox|link|button|combobox|checkbox|radio|option|tab|cell|row):(.+)$/;
+function L(scope, selector) {
+  const m = ROLE_SELECTOR.exec(selector);
+  return m ? scope.getByRole(m[1], { name: m[2] }) : scope.locator(selector);
+}
+
 /** Étapes de la réinitialisation de mot de passe (éditeur de scénario). */
 const RESET_STEPS_META = [
   { id: 'ouverture', label: 'Ouverture de NetSoins', critical: true, selectorKeys: [] },
@@ -121,14 +138,14 @@ function buildLoginSteps({ S, ctx, base }) {
         // Le formulaire vit dans l'iframe : on clique avant de saisir (le champ
         // n'accepte la frappe qu'une fois focalisé). `.first()` évite l'échec
         // « strict mode » si un libellé apparaît à plusieurs endroits.
-        const user = f.locator(S.login.user).first();
-        const pass = f.locator(S.login.password).first();
+        const user = L(f, S.login.user).first();
+        const pass = L(f, S.login.password).first();
         await user.click();
         await user.fill(process.env.NETSOINS_ADMIN_USER);
         await pass.click();
         await pass.fill(process.env.NETSOINS_ADMIN_PASSWORD);
         otpSince = new Date(); // le code OTP part au moment de la validation
-        await f.locator(S.login.submit).first().click();
+        await L(f, S.login.submit).first().click();
       },
     },
     {
@@ -137,7 +154,7 @@ function buildLoginSteps({ S, ctx, base }) {
       label: 'Double authentification — récupération du code',
       run: async (page) => {
         const f = F(page);
-        const field = f.locator(S.login.otpInput).first();
+        const field = L(f, S.login.otpInput).first();
         await field.waitFor();
         // Récupère le code (lecture auto par e-mail si configurée, sinon saisie
         // manuelle par l'admin dans les détails de la demande).
@@ -150,7 +167,7 @@ function buildLoginSteps({ S, ctx, base }) {
         await field.click();
         await field.fill(code);
         ctx.log('Validation du code (bouton OK)…');
-        await f.locator(S.login.otpSubmit).first().click();
+        await L(f, S.login.otpSubmit).first().click();
 
         // Le code est-il accepté ? Si le champ OTP est toujours là, c'est qu'il
         // a été refusé (code erroné ou expiré) : on le dit clairement.
@@ -163,7 +180,7 @@ function buildLoginSteps({ S, ctx, base }) {
         // ⚠️ Après connexion, NetSoins SORT de l'iframe : tout ce qui suit se
         // joue sur la page de premier niveau. La fenêtre d'accueil est
         // facultative (son absence n'est pas un échec).
-        const close = page.locator(S.closePopup).first();
+        const close = L(page, S.closePopup).first();
         try {
           await close.waitFor({ timeout: 10000 });
           await close.click();
@@ -228,10 +245,10 @@ async function createAccount(data, ctx) {
       label: 'Ouverture d’une nouvelle fiche intervenant',
       run: async (page) => {
         // Menu de premier niveau : Administratif > Intervenant.
-        await page.locator(S.menu.administratif).first().click();
+        await L(page, S.menu.administratif).first().click();
         ctx.log('Menu « Administratif » ouvert.');
-        await page.locator(S.menu.intervenant).first().click();
-        await page.locator(S.compte.login).first().waitFor();
+        await L(page, S.menu.intervenant).first().click();
+        await L(page, S.compte.login).first().waitFor();
         ctx.log('Formulaire « Intervenant » ouvert.');
       },
     },
@@ -242,15 +259,15 @@ async function createAccount(data, ctx) {
       run: async (page) => {
         // Identifiant + mot de passe initial (le mot de passe vient de .env,
         // jamais du code ; il n'est jamais journalisé).
-        const id = page.locator(S.compte.login).first();
+        const id = L(page, S.compte.login).first();
         await id.click();
         await id.fill(login);
         ctx.log(`Identifiant saisi : « ${login} ».`);
 
-        const pw = page.locator(S.compte.password).first();
+        const pw = L(page, S.compte.password).first();
         await pw.click();
         await pw.fill(initialPassword);
-        const pwc = page.locator(S.compte.passwordConfirm).first();
+        const pwc = L(page, S.compte.passwordConfirm).first();
         await pwc.click();
         await pwc.fill(initialPassword);
         ctx.log('Mot de passe initial et confirmation saisis.');
@@ -258,8 +275,8 @@ async function createAccount(data, ctx) {
         // CDD : « accès limité dans le temps » puis la date limite.
         // Un CDI reste sans date limite.
         if (data.type_contrat === 'cdd' && data.date_fin) {
-          await page.locator(S.compte.accesLimite).first().click();
-          const dl = page.locator(S.compte.dateLimite).first();
+          await L(page, S.compte.accesLimite).first().click();
+          const dl = L(page, S.compte.dateLimite).first();
           await dl.click();
           await dl.press('ControlOrMeta+a');
           await dl.fill(frDate(data.date_fin));
@@ -271,17 +288,17 @@ async function createAccount(data, ctx) {
 
         // Profil de droits : un lien ouvre la liste, on coche l'option voulue —
         // repérée par son identifiant interne, jamais par sa position.
-        await page.locator(S.compte.profilZone).first().click().catch(() => {});
-        await page.locator(S.compte.profilOpen).first().click();
-        await page.locator(S.compte.profilOption(data.profil_droit)).first().click();
+        await L(page, S.compte.profilZone).first().click().catch(() => {});
+        await L(page, S.compte.profilOpen).first().click();
+        await L(page, S.compte.profilOption(data.profil_droit)).first().click();
         ctx.log(`Profil de droits appliqué : ${profilLabel(data.profil_droit)}.`);
 
         // Établissements autorisés (un ou plusieurs).
-        await page.locator(S.compte.etabOpen).first().click();
-        await page.locator(S.compte.etabRoot).nth(1).click().catch(() => {});
+        await L(page, S.compte.etabOpen).first().click();
+        await L(page, S.compte.etabRoot).nth(1).click().catch(() => {});
         for (const value of etabsAutorises) {
           const label = etabLabel(value);
-          const option = page.locator(S.compte.etabOption(label)).first();
+          const option = L(page, S.compte.etabOption(label)).first();
           try {
             await option.waitFor({ timeout: 5000 });
             await option.click();
@@ -297,12 +314,12 @@ async function createAccount(data, ctx) {
       critical: true,
       label: `Onglet Informations — état civil (${fullName})`,
       run: async (page) => {
-        await page.locator(S.informations.tab).first().click();
+        await L(page, S.informations.tab).first().click();
         ctx.log('Onglet « Informations » ouvert.');
 
         // Catégorie professionnelle (liste recherchable).
-        await page.locator(S.informations.categorieOpen).first().click();
-        const cat = page.locator(S.informations.categorieOption(data.categorie_personnel)).first();
+        await L(page, S.informations.categorieOpen).first().click();
+        const cat = L(page, S.informations.categorieOption(data.categorie_personnel)).first();
         try {
           await cat.waitFor({ timeout: 5000 });
           await cat.click();
@@ -313,14 +330,14 @@ async function createAccount(data, ctx) {
 
         // Sexe.
         const sexeSel = data.sexe === 'feminin' ? S.informations.sexeFeminin : S.informations.sexeMasculin;
-        await page.locator(sexeSel).first().click();
+        await L(page, sexeSel).first().click();
         ctx.log(`Sexe : ${data.sexe === 'feminin' ? 'féminin' : 'masculin'}.`);
 
         // État civil.
-        const nom = page.locator(S.informations.nomNaissance).first();
+        const nom = L(page, S.informations.nomNaissance).first();
         await nom.click();
         await nom.fill(data.nom);
-        const prenom = page.locator(S.informations.premierPrenom).first();
+        const prenom = L(page, S.informations.premierPrenom).first();
         await prenom.click();
         await prenom.fill(data.prenom);
         ctx.log('Nom de naissance et premier prénom renseignés.');
@@ -331,11 +348,18 @@ async function createAccount(data, ctx) {
       critical: true,
       label: 'Enregistrement de la fiche',
       run: async (page) => {
-        const save = page.locator(S.save).first();
+        // Deux écritures possibles selon l'écran : on tente le repérage par
+        // rôle, puis le repli par texte.
+        let save = L(page, S.save).first();
         try {
           await save.waitFor({ timeout: 5000 });
         } catch {
-          throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
+          save = L(page, S.saveFallback).first();
+          try {
+            await save.waitFor({ timeout: 5000 });
+          } catch {
+            throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
+          }
         }
         await save.click();
         // Laisse NetSoins traiter l'enregistrement ; la capture de fin de
@@ -405,9 +429,9 @@ async function resetPassword(data, ctx) {
       critical: true,
       label: 'Ouverture de la liste des intervenants',
       run: async (page) => {
-        await page.locator(S.menu.administratif).first().click();
-        await page.locator(S.menu.intervenant).first().click();
-        await page.locator(S.menu.intervenantsListe).first().click();
+        await L(page, S.menu.administratif).first().click();
+        await L(page, S.menu.intervenant).first().click();
+        await L(page, S.menu.intervenantsListe).first().click();
         ctx.log('Liste des intervenants ouverte.');
       },
     },
@@ -416,8 +440,8 @@ async function resetPassword(data, ctx) {
       critical: true,
       label: `Bascule sur l'établissement ${etabLabel(data.etablissement)}`,
       run: async (page) => {
-        await page.locator(S.liste.etablissementOpen).first().click();
-        const option = page.locator(S.liste.etablissementOption(data.etablissement)).first();
+        await L(page, S.liste.etablissementOpen).first().click();
+        const option = L(page, S.liste.etablissementOption(data.etablissement)).first();
         try {
           await option.waitFor({ timeout: 5000 });
         } catch {
@@ -433,7 +457,7 @@ async function resetPassword(data, ctx) {
       label: `Recherche de l'intervenant « ${identifiant} »`,
       run: async (page) => {
         // Champ de recherche s'il existe : réduit la liste avant de cliquer.
-        const search = page.locator(S.liste.search).first();
+        const search = L(page, S.liste.search).first();
         try {
           await search.waitFor({ timeout: 3000 });
           await search.fill(identifiant);
@@ -444,14 +468,14 @@ async function resetPassword(data, ctx) {
         }
 
         // On clique la ligne portant l'identifiant, puis sa fiche.
-        const ligne = page.locator(S.liste.resultat(identifiant)).last();
+        const ligne = L(page, S.liste.resultat(identifiant)).last();
         try {
           await ligne.waitFor({ timeout: 8000 });
         } catch {
           throw new Error(`Intervenant « ${identifiant} » introuvable dans ${etabLabel(data.etablissement)} — vérifiez l'identifiant et l'établissement`);
         }
         await ligne.click();
-        await page.locator(S.liste.ficheIntervenant).first().click();
+        await L(page, S.liste.ficheIntervenant).first().click();
         ctx.log('Fiche intervenant ouverte.');
       },
     },
@@ -460,16 +484,38 @@ async function resetPassword(data, ctx) {
       critical: true,
       label: 'Saisie du nouveau mot de passe provisoire',
       run: async (page) => {
-        // La fiche est sur « Ne pas modifier » : on bascule sur « Définir un
-        // mot de passe » pour rendre les champs saisissables.
-        await page.locator(S.motDePasse.modeOpen).first().click();
-        await page.locator(S.motDePasse.modeDefinir).first().click();
-        ctx.log('Mode « Définir un mot de passe » activé.');
+        // La fiche est sur « Ne pas modifier » : tant qu'on n'a pas basculé sur
+        // « Définir un mot de passe », les champs restent inaccessibles.
+        // Selon l'écran, c'est une vraie liste déroulante ou un menu
+        // personnalisé rendu comme un lien : on gère les deux.
+        const combo = L(page, S.motDePasse.modeSelect);
+        if (await combo.count().catch(() => 0)) {
+          await combo.first().selectOption({ label: 'Définir un mot de passe' });
+          ctx.log('Mode « Définir un mot de passe » choisi dans la liste déroulante.');
+        } else {
+          ctx.log('Ouverture du menu « Gestion du mot de passe »…');
+          await L(page, S.motDePasse.modeOpen).first().click();
+          const option = L(page, S.motDePasse.modeDefinir).first();
+          try {
+            await option.waitFor({ timeout: 8000 });
+          } catch {
+            throw new Error('Option « Définir un mot de passe » introuvable après ouverture du menu — sélecteur « motDePasse.modeDefinir » à calibrer');
+          }
+          await option.click();
+          ctx.log('Mode « Définir un mot de passe » activé.');
+        }
 
-        const pw = page.locator(S.motDePasse.password).first();
+        // Les champs n'apparaissent qu'une fois le mode basculé.
+        try {
+          await L(page, S.motDePasse.password).first().waitFor({ timeout: 8000 });
+        } catch {
+          throw new Error('Les champs de mot de passe ne sont pas apparus — la bascule « Définir un mot de passe » n’a pas pris effet');
+        }
+
+        const pw = L(page, S.motDePasse.password).first();
         await pw.click();
         await pw.fill(newPassword);
-        const pwc = page.locator(S.motDePasse.passwordConfirm).first();
+        const pwc = L(page, S.motDePasse.passwordConfirm).first();
         await pwc.click();
         await pwc.fill(newPassword);
         ctx.log('Nouveau mot de passe provisoire saisi (non journalisé).');
@@ -480,11 +526,18 @@ async function resetPassword(data, ctx) {
       critical: true,
       label: 'Enregistrement de la fiche',
       run: async (page) => {
-        const save = page.locator(S.save).first();
+        // Deux écritures possibles selon l'écran : on tente le repérage par
+        // rôle, puis le repli par texte.
+        let save = L(page, S.save).first();
         try {
           await save.waitFor({ timeout: 5000 });
         } catch {
-          throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
+          save = L(page, S.saveFallback).first();
+          try {
+            await save.waitFor({ timeout: 5000 });
+          } catch {
+            throw new Error('Bouton d’enregistrement introuvable — sélecteur « save » à calibrer sur l’instance');
+          }
         }
         await save.click();
         await page.waitForTimeout(2500);
