@@ -372,11 +372,33 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
     byApp.get(e.appId).push(e.value);
   }
 
-  const accountsMap = new Map(); // comptes créés (uniques par identifiant)
+  const accountsMap = new Map(); // comptes (uniques par identifiant)
   const activity = []; // toutes les demandes des établissements
   for (const [appId, values] of byApp) {
     const appEntry = registry.get(appId);
     const appName = appEntry ? appEntry.config.name : appId;
+
+    // Comptes déjà existants importés (ex. export NetSoins) rattachés aux
+    // établissements du référent : il les voit et peut demander un reset dessus.
+    for (const acc of db.accountsForEtablissements(appId, values)) {
+      const key = `${appId}:${(acc.login || '').toLowerCase()}`;
+      if (!acc.login || accountsMap.has(key)) continue;
+      accountsMap.set(key, {
+        appId,
+        app: appName,
+        login: acc.login,
+        nom: acc.nom || '',
+        prenom: acc.prenom || '',
+        etablissement: String(acc.etablissement || ''),
+        etablissementLabel: referents.labelFor(appId, acc.etablissement),
+        fonction: acc.profil || '',
+        actif: !!acc.actif,
+        source: acc.source || 'import',
+        reference: '',
+        createdAt: acc.updated_at || acc.created_at,
+      });
+    }
+
     for (const row of db.requestsForEtablissements(appId, values)) {
       const data = JSON.parse(row.payload);
       const type = row.request_type || 'creation';
@@ -393,21 +415,23 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
         createdAt: row.created_at,
       });
       if (login && type === 'creation' && row.status === 'terminee') {
+        // Un compte créé via le portail fait autorité : il remplace l'éventuelle
+        // entrée importée du même identifiant (référence + lien d'identifiants).
         const key = `${appId}:${login.toLowerCase()}`;
-        if (!accountsMap.has(key)) {
-          accountsMap.set(key, {
-            appId,
-            app: appName,
-            login,
-            nom: data.nom || '',
-            prenom: data.prenom || '',
-            etablissement: String(data.etablissement || ''),
-            etablissementLabel: referents.labelFor(appId, data.etablissement),
-            fonction: data.fonction || '',
-            reference: row.reference,
-            createdAt: row.created_at,
-          });
-        }
+        accountsMap.set(key, {
+          appId,
+          app: appName,
+          login,
+          nom: data.nom || '',
+          prenom: data.prenom || '',
+          etablissement: String(data.etablissement || ''),
+          etablissementLabel: referents.labelFor(appId, data.etablissement),
+          fonction: data.fonction || '',
+          actif: true,
+          source: 'portail',
+          reference: row.reference,
+          createdAt: row.created_at,
+        });
       }
     }
   }

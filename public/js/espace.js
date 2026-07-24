@@ -78,6 +78,7 @@
         <h2>Comptes existants</h2>
         <span class="hint">${data.accounts.length} compte${data.accounts.length > 1 ? 's' : ''}</span>
       </div>
+      ${data.accounts.length > 12 ? `<label class="esp-search"><input type="text" id="acc-search" placeholder="Rechercher un identifiant, un nom, une fonction…" autocomplete="off" /></label>` : ''}
       <div id="accounts"></div>
 
       <div class="esp-section-head"><h2>Activité récente</h2></div>
@@ -85,43 +86,68 @@
 
     renderAccounts(data.accounts);
     renderActivity(data.activity || []);
+
+    const search = document.getElementById('acc-search');
+    if (search) {
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        const filtered = !q
+          ? data.accounts
+          : data.accounts.filter((a) =>
+              [a.login, a.nom, a.prenom, a.fonction, a.etablissementLabel]
+                .some((v) => (v || '').toLowerCase().includes(q)));
+        renderAccounts(filtered, q);
+      });
+    }
   }
 
-  function renderAccounts(accounts) {
+  const ACC_CAP = 100; // évite d'afficher des milliers de cartes d'un coup
+
+  function accCard(a) {
+    const who = `${a.prenom} ${a.nom}`.trim() || a.login;
+    const resetUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=reset&identifiant=${encodeURIComponent(a.login)}&etablissement=${encodeURIComponent(a.etablissement)}`;
+    const extUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=extension&identifiant=${encodeURIComponent(a.login)}`;
+    const srcBadge = a.source === 'portail'
+      ? '<span class="badge st-terminee acc-src">Créé ici</span>'
+      : '<span class="badge st-en_attente acc-src">Existant</span>';
+    const inactif = a.actif === false ? '<span class="badge st-echec acc-src">Inactif</span>' : '';
+    return `
+      <div class="acc-card">
+        <div class="top">
+          <div>
+            <div class="who">${escapeHtml(who)}</div>
+            <div class="acc-login">${escapeHtml(a.login)}</div>
+          </div>
+          <span class="badge st-terminee">${escapeHtml(a.app)}</span>
+        </div>
+        <div class="meta">
+          ${a.etablissementLabel ? `<div>${icon('building')} <b>${escapeHtml(a.etablissementLabel)}</b></div>` : ''}
+          ${a.fonction ? `<div>Fonction : ${escapeHtml(a.fonction)}</div>` : ''}
+          <div class="acc-tags">${srcBadge}${inactif}</div>
+        </div>
+        <div class="actions">
+          <a class="btn btn-ghost btn-sm" href="${resetUrl}">${icon('lock')} Réinitialiser</a>
+          <a class="btn btn-ghost btn-sm" href="${extUrl}">${icon('building')} Ajouter un étab.</a>
+        </div>
+      </div>`;
+  }
+
+  function renderAccounts(accounts, query) {
     const box = document.getElementById('accounts');
     if (!accounts.length) {
-      box.innerHTML = `<div class="empty-box">Aucun compte créé pour vos établissements pour l'instant.
-        <br />Les comptes apparaîtront ici dès qu'une création sera terminée.</div>`;
+      box.innerHTML = query
+        ? `<div class="empty-box">Aucun compte ne correspond à « ${escapeHtml(query)} ».</div>`
+        : `<div class="empty-box">Aucun compte pour vos établissements pour l'instant.
+           <br />Les comptes apparaîtront ici après une création ou un import.</div>`;
       return;
     }
+    const shown = accounts.slice(0, ACC_CAP);
+    const more = accounts.length - shown.length;
     box.innerHTML =
-      '<div class="acc-grid">' +
-      accounts
-        .map((a) => {
-          const who = `${a.prenom} ${a.nom}`.trim() || a.login;
-          const resetUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=reset&identifiant=${encodeURIComponent(a.login)}&etablissement=${encodeURIComponent(a.etablissement)}`;
-          const extUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=extension&identifiant=${encodeURIComponent(a.login)}`;
-          return `
-          <div class="acc-card">
-            <div class="top">
-              <div>
-                <div class="who">${escapeHtml(who)}</div>
-                <div class="acc-login">${escapeHtml(a.login)}</div>
-              </div>
-              <span class="badge st-terminee">${escapeHtml(a.app)}</span>
-            </div>
-            <div class="meta">
-              ${a.etablissementLabel ? `<div>${icon('building')} <b>${escapeHtml(a.etablissementLabel)}</b></div>` : ''}
-              ${a.fonction ? `<div>Fonction : ${escapeHtml(a.fonction)}</div>` : ''}
-            </div>
-            <div class="actions">
-              <a class="btn btn-ghost btn-sm" href="${resetUrl}">${icon('lock')} Réinitialiser</a>
-              <a class="btn btn-ghost btn-sm" href="${extUrl}">${icon('building')} Ajouter un étab.</a>
-            </div>
-          </div>`;
-        })
-        .join('') +
-      '</div>';
+      '<div class="acc-grid">' + shown.map(accCard).join('') + '</div>' +
+      (more > 0
+        ? `<div class="empty-box" style="margin-top:12px">${more} autre${more > 1 ? 's' : ''} compte${more > 1 ? 's' : ''} — affinez la recherche pour les voir.</div>`
+        : '');
   }
 
   function renderActivity(activity) {

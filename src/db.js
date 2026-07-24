@@ -223,6 +223,24 @@ if (!columns.includes('otp_code')) {
 if (!columns.includes('otp_prompt')) {
   db.exec(`ALTER TABLE requests ADD COLUMN otp_prompt TEXT NOT NULL DEFAULT ''`);
 }
+// Registre des comptes : champs supplémentaires pour les comptes importés depuis
+// une application (ex. export NetSoins). Champs MINIMAUX (RGPD) : e-mail pro,
+// établissement de rattachement, profil, état actif — jamais d'adresse/téléphone
+// personnels. `source` distingue les comptes créés par le robot des imports.
+const accCols = db.prepare(`PRAGMA table_info(created_accounts)`).all().map((c) => c.name);
+for (const [col, ddl] of [
+  ['email', `ALTER TABLE created_accounts ADD COLUMN email TEXT NOT NULL DEFAULT ''`],
+  ['etablissement', `ALTER TABLE created_accounts ADD COLUMN etablissement TEXT NOT NULL DEFAULT ''`],
+  ['profil', `ALTER TABLE created_accounts ADD COLUMN profil TEXT NOT NULL DEFAULT ''`],
+  ['actif', `ALTER TABLE created_accounts ADD COLUMN actif INTEGER NOT NULL DEFAULT 1`],
+  ['source', `ALTER TABLE created_accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'robot'`],
+  ['updated_at', `ALTER TABLE created_accounts ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`],
+]) {
+  if (!accCols.includes(col)) db.exec(ddl);
+}
+// Recherche des comptes par établissement (espace référent) sur un gros volume.
+db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_etab ON created_accounts (app_id, etablissement)`);
+
 const auditCols = db.prepare(`PRAGMA table_info(audit_log)`).all().map((c) => c.name);
 if (!auditCols.includes('ip')) {
   db.exec(`ALTER TABLE audit_log ADD COLUMN ip TEXT NOT NULL DEFAULT ''`);
@@ -396,6 +414,45 @@ const api = {
 
   listCreatedAccounts(limit = 200) {
     return db.prepare(`SELECT * FROM created_accounts ORDER BY id DESC LIMIT ?`).all(limit);
+  },
+
+  /**
+   * Enregistre/actualise un compte importé (ex. export NetSoins). Clé (app_id,
+   * login) : un ré-import met à jour l'existant. Champs MINIMAUX uniquement.
+   * @returns {'inserted'|'updated'}
+   */
+  upsertImportedAccount({ appId, login, nom = '', prenom = '', email = '', etablissement = '', profil = '', actif = 1 }) {
+    const existed = api.loginExists(appId, login);
+    db.prepare(
+      `INSERT INTO created_accounts (app_id, login, nom, prenom, email, etablissement, profil, actif, source, updated_at)
+         VALUES (@appId, @login, @nom, @prenom, @email, @etablissement, @profil, @actif, 'import', datetime('now'))
+       ON CONFLICT(app_id, login) DO UPDATE SET
+         nom = excluded.nom, prenom = excluded.prenom, email = excluded.email,
+         etablissement = excluded.etablissement, profil = excluded.profil,
+         actif = excluded.actif, source = 'import', updated_at = datetime('now')`
+    ).run({ appId, login, nom, prenom, email, etablissement, profil, actif: actif ? 1 : 0 });
+    return existed ? 'updated' : 'inserted';
+  },
+
+  /** Comptes du registre rattachés à un ensemble d'établissements (espace référent). */
+  accountsForEtablissements(appId, etabValues) {
+    const values = (etabValues || []).map(String).filter(Boolean);
+    if (values.length === 0) return [];
+    const placeholders = values.map(() => '?').join(',');
+    return db
+      .prepare(
+        `SELECT * FROM created_accounts
+          WHERE app_id = ? AND etablissement IN (${placeholders})
+          ORDER BY nom, prenom`
+      )
+      .all(appId, ...values);
+  },
+
+  /** Comptes importés par application (pour le récap admin). */
+  countImportedAccounts(appId) {
+    return db
+      .prepare(`SELECT COUNT(*) AS n FROM created_accounts WHERE app_id = ? AND source = 'import'`)
+      .get(appId).n;
   },
 
   // --- Statistiques détaillées (tableau de bord) ----------------------------
