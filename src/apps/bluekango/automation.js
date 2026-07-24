@@ -61,32 +61,59 @@ function toFrDate(iso) {
 }
 
 /**
+ * Motif du lien de choix de profil affiché après connexion
+ * (« Prénom Nom ÉTABLISSEMENT »). L'établissement du compte admin varie :
+ *  - BLUEKANGO_PROFILE_LINK (env) permet de forcer un libellé exact ;
+ *  - sinon on reconnaît le lien par le NOM de l'établissement, dérivé de la
+ *    liste des établissements du config (partie avant « - »). Ainsi le lien
+ *    « Achraf Maatoug COMBS LA VILLE » correspond via « COMBS LA VILLE ».
+ */
+function profileLinkPattern() {
+  if (process.env.BLUEKANGO_PROFILE_LINK) {
+    return new RegExp(process.env.BLUEKANGO_PROFILE_LINK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  }
+  const noms = config.formSchema.sections[1].fields
+    .find((f) => f.name === 'etablissement').options
+    .map((o) => o.label.split(' - ')[0].trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length) // les libellés longs d'abord (spécificité)
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`(${noms.join('|')})`, 'i');
+}
+
+/** Clique le profil sur la page de choix (si elle apparaît). Non bloquant. */
+async function selectProfile(page, log) {
+  const link = page.getByRole('link', { name: profileLinkPattern() }).first();
+  if (await link.isVisible().catch(() => false)) {
+    const label = await link.textContent().catch(() => '');
+    await link.click({ timeout: 8000 }).catch(() => {});
+    if (log && label) log(`Profil sélectionné : « ${label.trim()} »`);
+  }
+}
+
+/**
  * Ferme les fenêtres d'accueil qui s'ouvrent parfois juste après la connexion
  * (ex. « Pyramide documentaire »), et qui recouvrent le menu Administration.
  * Non bloquant : on tente plusieurs stratégies de fermeture puis on continue.
  */
 async function dismissWelcomePopups(page, log) {
+  // N'agit QUE si une fenêtre fancybox est réellement ouverte (sinon on ne
+  // touche à rien — parcours nominal inchangé).
+  const overlay = page.locator('.fancybox-overlay, .fancybox-wrap').first();
+  if (!(await overlay.isVisible().catch(() => false))) return;
   for (let i = 0; i < 3; i++) {
-    let closed = false;
-    // Boutons/liens de fermeture usuels (croix fancybox, « Fermer »).
     const closers = [
       page.locator('.fancybox-close, .fancybox-item-close, a.fancybox-close').first(),
       page.getByRole('button', { name: /Fermer/i }).first(),
       page.getByTitle(/Fermer|Close/i).first(),
     ];
+    let clicked = false;
     for (const c of closers) {
-      if (await c.isVisible().catch(() => false)) {
-        await c.click({ timeout: 2000 }).catch(() => {});
-        closed = true;
-        break;
-      }
+      if (await c.isVisible().catch(() => false)) { await c.click({ timeout: 2000 }).catch(() => {}); clicked = true; break; }
     }
-    if (!closed) await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(600).catch(() => {});
-    // Plus de fenêtre fancybox visible : on peut sortir.
-    const stillOpen = await page.locator('.fancybox-overlay, .fancybox-wrap').first().isVisible().catch(() => false);
-    if (!stillOpen && closed) { if (log) log('Fenêtre d’accueil fermée'); return; }
-    if (!stillOpen && !closed) return;
+    if (!clicked) await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(500).catch(() => {});
+    if (!(await overlay.isVisible().catch(() => false))) { if (log) log('Fenêtre d’accueil fermée'); return; }
   }
 }
 
@@ -180,9 +207,8 @@ async function createAccount(data, ctx) {
           await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
           await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
           await page.getByRole('button', { name: S.login.submitLabel }).click();
-          // Page de choix de profil éventuelle ("Prénom Nom SIEGE").
-          const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
-          await profile.click({ timeout: 8000 }).catch(() => {});
+          // Page de choix de profil éventuelle (« Prénom Nom ÉTABLISSEMENT »).
+          await selectProfile(page, ctx.log);
           // Ferme une éventuelle fenêtre d'accueil (Pyramide documentaire…).
           await dismissWelcomePopups(page, ctx.log);
           await page.getByText(S.nav.administration).first().waitFor({ timeout: 45000 });
@@ -493,8 +519,7 @@ async function resetPassword(data, ctx) {
         await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
         await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
         await page.getByRole('button', { name: S.login.submitLabel }).click();
-        const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
-        await profile.click({ timeout: 8000 }).catch(() => {});
+        await selectProfile(page, ctx.log);
         await dismissWelcomePopups(page, ctx.log);
         await page.getByText(S.nav.administration).first().waitFor({ timeout: 45000 });
       },
