@@ -6,13 +6,13 @@
  */
 
 const CHART = {
-  pine: '#2f5fda',   /* série principale : bleu accent */
-  terra: '#b54708',  /* série secondaire : ambre foncé */
-  gold: '#7a5af8',   /* accent : violet doux */
-  info: '#175cd3',
-  line: '#e4e7ec',
-  muted: '#667085',
-  ink: '#101828',
+  pine: '#6b8ff2',   /* série principale : bleu clair (fond sombre) */
+  terra: '#e3b74f',  /* série secondaire : or */
+  gold: '#e3b74f',   /* accent : or */
+  info: '#6b8ff2',
+  line: '#242e52',
+  muted: '#8b96b5',
+  ink: '#e8ecf7',
 };
 
 function chartEmpty(msg) {
