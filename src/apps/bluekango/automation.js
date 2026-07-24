@@ -81,13 +81,22 @@ function profileLinkPattern() {
   return new RegExp(`(${noms.join('|')})`, 'i');
 }
 
-/** Clique le profil sur la page de choix (si elle apparaît). Non bloquant. */
+/**
+ * Clique un profil sur la page de choix (si elle apparaît). Peu importe LEQUEL :
+ * l'établissement demandé par le client est sélectionné ensuite (étape
+ * « etablissement » via le menu #change_etab). Non bloquant.
+ */
 async function selectProfile(page, log) {
-  const link = page.getByRole('link', { name: profileLinkPattern() }).first();
+  // 1) Repérage par nom d'établissement (ou BLUEKANGO_PROFILE_LINK forcé).
+  let link = page.getByRole('link', { name: profileLinkPattern() }).first();
+  // 2) Repli générique : un lien « Prénom Nom ÉTABLISSEMENT » (≥ 3 mots).
+  if (!(await link.isVisible().catch(() => false))) {
+    link = page.getByRole('link', { name: /\S+\s+\S+\s+\S+/ }).first();
+  }
   if (await link.isVisible().catch(() => false)) {
     const label = await link.textContent().catch(() => '');
     await link.click({ timeout: 8000 }).catch(() => {});
-    if (log && label) log(`Profil sélectionné : « ${label.trim()} »`);
+    if (log && label) log(`Profil sélectionné : « ${label.trim()} » (l'établissement demandé sera choisi ensuite)`);
   }
 }
 
