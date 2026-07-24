@@ -134,6 +134,7 @@
     reinit_mdp: 'Mot de passe réinitialisé (robot)',
     depot_ajout_etab: 'Ajout d’établissement déposé',
     ajout_etab: 'Établissement ajouté (robot)',
+    admin_consultation_identifiants: 'Identifiants consultés (admin)',
   };
   let journalEntries = [];
   async function loadJournal() {
@@ -219,7 +220,7 @@
     if (!vis.length) { el('rows').innerHTML = `<tr><td colspan="7" class="loading">${requests.length ? 'Aucune demande ne correspond aux filtres.' : 'Aucune demande.'}</td></tr>`; return; }
     el('rows').innerHTML = vis.map((r) => `<tr>
       <td><span class="ref">${escapeHtml(r.reference)}</span></td>
-      <td>${escapeHtml(r.app)}${r.type === 'reset_mdp' ? ' <span class="badge st-en_cours" style="font-size:.68rem">Réinit. mdp</span>' : r.type === 'ajout_etab' ? ' <span class="badge st-en_attente" style="font-size:.68rem">Ajout étab.</span>' : ''}</td>
+      <td>${escapeHtml(r.app)} ${typeBadge(r.type)}</td>
       <td><span class="who">${escapeHtml(who(r.payload))}<small>${escapeHtml(r.payload?.email || '')}</small></span></td>
       <td>${escapeHtml(r.demandeur || '—')}</td>
       <td>${formatDate(r.createdAt)}</td>
@@ -255,7 +256,7 @@
       ${r.credentialLink ? `<p style="margin-top:6px;font-size:.88rem">Lien d'identifiants : ${r.credentialLink.viewedAt
           ? `<span class="badge st-terminee">Consulté</span> le ${formatDate(r.credentialLink.viewedAt)}${r.credentialLink.viewedBy ? ' par ' + escapeHtml(r.credentialLink.viewedBy) : ''}`
           : `<span class="badge st-en_attente">Non consulté</span> — expire le ${formatDate(r.credentialLink.expiresAt)}`}</p>` : ''}
-      ${r.status === 'terminee' && r.login ? `<p style="margin-top:6px"><button class="btn btn-ghost btn-sm" id="m-newlink">Régénérer un lien d'identifiants</button> <span id="m-newlink-out" style="font-size:.82rem;color:var(--muted)"></span></p>` : ''}
+      ${r.status === 'terminee' && r.login ? `<p style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="m-showcreds">Voir identifiant + mot de passe</button><button class="btn btn-ghost btn-sm" id="m-newlink">Régénérer un lien d'identifiants</button></p><div id="m-creds-out" style="font-size:.88rem;margin-top:4px"></div><span id="m-newlink-out" style="font-size:.82rem;color:var(--muted)"></span>` : ''}
       ${r.message ? `<p style="margin-top:8px;font-size:.9rem"><strong>Résultat :</strong> ${escapeHtml(r.message)}</p>` : ''}
       <h4>Informations saisies</h4><dl class="kv">${payloadRows}</dl>
       ${emails}
@@ -263,6 +264,17 @@
       <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;margin-top:8px;display:flex;gap:10px">${r.status === 'echec' ? `<button class="btn btn-ghost" id="m-retry">Relancer</button>` : ''}<button class="btn btn-primary" id="m-close">Fermer</button></div>`;
     modal.querySelector('#m-close').addEventListener('click', closeModal);
     const rt = modal.querySelector('#m-retry'); if (rt) rt.addEventListener('click', () => retry(r.id, rt));
+    const sc = modal.querySelector('#m-showcreds');
+    if (sc) sc.addEventListener('click', async () => {
+      sc.disabled = true;
+      try {
+        const c = await fetchJson(`/api/admin/requests/${r.id}/credentials`);
+        modal.querySelector('#m-creds-out').innerHTML =
+          `<div class="kv" style="margin-top:4px"><dt>Identifiant</dt><dd><span class="ref" style="user-select:all">${escapeHtml(c.login)}</span></dd>` +
+          `<dt>Mot de passe</dt><dd><span class="ref" style="user-select:all">${escapeHtml(c.password || '—')}</span></dd></div>` +
+          `<p style="font-size:.78rem;color:var(--muted);margin-top:4px">Consultation enregistrée au journal. À communiquer uniquement au bénéficiaire concerné.</p>`;
+      } catch (e) { toast(e.message, true); sc.disabled = false; }
+    });
     const nl = modal.querySelector('#m-newlink');
     if (nl) nl.addEventListener('click', async () => {
       nl.disabled = true;
@@ -279,6 +291,17 @@
 
   const EMAIL_LABELS = { a_envoyer: 'À envoyer', envoye: 'Envoyé', erreur: 'Erreur' };
   function statusBadge2(st) { const cls = st === 'envoye' ? 'st-terminee' : st === 'erreur' ? 'st-echec' : 'st-en_attente'; return `<span class="badge ${cls}">${EMAIL_LABELS[st] || st}</span>`; }
+
+  // Étiquette du type de demande (création / réinit. mdp / ajout établissement).
+  function typeBadge(type) {
+    const map = {
+      reset_mdp: ['Réinit. mdp', 'st-en_cours'],
+      ajout_etab: ['Ajout étab.', 'st-en_attente'],
+      creation: ['Création', 'st-terminee'],
+    };
+    const [label, cls] = map[type] || map.creation;
+    return `<span class="badge ${cls}" style="font-size:.68rem">${label}</span>`;
+  }
 
   // ========================================================================
   // E-mails (boîte d'envoi)

@@ -399,6 +399,17 @@ app.post('/api/admin/requests/:id/credential-link', auth.requireApi, (req, res) 
   res.json({ ok: true, url: link.url, expiresAt: link.expiresAt, ttlDays: link.ttlDays });
 });
 
+// Consultation directe par l'admin de l'identifiant + mot de passe d'une
+// demande (dépannage : le bénéficiaire les a oubliés). Toujours audité.
+app.get('/api/admin/requests/:id/credentials', auth.requireApi, (req, res) => {
+  const row = db.getById(Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+  if (!row.generated_login) return res.status(409).json({ error: 'Aucun identifiant pour cette demande' });
+  const password = credentials.passwordForRequest(row.id) || credentials.initialPasswordFor(row.app_id) || null;
+  db.audit(req.admin.username, 'admin_consultation_identifiants', row.reference, row.generated_login, sso.clientIp(req));
+  res.json({ login: row.generated_login, password });
+});
+
 app.post('/api/admin/requests/:id/retry', auth.requireApi, (req, res) => {
   const ok = db.requeue(Number(req.params.id));
   if (!ok) return res.status(409).json({ error: 'Seule une demande en échec peut être relancée' });

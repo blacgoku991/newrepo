@@ -61,14 +61,14 @@ function toFrDate(iso) {
 }
 
 /**
- * Mot de passe provisoire ALÉATOIRE (réinitialisation) : BlueKanGo refuse un
- * mot de passe déjà utilisé récemment, on ne peut donc pas remettre celui par
- * défaut. Respecte la complexité : majuscule, minuscules, chiffres, spécial.
+ * Mot de passe provisoire (réinitialisation). Simple et lisible, dans le même
+ * esprit que le mot de passe par défaut (« Adefresidences2026 ») : un mot avec
+ * une majuscule + des chiffres qui CHANGENT à chaque fois — car BlueKanGo
+ * refuse de remettre un mot de passe déjà utilisé récemment.
  */
 function randomProvisionalPassword() {
   const crypto = require('node:crypto');
-  const core = crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
-  return `Adef${core}${crypto.randomInt(10, 99)}!`;
+  return `Adefresidences${crypto.randomInt(1000, 9999)}`;
 }
 
 /**
