@@ -61,6 +61,23 @@ function toFrDate(iso) {
 }
 
 /**
+ * Motif du lien de choix de profil affiché après connexion. Le lien a la forme
+ * « Prénom Nom ÉTABLISSEMENT » (ex. « Achraf Maatoug COMBS LA VILLE ») : on le
+ * repère par le NOM DE L'ÉTABLISSEMENT (dérivé de la liste du config, partie
+ * avant « - »). Ainsi on clique le bon profil et jamais un autre lien de la
+ * page (bannières, etc.). L'établissement du compte admin varie sans impact.
+ */
+function profileLinkPattern() {
+  const noms = config.formSchema.sections[1].fields
+    .find((f) => f.name === 'etablissement').options
+    .map((o) => o.label.split(' - ')[0].trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`(${noms.join('|')})`, 'i');
+}
+
+/**
  * Recherche le select d'établissement (« Etablissements : XXX » en haut à
  * droite) dans TOUTES les frames de la page. BlueKanGo classique utilise
  * d'anciens <frame> (frameset), pas des <iframe> : on itère donc sur
@@ -136,7 +153,7 @@ async function createAccount(data, ctx) {
           await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
           await page.getByRole('button', { name: S.login.submitLabel }).click();
           // Page de choix de profil éventuelle ("Prénom Nom SIEGE").
-          const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
+          const profile = page.getByRole('link', { name: profileLinkPattern() }).first();
           await profile.click({ timeout: 8000 }).catch(() => {});
           await page.getByText(S.nav.administration).first().waitFor();
         },
@@ -376,7 +393,7 @@ async function resetPassword(data, ctx) {
         await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
         await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
         await page.getByRole('button', { name: S.login.submitLabel }).click();
-        const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
+        const profile = page.getByRole('link', { name: profileLinkPattern() }).first();
         await profile.click({ timeout: 8000 }).catch(() => {});
         await page.getByText(S.nav.administration).first().waitFor();
       },
