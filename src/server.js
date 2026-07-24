@@ -51,6 +51,35 @@ app.use((req, res, next) => {
 // notre propre origine (ou d'une origine explicitement autorisée via CORS).
 app.use(security.csrfOriginCheck(ALLOWED_ORIGINS));
 
+// ---------------------------------------------------------------------------
+// Porte d'entrée SSO globale — site fermé par défaut.
+// Quand le SSO Microsoft 365 est actif, AUCUNE page ni API n'est accessible
+// sans session, à l'exception de :
+//  - le parcours de connexion lui-même (/connexion, /auth/sso/*) ;
+//  - l'espace admin, qui a sa propre authentification (login + sessions) ;
+//  - les ressources statiques sans données (css, js, images, polices) ;
+//  - la console démo, réservée au robot (même machine) ou à un utilisateur SSO.
+// Toute route ajoutée plus tard est donc protégée automatiquement.
+// ---------------------------------------------------------------------------
+app.use((req, res, next) => {
+  if (!sso.required()) return next();
+  const p = req.path;
+  if (p.startsWith('/auth/sso/') || p === '/connexion' || p === '/connexion.html') return next();
+  if (p === '/login.html' || p === '/admin' || p === '/admin.html' || p.startsWith('/artifacts')) return next();
+  if (p.startsWith('/api/auth/') || p.startsWith('/api/admin/') || p === '/api/sso/me') return next();
+  if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/img/') || p.startsWith('/vendor/') || p === '/favicon.ico') return next();
+  if (p.startsWith('/demo')) {
+    const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+    if (local || sso.currentUser(req)) return next();
+    return res.status(403).send('Accès réservé');
+  }
+  if (sso.currentUser(req)) return next();
+  if (p.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Connexion Microsoft 365 requise', sso: true });
+  }
+  return res.redirect(`/connexion?next=${encodeURIComponent(req.originalUrl || '/')}`);
+});
+
 // Compte administrateur initial + purge des sessions expirées au démarrage.
 auth.ensureSeedAdmin();
 db.purgeExpiredSessions();
@@ -74,10 +103,9 @@ app.get('/api/sso/me', (req, res) => {
   res.json({ enabled: sso.required(), user: sso.currentUser(req) });
 });
 
-// Pages publiques protégées par le SSO (statiques et ressources exclues).
-app.get(['/', '/index.html', '/demande.html', '/suivi.html'], sso.requirePage, (req, res) => {
-  const file = req.path === '/' ? 'index.html' : req.path.slice(1);
-  res.sendFile(path.join(PUBLIC_DIR, file));
+// URL propre de la page de connexion (sert /connexion.html).
+app.get('/connexion', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'connexion.html'));
 });
 
 // Pages/fichiers d'administration protégés (avant le service statique global).

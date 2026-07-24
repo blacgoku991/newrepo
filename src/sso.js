@@ -162,7 +162,7 @@ async function callbackRoute(req, res) {
       .send(
         `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:40px">` +
           `<h2>Connexion Microsoft 365 refusée</h2><p>${String(err.message).replace(/</g, '&lt;')}</p>` +
-          `<p><a href="/connexion.html">Réessayer</a></p></body>`
+          `<p><a href="/connexion">Réessayer</a></p></body>`
       );
   }
 }
@@ -177,11 +177,11 @@ function logoutRoute(req, res) {
 
 // --- Middlewares ----------------------------------------------------------
 
-/** Pages publiques : redirige vers /connexion.html si non connecté en SSO. */
+/** Pages publiques : redirige vers /connexion si non connecté en SSO. */
 function requirePage(req, res, next) {
   if (!required() || currentUser(req)) return next();
   const target = encodeURIComponent(req.originalUrl || '/');
-  res.redirect(`/connexion.html?next=${target}`);
+  res.redirect(`/connexion?next=${target}`);
 }
 
 /** API publiques : 401 JSON (le frontend redirige vers /connexion.html). */

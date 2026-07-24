@@ -91,7 +91,7 @@ async function fetchJson(url, options) {
   if (!res.ok) {
     // Session SSO Microsoft 365 absente ou expirée : retour à la connexion.
     if (res.status === 401 && body.sso) {
-      location.href = '/connexion.html?next=' + encodeURIComponent(location.pathname + location.search);
+      location.href = '/connexion?next=' + encodeURIComponent(location.pathname + location.search);
       return new Promise(() => {}); // la navigation interrompt le script
     }
     const err = new Error(body.error || `Erreur ${res.status}`);
