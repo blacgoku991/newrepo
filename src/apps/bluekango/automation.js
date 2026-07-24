@@ -61,6 +61,36 @@ function toFrDate(iso) {
 }
 
 /**
+ * Ferme les fenêtres d'accueil qui s'ouvrent parfois juste après la connexion
+ * (ex. « Pyramide documentaire »), et qui recouvrent le menu Administration.
+ * Non bloquant : on tente plusieurs stratégies de fermeture puis on continue.
+ */
+async function dismissWelcomePopups(page, log) {
+  for (let i = 0; i < 3; i++) {
+    let closed = false;
+    // Boutons/liens de fermeture usuels (croix fancybox, « Fermer »).
+    const closers = [
+      page.locator('.fancybox-close, .fancybox-item-close, a.fancybox-close').first(),
+      page.getByRole('button', { name: /Fermer/i }).first(),
+      page.getByTitle(/Fermer|Close/i).first(),
+    ];
+    for (const c of closers) {
+      if (await c.isVisible().catch(() => false)) {
+        await c.click({ timeout: 2000 }).catch(() => {});
+        closed = true;
+        break;
+      }
+    }
+    if (!closed) await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(600).catch(() => {});
+    // Plus de fenêtre fancybox visible : on peut sortir.
+    const stillOpen = await page.locator('.fancybox-overlay, .fancybox-wrap').first().isVisible().catch(() => false);
+    if (!stillOpen && closed) { if (log) log('Fenêtre d’accueil fermée'); return; }
+    if (!stillOpen && !closed) return;
+  }
+}
+
+/**
  * Recherche le select d'établissement (« Etablissements : XXX » en haut à
  * droite) dans TOUTES les frames de la page. BlueKanGo classique utilise
  * d'anciens <frame> (frameset), pas des <iframe> : on itère donc sur
@@ -153,7 +183,9 @@ async function createAccount(data, ctx) {
           // Page de choix de profil éventuelle ("Prénom Nom SIEGE").
           const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
           await profile.click({ timeout: 8000 }).catch(() => {});
-          await page.getByText(S.nav.administration).first().waitFor();
+          // Ferme une éventuelle fenêtre d'accueil (Pyramide documentaire…).
+          await dismissWelcomePopups(page, ctx.log);
+          await page.getByText(S.nav.administration).first().waitFor({ timeout: 45000 });
         },
       },
       {
@@ -161,6 +193,7 @@ async function createAccount(data, ctx) {
         critical: true,
         label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
         run: async () => {
+          await dismissWelcomePopups(page, ctx.log);
           await page.getByText(S.nav.administration).first().click();
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
@@ -324,7 +357,10 @@ async function createAccount(data, ctx) {
           //                revalidation (rattachement au nouvel établissement) ;
           //  - homonyme  : AUTRE personne → identifiant suivant puis revalidation ;
           //  - premier   : situation inattendue → échec explicite, un humain tranche.
-          const mode = data.compte_existant || 'premier';
+          // Mode : 'ajout' (démarche dédiée, identifiant imposé) ou, en création,
+          // 'homonyme' par défaut — l'avertissement « déjà défini » signifie alors
+          // qu'un homonyme existe : on prend l'identifiant suivant automatiquement.
+          const mode = data.compte_existant || (fixedLogin ? 'ajout' : 'homonyme');
           for (let attempt = 1; attempt <= 6; attempt++) {
             await main().getByRole('button', { name: S.form.validerLabel }).click();
             await page.waitForTimeout(2500).catch(() => {});
@@ -459,7 +495,8 @@ async function resetPassword(data, ctx) {
         await page.getByRole('button', { name: S.login.submitLabel }).click();
         const profile = page.getByRole('link', { name: S.login.profileLinkPattern }).first();
         await profile.click({ timeout: 8000 }).catch(() => {});
-        await page.getByText(S.nav.administration).first().waitFor();
+        await dismissWelcomePopups(page, ctx.log);
+        await page.getByText(S.nav.administration).first().waitFor({ timeout: 45000 });
       },
     },
     {
