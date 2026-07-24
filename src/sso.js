@@ -52,10 +52,9 @@ function b64url(buf) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function clientIp(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return fwd || req.socket?.remoteAddress || '';
-}
+// Source unique de vérité pour l'adresse IP : ne fait confiance à
+// « X-Forwarded-For » que derrière un reverse proxy déclaré (voir security.js).
+const { clientIp } = require('./security');
 
 function parseCookies(req) {
   const out = {};

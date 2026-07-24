@@ -51,4 +51,24 @@ function resolve(req) {
   return ref && ref.active ? ref : null;
 }
 
-module.exports = { establishmentsFor, labelFor, enforced, resolve };
+/** Valeurs d'établissement rattachées à ce référent pour une application. */
+function allowedEtablissements(ref, appId) {
+  return ((ref && ref.etablissements) || [])
+    .filter((e) => e.appId === appId)
+    .map((e) => String(e.value));
+}
+
+/**
+ * Le référent est-il habilité sur cet établissement ?
+ *
+ * Être référent ne suffit pas : chaque demande porte sur un établissement
+ * précis, et agir dessus (créer un compte, réinitialiser un mot de passe,
+ * rattacher un établissement) donne accès aux données de cet établissement.
+ * Sans ce contrôle, un référent pourrait viser n'importe quel établissement du
+ * groupe en modifiant simplement la valeur envoyée.
+ */
+function allows(ref, appId, value) {
+  return allowedEtablissements(ref, appId).includes(String(value));
+}
+
+module.exports = { establishmentsFor, labelFor, enforced, resolve, allowedEtablissements, allows };

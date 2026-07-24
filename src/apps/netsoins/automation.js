@@ -113,6 +113,24 @@ function etabLabel(value) {
 }
 
 /**
+ * NetSoins valide toute la fiche d'un coup et ouvre une fenêtre « Il y a des
+ * erreurs » si un champ obligatoire manque. Rencontrer cette fenêtre en cours
+ * de saisie signifie que le formulaire a été soumis trop tôt : on s'arrête avec
+ * un message clair plutôt que de poursuivre sur une fiche déjà en erreur.
+ */
+async function assertPasDErreur(page, S, etape) {
+  let visible = false;
+  try {
+    visible = await L(page, S.errorDialog).first().isVisible({ timeout: 800 });
+  } catch {
+    visible = false; // absence de la fenêtre : cas nominal
+  }
+  if (visible) {
+    throw new Error(`NetSoins signale « Il y a des erreurs » après l'étape « ${etape} » : la fiche a été soumise avant d'être complète`);
+  }
+}
+
+/**
  * Retrouve le bouton d'enregistrement en essayant les écritures déclarées dans
  * `selectors.save`, du plus précis au plus large. En cas d'échec total, liste
  * les boutons réellement présents sur la page : le journal devient alors un
@@ -326,7 +344,11 @@ async function createAccount(data, ctx) {
           await dl.click();
           await dl.press('ControlOrMeta+a');
           await dl.fill(frDate(data.date_fin));
-          await dl.press('Enter');
+          // Surtout PAS de validation par « Entrée » : dans ce formulaire, cela
+          // envoie la fiche avant que l'onglet Informations soit rempli, et
+          // NetSoins répond « Il y a des erreurs ». Tab referme le sélecteur de
+          // date et valide la saisie sans rien soumettre.
+          await dl.press('Tab');
           ctx.log(`Contrat à durée déterminée : accès limité au ${frDate(data.date_fin)}.`);
         } else {
           ctx.log('Contrat à durée indéterminée : aucune date limite d’accès.');
@@ -338,6 +360,9 @@ async function createAccount(data, ctx) {
         await L(page, S.compte.profilOpen).first().click();
         await L(page, S.compte.profilOption(data.profil_droit)).first().click();
         ctx.log(`Profil de droits appliqué : ${profilLabel(data.profil_droit)}.`);
+
+        // La fiche n'a pas dû partir pendant la saisie (touche Entrée, etc.).
+        await assertPasDErreur(page, S, 'accès limité / date');
 
         // Établissements autorisés (un ou plusieurs).
         await L(page, S.compte.etabOpen).first().click();

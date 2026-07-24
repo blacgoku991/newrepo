@@ -51,9 +51,25 @@ setInterval(() => {
   for (const [key, value] of buckets) if (value.resetAt <= now) buckets.delete(key);
 }, 60 * 1000).unref();
 
+/**
+ * Adresse IP du client.
+ *
+ * `X-Forwarded-For` n'est PAS digne de confiance par défaut : n'importe qui
+ * peut l'envoyer, et le faire varier suffirait à réduire à néant le rate
+ * limiting (force brute sur la connexion admin, sur les liens d'identifiants…)
+ * comme à falsifier le journal d'activité. On ne s'y fie que si l'on a été
+ * explicitement prévenu qu'un reverse proxy de confiance est en amont
+ * (TRUST_PROXY=true), ce qui est le seul cas où l'en-tête est réécrit par
+ * l'infrastructure.
+ */
+const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
+
 function clientIp(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return fwd || req.socket?.remoteAddress || 'inconnu';
+  if (TRUST_PROXY) {
+    const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (fwd) return fwd;
+  }
+  return req.socket?.remoteAddress || 'inconnu';
 }
 
 /**

@@ -245,7 +245,9 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
 
   // Habilitation : quand des référents sont configurés, seuls les référents
   // actifs (compte Microsoft 365 dans la liste blanche) peuvent déposer.
-  if (referents.enforced() && !referents.resolve(req)) {
+  const enforce = referents.enforced();
+  const referent = enforce ? referents.resolve(req) : null;
+  if (enforce && !referent) {
     const u = sso.currentUser(req);
     db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'depot_refuse_non_referent', '', entry.config.id, sso.clientIp(req));
     return res.status(403).json({
@@ -274,6 +276,30 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const { data, errors } = validate(schema, body);
   if (Object.keys(errors).length > 0) {
     return res.status(422).json({ error: 'Formulaire invalide', fields: errors });
+  }
+
+  // Cloisonnement par établissement : le référent ne peut agir QUE sur ses
+  // établissements. Sans ce contrôle, il suffirait de modifier la valeur
+  // envoyée pour créer un compte — ou réinitialiser un mot de passe, et donc
+  // en récupérer le nouveau — dans n'importe quel établissement du groupe.
+  if (enforce) {
+    const cibles = [data.etablissement, ...(data.etablissements_autorises || [])]
+      .filter(Boolean)
+      .map(String);
+    const horsPerimetre = [...new Set(cibles)].filter((v) => !referents.allows(referent, entry.config.id, v));
+    if (horsPerimetre.length > 0) {
+      const u = sso.currentUser(req);
+      db.audit(
+        u ? `${u.name} <${u.email}>` : 'inconnu',
+        'depot_refuse_hors_perimetre',
+        '',
+        `${entry.config.id} — ${horsPerimetre.join(', ')}`,
+        sso.clientIp(req)
+      );
+      return res.status(403).json({
+        error: "Vous n'êtes pas référent de l'établissement visé par cette demande.",
+      });
+    }
   }
 
   // Traçabilité : l'adresse IP d'origine et l'identité Microsoft 365 sont conservées.

@@ -111,6 +111,10 @@ module.exports = {
   // Bouton d'enregistrement. Sa forme varie d'un écran à l'autre (bouton,
   // champ de saisie, lien, conteneur « EnregistrerOnglet suivant »…) : on tente
   // les écritures dans l'ordre et on retient la première qui répond.
+  // Fenêtre d'erreur de validation de NetSoins. Sa présence signifie que la
+  // fiche a été soumise trop tôt : mieux vaut le dire que continuer à l'aveugle.
+  errorDialog: 'text=Il y a des erreurs',
+
   save: [
     'button:Enregistrer',
     'input[value="Enregistrer" i]',
