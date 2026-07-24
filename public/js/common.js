@@ -129,16 +129,30 @@ function renderFooter() {
         </span>
       </div>
     </div>`;
-  for (const img of host.querySelectorAll('img[data-fallback]')) {
-    img.addEventListener('error', () => {
+}
+
+/* Repli texte pour toute image marquée data-fallback (logos éditeurs, logo
+ * Algonis en en-tête). Gère aussi le cas où l'image a déjà échoué avant
+ * l'attachement de l'écouteur. Aucun gestionnaire inline (CSP stricte). */
+function attachImgFallbacks() {
+  for (const img of document.querySelectorAll('img[data-fallback]')) {
+    if (img._fbBound) continue;
+    img._fbBound = true;
+    const swap = () => {
       const span = document.createElement('span');
       span.className = img.dataset.fallbackCls || '';
       span.textContent = img.dataset.fallback;
       img.replaceWith(span);
-    });
+    };
+    img.addEventListener('error', swap);
+    if (img.complete && img.naturalWidth === 0) swap();
   }
 }
-document.addEventListener('DOMContentLoaded', renderFooter);
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderFooter();
+  attachImgFallbacks();
+});
 
 /* Barre de navigation du site public :
  *  - masque les onglets désactivés depuis l'admin (config « nav ») ;

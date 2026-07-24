@@ -99,6 +99,11 @@ a:hover { text-decoration: underline; }
 .brand .name { font-size: 1.14rem; letter-spacing: .01em; }
 .brand .name b { font-weight: 650; }
 .brand .name span { color: var(--muted); font-weight: 400; font-family: var(--font); font-size: .9rem; }
+/* Logo Algonis en en-tête (image) + repli texte si l'image ne charge pas. */
+.brand .brand-logo { height: 30px; width: auto; display: block; }
+.brand .brand-fallback { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: #fff; }
+.brand .brand-sub { color: var(--muted); font-weight: 400; font-family: var(--font); font-size: .9rem; padding-left: 2px; border-left: 1px solid var(--line-2); padding-left: 12px; margin-left: 2px; }
+@media (max-width: 540px) { .brand .brand-sub { display: none; } }
 .topnav { display: flex; align-items: center; gap: 6px; }
 .topnav a { color: var(--ink-2); font-weight: 600; font-size: .93rem; padding: 8px 14px; border-radius: 9px; transition: background .15s, color .15s; }
 .topnav a:hover { background: rgba(255,255,255,.06); text-decoration: none; color: #fff; }

@@ -27,7 +27,9 @@ const PORT = Number(process.env.PORT || 3000);
 // « admin » (lien Administration) est masqué par défaut : l'accès se fait par
 // /admin.html directement. Les autres onglets sont visibles par défaut.
 const NAV_KEYS = ['apps', 'demarches', 'espace', 'suivi', 'admin'];
-const NAV_DEFAULT = { apps: true, demarches: true, espace: true, suivi: true, admin: false };
+// Par défaut : « Applications » et « Démarches » masqués (les démarches passent
+// par l'espace référent), « Administration » masquée (accès par /admin.html).
+const NAV_DEFAULT = { apps: false, demarches: false, espace: true, suivi: true, admin: false };
 function siteNav() {
   const saved = db.getSetting('site_nav', {}) || {};
   const out = {};
