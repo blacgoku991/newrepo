@@ -56,6 +56,19 @@
     /* SSO non configuré : champs demandeur libres */
   }
 
+  // Pré-remplissage depuis l'espace référent : l'identifiant du compte est déjà
+  // connu (bouton « Réinitialiser » / « Ajouter un établissement »). On le
+  // verrouille pour éviter toute faute de frappe. En réinitialisation,
+  // l'établissement d'origine est aussi connu et figé ; en ajout d'établissement
+  // au contraire, l'établissement saisi est le NOUVEAU, donc laissé libre.
+  for (const key of ['identifiant', 'etablissement']) {
+    const v = params.get(key);
+    if (v && key in values) {
+      values[key] = v;
+      if (key === 'identifiant' || (key === 'etablissement' && resetMode)) lockedFields.add(key);
+    }
+  }
+
   // Mode « plusieurs comptes » : chaque entrée est un jeu de valeurs complet
   // déjà validé. Le compte en cours de saisie est dans `values`.
   const batch = [];
@@ -196,13 +209,15 @@
     let control = '';
 
     switch (field.type) {
-      case 'select':
+      case 'select': {
+        const locked = lockedFields.has(field.name) ? ' disabled title="Rempli automatiquement"' : '';
         control = `
-          <select name="${escapeHtml(field.name)}">
+          <select name="${escapeHtml(field.name)}"${locked}>
             <option value="">— Sélectionner —</option>
             ${field.options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
           </select>`;
         break;
+      }
       case 'radio':
         control = `
           <div class="choices">

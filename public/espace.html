@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mon espace — Algonis</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23101731'/><text x='50' y='70' font-size='54' text-anchor='middle' fill='%23E9C05C' font-family='Arial' font-weight='bold'>A</text></svg>" />
+  <style>
+    .esp-wrap { max-width: 1080px; margin: 0 auto; padding: 44px 24px 72px; }
+    .esp-head { margin-bottom: 26px; }
+    .esp-head h1 { font-size: clamp(1.5rem, 3vw, 2.1rem); color: #fff; }
+    .esp-head p { color: var(--muted); margin-top: 8px; }
+    .etab-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .etab-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+                 background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); font-size: .84rem; font-weight: 600; }
+    .etab-chip svg { width: 15px; height: 15px; }
+    .esp-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 34px 0 14px; }
+    .esp-section-head h2 { font-size: 1.18rem; color: #fff; }
+    .esp-section-head .hint { color: var(--faint); font-size: .84rem; }
+    .acc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .acc-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .acc-card .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .acc-card .who { font-weight: 650; color: #fff; font-size: 1.02rem; }
+    .acc-card .acc-login { font-family: var(--mono); font-size: .9rem; color: var(--gold-bright); margin-top: 3px; }
+    .acc-card .meta { color: var(--muted); font-size: .85rem; line-height: 1.6; }
+    .acc-card .meta b { color: var(--text); font-weight: 600; }
+    .acc-card .meta div { display: flex; align-items: center; gap: 7px; }
+    .acc-card .meta svg { width: 15px; height: 15px; flex: none; color: var(--gold-bright); }
+    .acc-card .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 6px; }
+    .acc-card .actions .btn { flex: 1; min-width: 140px; justify-content: center; gap: 7px; }
+    .acc-card .actions .btn svg { width: 15px; height: 15px; flex: none; }
+    .empty-box { background: var(--surface); border: 1px dashed var(--line-2); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; color: var(--muted); }
+    .notauth { max-width: 620px; margin: 60px auto; text-align: center; }
+    .notauth .ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; margin: 0 auto 18px; background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }
+    .notauth .ic svg { width: 30px; height: 30px; }
+    .notauth h1 { color: #fff; font-size: 1.5rem; }
+    .notauth p { color: var(--muted); margin-top: 12px; }
+  </style>
+</head>
+<body class="public">
+  <header class="topbar">
+    <div class="inner">
+      <a class="brand" href="/">
+        <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="name"><b>Algonis</b> <span>Accès applications</span></span>
+      </a>
+      <nav class="topnav">
+        <a href="/">Applications</a>
+        <a href="/demarches.html">Démarches</a>
+        <a href="/espace" class="active">Mon espace</a>
+        <a href="/suivi.html">Suivre une demande</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="esp-wrap" id="esp">
+      <div class="loading">Chargement de votre espace…</div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="inner">
+      <span>© Algonis — création automatisée de comptes sur les applications métiers.</span>
+      <span><a href="/suivi.html">Suivi</a></span>
+    </div>
+  </footer>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/espace.js"></script>
+</body>
+</html>

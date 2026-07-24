@@ -10,6 +10,7 @@ const db = require('./db');
 const registry = require('./registry');
 const auth = require('./auth');
 const sso = require('./sso');
+const referents = require('./referents');
 const stats = require('./stats');
 const { validate } = require('./validate');
 const { augmentSchema, effectiveSchema, effectiveResetSchema, effectiveExtensionSchema, validateOverrides, requesterLabel } = require('./schema');
@@ -99,13 +100,25 @@ app.get('/auth/sso/callback', security.rateLimit('sso', 30, 10 * 60 * 1000), sso
 app.post('/auth/sso/logout', sso.logoutRoute);
 
 // Identité SSO du visiteur (préremplissage du formulaire + bandeau).
+// `referent` indique si le compte connecté dispose d'un espace personnel.
 app.get('/api/sso/me', (req, res) => {
-  res.json({ enabled: sso.required(), user: sso.currentUser(req) });
+  const ref = referents.resolve(req);
+  res.json({
+    enabled: sso.required(),
+    user: sso.currentUser(req),
+    referent: !!ref,
+    referentEnforced: referents.enforced(),
+  });
 });
 
 // URL propre de la page de connexion (sert /connexion.html).
 app.get('/connexion', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'connexion.html'));
+});
+
+// Espace personnel du référent (protégé par la porte SSO globale).
+app.get('/espace', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'espace.html'));
 });
 
 // ---------------------------------------------------------------------------
@@ -206,6 +219,16 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const entry = registry.getAvailable(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue ou indisponible' });
 
+  // Habilitation : quand des référents sont configurés, seuls les référents
+  // actifs (compte Microsoft 365 dans la liste blanche) peuvent déposer.
+  if (referents.enforced() && !referents.resolve(req)) {
+    const u = sso.currentUser(req);
+    db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'depot_refuse_non_referent', '', entry.config.id, sso.clientIp(req));
+    return res.status(403).json({
+      error: "Votre compte n'est pas habilité à déposer des demandes. Contactez votre administrateur pour être ajouté comme référent de votre établissement.",
+    });
+  }
+
   const isReset = req.query.type === 'reset';
   const isExtension = req.query.type === 'extension';
   const schema = isReset
@@ -295,6 +318,75 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
   const actor = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : row.demandeur || 'suivi';
   db.audit(actor, 'lien_identifiants_regenere', row.reference, row.generated_login, sso.clientIp(req));
   res.json({ path: link.path });
+});
+
+// ---------------------------------------------------------------------------
+// Espace personnel du référent
+// ---------------------------------------------------------------------------
+
+// Comptes et activité des établissements dont l'utilisateur connecté est
+// référent. Un compte non habilité reçoit { referent: null }.
+app.get('/api/espace/me', sso.requireApi, (req, res) => {
+  const user = sso.currentUser(req);
+  const ref = referents.resolve(req);
+  if (!ref) {
+    return res.json({ user, referent: null, enforced: referents.enforced() });
+  }
+
+  // Établissements regroupés par application.
+  const byApp = new Map();
+  for (const e of ref.etablissements) {
+    if (!byApp.has(e.appId)) byApp.set(e.appId, []);
+    byApp.get(e.appId).push(e.value);
+  }
+
+  const accountsMap = new Map(); // comptes créés (uniques par identifiant)
+  const activity = []; // toutes les demandes des établissements
+  for (const [appId, values] of byApp) {
+    const appEntry = registry.get(appId);
+    const appName = appEntry ? appEntry.config.name : appId;
+    for (const row of db.requestsForEtablissements(appId, values)) {
+      const data = JSON.parse(row.payload);
+      const type = row.request_type || 'creation';
+      const login = row.generated_login || data.identifiant || '';
+      activity.push({
+        reference: row.reference,
+        app: appName,
+        appId,
+        type,
+        status: row.status,
+        login: login || null,
+        who: `${data.prenom || ''} ${data.nom || ''}`.trim(),
+        etablissementLabel: referents.labelFor(appId, data.etablissement),
+        createdAt: row.created_at,
+      });
+      if (login && type === 'creation' && row.status === 'terminee') {
+        const key = `${appId}:${login.toLowerCase()}`;
+        if (!accountsMap.has(key)) {
+          accountsMap.set(key, {
+            appId,
+            app: appName,
+            login,
+            nom: data.nom || '',
+            prenom: data.prenom || '',
+            etablissement: String(data.etablissement || ''),
+            etablissementLabel: referents.labelFor(appId, data.etablissement),
+            fonction: data.fonction || '',
+            reference: row.reference,
+            createdAt: row.created_at,
+          });
+        }
+      }
+    }
+  }
+
+  res.json({
+    user,
+    referent: { email: ref.email, nom: ref.nom, prenom: ref.prenom, etablissements: ref.etablissements },
+    accounts: [...accountsMap.values()],
+    activity: activity.slice(0, 200),
+    enforced: referents.enforced(),
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -602,6 +694,73 @@ app.get('/api/admin/accounts', auth.requireApi, (req, res) => {
     };
   });
   res.json({ accounts });
+});
+
+// --- Référents autorisés ---------------------------------------------------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// Valide et normalise les établissements reçus : chaque valeur doit exister
+// dans les options du formulaire de l'application (le libellé vient du serveur,
+// jamais du client).
+function normalizeEtabs(list) {
+  const seen = new Set();
+  const out = [];
+  for (const e of Array.isArray(list) ? list : []) {
+    const appId = String((e && e.appId) || 'bluekango');
+    const value = String((e && e.value) || '').trim();
+    if (!value) continue;
+    const label = referents.labelFor(appId, value);
+    if (!label || label === value) continue; // établissement inconnu → ignoré
+    const key = `${appId}:${value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ appId, value, label });
+  }
+  return out;
+}
+
+app.get('/api/admin/referents', auth.requireApi, (req, res) => {
+  const apps = registry
+    .publicList()
+    .filter((a) => !a.comingSoon)
+    .map((a) => ({ id: a.id, name: a.name, establishments: referents.establishmentsFor(a.id) }))
+    .filter((a) => a.establishments.length);
+  res.json({ referents: db.listReferents(), apps });
+});
+
+app.post('/api/admin/referents', auth.requireApi, (req, res) => {
+  const { email, nom, prenom, etablissements } = req.body || {};
+  const mail = String(email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(mail)) return res.status(422).json({ error: 'Adresse e-mail invalide' });
+  if (db.getReferentByEmail(mail)) return res.status(409).json({ error: 'Un référent avec cet e-mail existe déjà' });
+  const etabs = normalizeEtabs(etablissements);
+  const id = db.createReferent(mail, String(nom || '').trim(), String(prenom || '').trim(), etabs, req.admin.username);
+  db.audit(req.admin.username, 'creation_referent', mail, etabs.map((e) => e.label).join(', '));
+  res.status(201).json({ ok: true, id });
+});
+
+app.put('/api/admin/referents/:id', auth.requireApi, (req, res) => {
+  const ref = db.getReferentById(Number(req.params.id));
+  if (!ref) return res.status(404).json({ error: 'Référent introuvable' });
+  const { nom, prenom, active, etablissements } = req.body || {};
+  const etabs = etablissements === undefined ? undefined : normalizeEtabs(etablissements);
+  db.updateReferent(ref.id, {
+    nom: String(nom ?? ref.nom).trim(),
+    prenom: String(prenom ?? ref.prenom).trim(),
+    active: active === undefined ? ref.active : !!active,
+    etabs,
+  });
+  db.audit(req.admin.username, 'maj_referent', ref.email, (etabs || ref.etablissements).map((e) => e.label).join(', '));
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/referents/:id', auth.requireApi, (req, res) => {
+  const ref = db.getReferentById(Number(req.params.id));
+  if (!ref) return res.status(404).json({ error: 'Référent introuvable' });
+  db.deleteReferent(ref.id);
+  db.audit(req.admin.username, 'suppression_referent', ref.email);
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

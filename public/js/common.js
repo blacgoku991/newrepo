@@ -84,6 +84,19 @@ function formatDate(iso) {
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+/* Affiche le lien « Mon espace » dans la barre de navigation pour les référents. */
+document.addEventListener('DOMContentLoaded', async () => {
+  const link = document.querySelector('.nav-espace');
+  if (!link) return;
+  try {
+    const res = await fetch('/api/sso/me');
+    const me = await res.json();
+    if (me && me.referent) link.hidden = false;
+  } catch {
+    /* sans SSO : lien masqué */
+  }
+});
+
 /* Appels API stricts : toute erreur serveur remonte telle quelle (jamais de faux succès). */
 async function fetchJson(url, options) {
   const res = await fetch(url, options);

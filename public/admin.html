@@ -26,6 +26,7 @@
         <span class="sep">Configuration</span>
         <a data-view="forms" id="nav-forms"></a>
         <a data-view="scenarios" id="nav-scenarios"></a>
+        <a data-view="referents" id="nav-referents"></a>
         <a data-view="users" id="nav-users"></a>
         <a data-view="settings" id="nav-settings"></a>
         <a data-view="journal" id="nav-journal"></a>
@@ -107,6 +108,14 @@
             <button class="btn btn-primary btn-sm" id="add-admin">+ Nouveau compte</button>
           </div>
           <div class="tablecard"><table class="data"><thead><tr><th>Identifiant</th><th>Nom affiché</th><th>Dernière connexion</th><th>État</th><th></th></tr></thead><tbody id="users-rows"><tr><td colspan="5" class="loading">Chargement…</td></tr></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-referents">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <p style="color:var(--muted);font-size:.9rem;max-width:60ch">Personnes habilitées (compte Microsoft 365) à déposer des demandes et à consulter les comptes de leur établissement. Dès qu'au moins un référent existe, seuls les référents peuvent déposer des demandes.</p>
+            <button class="btn btn-primary btn-sm" id="add-referent">+ Nouveau référent</button>
+          </div>
+          <div class="tablecard"><table class="data"><thead><tr><th>Référent</th><th>E-mail Microsoft 365</th><th>Établissements</th><th>État</th><th></th></tr></thead><tbody id="referents-rows"><tr><td colspan="5" class="loading">Chargement…</td></tr></tbody></table></div>
         </section>
 
         <section class="view" id="view-settings">

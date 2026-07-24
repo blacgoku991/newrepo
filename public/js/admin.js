@@ -39,6 +39,7 @@
     emails: { ic: 'inbox', label: 'E-mails', h1: "E-mails d'identifiants", sub: "Boîte d'envoi des identifiants de connexion" },
     forms: { ic: 'briefcase', label: 'Formulaires', h1: 'Éditeur de formulaires', sub: 'Champs demandés pour chaque application' },
     scenarios: { ic: 'bot', label: 'Scénarios', h1: 'Éditeur de scénarios', sub: 'Étapes d’automatisation par application' },
+    referents: { ic: 'building', label: 'Référents', h1: 'Référents autorisés', sub: 'Habilitations par établissement & espaces personnels' },
     users: { ic: 'users', label: 'Comptes admin', h1: 'Comptes administrateurs', sub: 'Accès à cet espace' },
     settings: { ic: 'lock', label: 'Réglages', h1: 'Réglages', sub: 'Mode d’exécution, e-mail, configuration' },
     journal: { ic: 'list', label: "Journal d'activité", h1: "Journal d'activité", sub: 'Toutes les modifications faites dans l\'admin' },
@@ -66,6 +67,7 @@
       c.classList.add('on'); filters.status = c.dataset.status; renderRows();
     });
     el('add-admin').addEventListener('click', addAdminModal);
+    el('add-referent').addEventListener('click', () => referentModal(null));
     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
@@ -87,6 +89,7 @@
     else if (view === 'emails') loadEmails();
     else if (view === 'forms') loadFormsEditor();
     else if (view === 'scenarios') loadScenariosEditor();
+    else if (view === 'referents') loadReferents();
     else if (view === 'users') loadUsers();
     else if (view === 'settings') loadSettings();
     else if (view === 'journal') loadJournal();
@@ -660,6 +663,111 @@
     modal.querySelector('#m-close').addEventListener('click', closeModal);
     modal.querySelector('#cp-save').addEventListener('click', async () => {
       try { await fetchJson(`/api/admin/users/${id}/password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: el('cp-pw').value }) }); toast('Mot de passe changé'); closeModal(); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+
+  // ========================================================================
+  // Référents autorisés
+  // ========================================================================
+  let referentsData = [];
+  let referentApps = [];
+
+  async function loadReferents() {
+    let data;
+    try { data = await fetchJson('/api/admin/referents'); }
+    catch (e) { el('referents-rows').innerHTML = `<tr><td colspan="5" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
+    referentsData = data.referents || [];
+    referentApps = data.apps || [];
+    renderReferents();
+  }
+
+  function renderReferents() {
+    el('referents-rows').innerHTML = referentsData.length
+      ? referentsData.map((r) => {
+          const name = `${r.prenom || ''} ${r.nom || ''}`.trim() || '—';
+          const etabs = r.etablissements.length
+            ? r.etablissements.map((e) => escapeHtml(e.label)).join(', ')
+            : '<span style="color:var(--faint)">Aucun</span>';
+          return `<tr>
+            <td><b>${escapeHtml(name)}</b></td>
+            <td><span class="ref">${escapeHtml(r.email)}</span></td>
+            <td style="max-width:360px">${etabs}</td>
+            <td>${r.active ? '<span class="badge st-terminee">Actif</span>' : '<span class="badge st-echec">Inactif</span>'}</td>
+            <td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" data-edit="${r.id}">Modifier</button> <button class="btn btn-ghost btn-sm" data-del="${r.id}">Supprimer</button></td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="5" class="loading">Aucun référent. Ajoutez la ou les personnes habilitées par établissement.</td></tr>';
+    for (const b of el('referents-rows').querySelectorAll('[data-edit]'))
+      b.addEventListener('click', () => referentModal(referentsData.find((r) => String(r.id) === b.dataset.edit)));
+    for (const b of el('referents-rows').querySelectorAll('[data-del]'))
+      b.addEventListener('click', () => deleteReferentModal(b.dataset.del));
+  }
+
+  function referentModal(ref) {
+    const editing = !!ref;
+    const selected = new Set((ref?.etablissements || []).map((e) => `${e.appId}:${e.value}`));
+    modal.classList.add('wide');
+    const etabHtml = referentApps.map((app) => `
+      <div style="margin-bottom:10px">
+        ${referentApps.length > 1 ? `<div style="font-weight:600;font-size:.85rem;margin-bottom:6px">${escapeHtml(app.name)}</div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;max-height:300px;overflow:auto;padding:4px 2px">
+          ${app.establishments.map((e) => {
+            const key = `${app.id}:${e.value}`;
+            return `<label class="etab-opt" style="display:flex;gap:8px;align-items:center;font-size:.85rem;padding:3px 0;cursor:pointer"><input type="checkbox" data-app="${escapeHtml(app.id)}" value="${escapeHtml(e.value)}" ${selected.has(key) ? 'checked' : ''} /> <span>${escapeHtml(e.label)}</span></label>`;
+          }).join('')}
+        </div>
+      </div>`).join('');
+    modal.innerHTML = `
+      <h3>${editing ? 'Modifier le référent' : 'Nouveau référent'}</h3>
+      <div class="form-grid" style="margin-top:14px">
+        <label class="full">E-mail Microsoft 365${editing ? '' : ' <span class="req">*</span>'}<input class="inp" id="rf-email" type="email" autocomplete="off" value="${editing ? escapeHtml(ref.email) : ''}" ${editing ? 'readonly' : ''} placeholder="prenom.nom@adefresidences.com" /></label>
+        <label>Prénom<input class="inp" id="rf-prenom" value="${editing ? escapeHtml(ref.prenom) : ''}" /></label>
+        <label>Nom<input class="inp" id="rf-nom" value="${editing ? escapeHtml(ref.nom) : ''}" /></label>
+        ${editing ? `<label class="full">État<select class="inp" id="rf-active"><option value="1" ${ref.active ? 'selected' : ''}>Actif</option><option value="0" ${!ref.active ? 'selected' : ''}>Inactif</option></select></label>` : ''}
+      </div>
+      <div style="margin-top:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:.9rem">Établissements rattachés</b><input class="inp" id="rf-filter" placeholder="Filtrer…" style="max-width:220px" /></div>
+        <div id="rf-etabs" style="margin-top:10px">${etabHtml || '<p style="color:var(--muted);font-size:.85rem">Aucun établissement disponible.</p>'}</div>
+      </div>
+      <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;display:flex;gap:8px"><button class="btn btn-ghost" id="m-close">Annuler</button><button class="btn btn-primary" id="rf-save">${editing ? 'Enregistrer' : 'Créer'}</button></div>`;
+    backdrop.classList.add('show');
+    modal.querySelector('#m-close').addEventListener('click', closeModal);
+    const filter = modal.querySelector('#rf-filter');
+    if (filter) filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      for (const lab of modal.querySelectorAll('.etab-opt')) lab.style.display = lab.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+    modal.querySelector('#rf-save').addEventListener('click', async () => {
+      const etablissements = [...modal.querySelectorAll('#rf-etabs input[type=checkbox]:checked')].map((c) => ({ appId: c.dataset.app, value: c.value }));
+      const payload = { nom: el('rf-nom').value.trim(), prenom: el('rf-prenom').value.trim(), etablissements };
+      try {
+        if (editing) {
+          payload.active = el('rf-active').value === '1';
+          await fetchJson(`/api/admin/referents/${ref.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          toast('Référent mis à jour');
+        } else {
+          payload.email = el('rf-email').value.trim();
+          await fetchJson('/api/admin/referents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          toast('Référent créé');
+        }
+        closeModal(); loadReferents();
+      } catch (e) { toast(e.message, true); }
+    });
+  }
+
+  function deleteReferentModal(id) {
+    const ref = referentsData.find((r) => String(r.id) === String(id));
+    if (!ref) return;
+    modal.classList.remove('wide');
+    modal.innerHTML = `
+      <h3>Supprimer ce référent&nbsp;?</h3>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:10px">${escapeHtml(`${ref.prenom || ''} ${ref.nom || ''}`.trim())} &lt;${escapeHtml(ref.email)}&gt; ne pourra plus déposer de demandes ni accéder à son espace personnel.</p>
+      <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;display:flex;gap:8px"><button class="btn btn-ghost" id="m-close">Annuler</button><button class="btn btn-primary" id="rf-del" style="background:var(--danger);border-color:var(--danger)">Supprimer</button></div>`;
+    backdrop.classList.add('show');
+    modal.querySelector('#m-close').addEventListener('click', closeModal);
+    modal.querySelector('#rf-del').addEventListener('click', async () => {
+      try { await fetchJson(`/api/admin/referents/${id}`, { method: 'DELETE' }); toast('Référent supprimé'); closeModal(); loadReferents(); }
       catch (e) { toast(e.message, true); }
     });
   }

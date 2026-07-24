@@ -140,6 +140,30 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     sent_at TEXT
   );
+
+  -- Référents autorisés : personnes (compte Microsoft 365) habilitées à
+  -- déposer des demandes pour un ou plusieurs établissements. Chaque référent
+  -- dispose d'un espace personnel listant les comptes de ses établissements.
+  CREATE TABLE IF NOT EXISTS referents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    nom TEXT NOT NULL DEFAULT '',
+    prenom TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by TEXT NOT NULL DEFAULT ''
+  );
+
+  -- Établissements rattachés à un référent (relation n-n).
+  -- etab_value = valeur de l'option « établissement » du formulaire (ex. « 24 »).
+  CREATE TABLE IF NOT EXISTS referent_etablissements (
+    referent_id INTEGER NOT NULL,
+    app_id TEXT NOT NULL DEFAULT 'bluekango',
+    etab_value TEXT NOT NULL,
+    etab_label TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (referent_id, app_id, etab_value),
+    FOREIGN KEY (referent_id) REFERENCES referents(id) ON DELETE CASCADE
+  );
 `);
 
 // Migration : ajoute les colonnes récentes aux bases créées avant leur introduction.
@@ -510,6 +534,97 @@ const api = {
 
   countActiveAdmins() {
     return db.prepare(`SELECT COUNT(*) AS n FROM admin_users WHERE disabled = 0`).get().n;
+  },
+
+  // --- Référents autorisés & espace personnel -------------------------------
+
+  countReferents() {
+    return db.prepare(`SELECT COUNT(*) AS n FROM referents WHERE active = 1`).get().n;
+  },
+
+  /** Établissements d'un référent, forme légère. */
+  referentEtablissements(referentId) {
+    return db
+      .prepare(`SELECT app_id, etab_value, etab_label FROM referent_etablissements WHERE referent_id = ?`)
+      .all(referentId)
+      .map((r) => ({ appId: r.app_id, value: r.etab_value, label: r.etab_label }));
+  },
+
+  /** Référent (avec ses établissements) par adresse e-mail, insensible à la casse. */
+  getReferentByEmail(email) {
+    const row = db
+      .prepare(`SELECT * FROM referents WHERE email = ? COLLATE NOCASE`)
+      .get(String(email || '').toLowerCase());
+    if (!row) return null;
+    return { ...row, active: !!row.active, etablissements: api.referentEtablissements(row.id) };
+  },
+
+  getReferentById(id) {
+    const row = db.prepare(`SELECT * FROM referents WHERE id = ?`).get(id);
+    if (!row) return null;
+    return { ...row, active: !!row.active, etablissements: api.referentEtablissements(row.id) };
+  },
+
+  listReferents() {
+    return db
+      .prepare(`SELECT * FROM referents ORDER BY nom, prenom, email`)
+      .all()
+      .map((r) => ({ ...r, active: !!r.active, etablissements: api.referentEtablissements(r.id) }));
+  },
+
+  /** Crée un référent et rattache ses établissements. `etabs` = [{appId,value,label}]. */
+  createReferent(email, nom, prenom, etabs, createdBy) {
+    const insert = db.transaction(() => {
+      const info = db
+        .prepare(`INSERT INTO referents (email, nom, prenom, created_by) VALUES (?, ?, ?, ?)`)
+        .run(String(email).toLowerCase(), nom || '', prenom || '', createdBy || '');
+      api._replaceReferentEtabs(info.lastInsertRowid, etabs);
+      return info.lastInsertRowid;
+    });
+    return insert();
+  },
+
+  updateReferent(id, { nom, prenom, active, etabs }) {
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE referents SET nom = ?, prenom = ?, active = ? WHERE id = ?`)
+        .run(nom || '', prenom || '', active ? 1 : 0, id);
+      if (Array.isArray(etabs)) api._replaceReferentEtabs(id, etabs);
+    });
+    tx();
+  },
+
+  _replaceReferentEtabs(referentId, etabs) {
+    db.prepare(`DELETE FROM referent_etablissements WHERE referent_id = ?`).run(referentId);
+    const stmt = db.prepare(
+      `INSERT OR IGNORE INTO referent_etablissements (referent_id, app_id, etab_value, etab_label) VALUES (?, ?, ?, ?)`
+    );
+    for (const e of etabs || []) {
+      if (!e || !e.value) continue;
+      stmt.run(referentId, e.appId || 'bluekango', String(e.value), e.label || '');
+    }
+  },
+
+  deleteReferent(id) {
+    db.prepare(`DELETE FROM referents WHERE id = ?`).run(id);
+  },
+
+  /**
+   * Demandes rattachées à un ensemble d'établissements (par la valeur du champ
+   * « etablissement » du payload), pour l'espace d'un référent. Les valeurs
+   * sont bornées à `appId`.
+   */
+  requestsForEtablissements(appId, etabValues) {
+    const values = (etabValues || []).map(String).filter(Boolean);
+    if (values.length === 0) return [];
+    const placeholders = values.map(() => '?').join(',');
+    return db
+      .prepare(
+        `SELECT * FROM requests
+          WHERE app_id = ?
+            AND json_extract(payload, '$.etablissement') IN (${placeholders})
+          ORDER BY id DESC`
+      )
+      .all(appId, ...values);
   },
 
   // --- Application de démonstration -----------------------------------------
