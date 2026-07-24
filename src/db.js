@@ -448,6 +448,23 @@ const api = {
       .all(appId, ...values);
   },
 
+  /**
+   * Cherche un compte existant à DUPLIQUER : même établissement ET même profil
+   * de droit (droits identiques). Sert à créer un nouveau compte par duplication
+   * plutôt qu'en resaisissant tout le formulaire. Renvoie un compte actif ou null.
+   */
+  findAccountTemplate(appId, etablissement, profil) {
+    if (!etablissement || !profil) return null;
+    return db
+      .prepare(
+        `SELECT * FROM created_accounts
+          WHERE app_id = ? AND etablissement = ? AND profil = ? AND actif = 1
+          ORDER BY (source = 'import') DESC, id DESC
+          LIMIT 1`
+      )
+      .get(appId, String(etablissement), String(profil)) || null;
+  },
+
   /** Comptes importés par application (pour le récap admin). */
   countImportedAccounts(appId) {
     return db
