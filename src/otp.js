@@ -54,6 +54,7 @@ async function awaitOtp({
   timeoutMs,
   log = () => {},
   keepAlive,
+  abort,
 } = {}) {
   if (mailReadConfigured()) {
     log('Lecture automatique du code OTP par e-mail (Microsoft Graph)…');
@@ -65,10 +66,15 @@ async function awaitOtp({
       log(`Lecture automatique impossible (${err.message}) — passage en saisie manuelle`);
     }
   }
-  return awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive });
+  return awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive, abort });
 }
 
-async function awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive }) {
+/**
+ * @param {{aborted:boolean}} [abort] permet d'arrêter l'attente sans erreur
+ *   lorsque le code n'est plus nécessaire (connexion validée autrement).
+ *   Renvoie alors `null`.
+ */
+async function awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive, abort }) {
   if (!requestId) throw new Error('Saisie manuelle de l\'OTP impossible : demande inconnue');
   // 15 minutes par défaut : le temps d'ouvrir sa boîte mail sans se presser.
   const total = Number(timeoutMs || env('OTP_MANUAL_TIMEOUT_MS', 900000));
@@ -78,6 +84,7 @@ async function awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive }) {
   let lastPing = Date.now();
   try {
     while (Date.now() < deadline) {
+      if (abort && abort.aborted) return null; // le code n'est plus attendu
       if (typeof keepAlive === 'function') keepAlive(); // l'attente est légitime
       const state = db.otpState(requestId);
       if (state && !state.awaiting_otp && state.otp_code) {
@@ -87,7 +94,10 @@ async function awaitManualOtp({ requestId, label, timeoutMs, log, keepAlive }) {
       // Rappel périodique : montre que le robot est toujours en attente.
       if (Date.now() - lastPing >= 30000) {
         lastPing = Date.now();
-        log(`Toujours en attente du code OTP (${Math.ceil((deadline - Date.now()) / 60000)} min restantes)…`);
+        log(
+          `Toujours en attente du code OTP (${Math.ceil((deadline - Date.now()) / 60000)} min restantes) — ` +
+            'saisissez-le dans les détails de la demande, ou directement dans la fenêtre du robot.'
+        );
       }
       await sleep(2000);
     }

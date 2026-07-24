@@ -213,26 +213,57 @@ function buildLoginSteps({ S, ctx, base }) {
         const f = F(page);
         const field = L(f, S.login.otpInput).first();
         await field.waitFor();
-        // Récupère le code (lecture auto par e-mail si configurée, sinon saisie
-        // manuelle par l'admin dans les détails de la demande).
-        const code = await ctx.awaitOtp({
-          since: otpSince,
-          label: 'Code de connexion NetSoins reçu par e-mail — saisissez-le ici.',
-        });
 
-        ctx.log('Saisie du code dans NetSoins…');
-        await field.click();
-        await field.fill(code);
-        ctx.log('Validation du code (bouton OK)…');
-        await L(f, S.login.otpSubmit).first().click();
+        // Le code peut arriver par DEUX voies, et la première qui aboutit
+        // l'emporte :
+        //   1. saisie dans le portail (ou lecture automatique du mail) — le
+        //      robot tape alors le code lui-même ;
+        //   2. saisie directement dans la fenêtre du robot, quand elle est
+        //      visible : c'est le geste naturel quand on voit l'écran, et il
+        //      serait absurde de rester bloqué alors que la connexion est faite.
+        const abort = { aborted: false };
+        const parLePortail = ctx
+          .awaitOtp({
+            since: otpSince,
+            label: 'Code de connexion NetSoins reçu par e-mail — saisissez-le ici (ou directement dans la fenêtre du robot).',
+            abort,
+          })
+          .then((code) => ({ voie: 'portail', code }));
 
-        // Le code est-il accepté ? Si le champ OTP est toujours là, c'est qu'il
-        // a été refusé (code erroné ou expiré) : on le dit clairement.
-        await page.waitForTimeout(1500);
-        if (await field.isVisible().catch(() => false)) {
-          throw new Error('Code refusé par NetSoins (code erroné ou expiré) — relancez la demande pour recevoir un nouveau code');
+        const dansLaFenetre = (async () => {
+          while (!abort.aborted) {
+            // Le champ disparaît dès que NetSoins accepte le code.
+            if (!(await field.isVisible().catch(() => false))) return { voie: 'fenetre' };
+            await page.waitForTimeout(1000);
+          }
+          return { voie: 'abandon' };
+        })();
+
+        let issue;
+        try {
+          issue = await Promise.race([parLePortail, dansLaFenetre]);
+        } finally {
+          abort.aborted = true; // libère l'attente restante, quelle qu'elle soit
         }
-        ctx.log('Code accepté.');
+
+        if (issue.voie === 'fenetre') {
+          ctx.log('Code saisi directement dans la fenêtre du robot — connexion validée.');
+        } else {
+          if (!issue.code) throw new Error('Code OTP non fourni');
+          ctx.log('Saisie du code dans NetSoins…');
+          await field.click();
+          await field.fill(issue.code);
+          ctx.log('Validation du code (bouton OK)…');
+          await L(f, S.login.otpSubmit).first().click();
+
+          // Le code est-il accepté ? Si le champ OTP est toujours là, c'est
+          // qu'il a été refusé (code erroné ou expiré) : on le dit clairement.
+          await page.waitForTimeout(1500);
+          if (await field.isVisible().catch(() => false)) {
+            throw new Error('Code refusé par NetSoins (code erroné ou expiré) — relancez la demande pour recevoir un nouveau code');
+          }
+          ctx.log('Code accepté.');
+        }
 
         // ⚠️ Après connexion, NetSoins SORT de l'iframe : tout ce qui suit se
         // joue sur la page de premier niveau. La fenêtre d'accueil est
