@@ -54,9 +54,15 @@ function ensureSeedAdmin() {
 
 // --- Sessions ---------------------------------------------------------------
 
+// Haché une fois au démarrage : sert de comparaison « pour rien » quand
+// l'identifiant n'existe pas, afin que la durée de la vérification soit la
+// même que l'utilisateur existe ou non (anti-énumération par mesure du temps).
+const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
+
 function login(username, password) {
   const user = db.getAdminByUsername(username);
-  if (!user || user.disabled || !verifyPassword(password, user.password_hash)) return null;
+  const ok = verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
+  if (!user || user.disabled || !ok) return null;
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString().replace('T', ' ').slice(0, 19);
   db.createSession(token, user.id, expiresAt);

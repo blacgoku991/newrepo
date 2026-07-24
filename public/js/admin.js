@@ -625,7 +625,13 @@
     let s;
     try { s = await fetchJson('/api/admin/settings'); } catch (e) { el('settings-body').innerHTML = `<div class="alert alert-err">${escapeHtml(e.message)}</div>`; return; }
     const badge = (ok) => ok ? '<span class="badge st-terminee">Configuré</span>' : '<span class="badge st-en_attente">Non configuré</span>';
+    const sec = s.security || {};
+    const secAlerts = [];
+    if (sec.defaultAdminPassword) secAlerts.push('Le compte « admin » utilise encore le mot de passe par défaut : changez-le immédiatement (Comptes admin → Mot de passe).');
+    if (!sec.https) secAlerts.push('Le portail n’est pas servi en HTTPS : à activer impérativement en production (certificat + reverse proxy).');
+    if (sec.https && !sec.cookieSecure) secAlerts.push('HTTPS détecté mais ADMIN_COOKIE_SECURE n’est pas à true : les cookies devraient être marqués « Secure ».');
     el('settings-body').innerHTML = `
+      ${secAlerts.length ? `<div class="alert alert-err" style="margin-bottom:18px"><b>Sécurité :</b><ul style="margin:6px 0 0 18px">${secAlerts.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>` : ''}
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Robot</h3></div><div class="cb">
         <p style="font-size:.92rem">Mode d'automatisation : <b>${s.automationMode === 'production' ? 'Production (vraies applications)' : 'Démonstration (console factice)'}</b></p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Se règle via la variable d'environnement <code>AUTOMATION_MODE</code> côté serveur.</p>

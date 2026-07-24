@@ -36,15 +36,6 @@
       <div class="sso-note">En cas de difficulté de connexion, rapprochez-vous du service informatique.</div>
     </div>
   </div>
-  <script>
-    // Conserve la page demandée à l'origine pour y revenir après connexion.
-    (function () {
-      const next = new URLSearchParams(location.search).get('next');
-      if (next && next.startsWith('/') && !next.startsWith('//')) {
-        const btn = document.getElementById('ms-btn');
-        btn.href = '/auth/sso/login?next=' + encodeURIComponent(next);
-      }
-    })();
-  </script>
+  <script src="/js/connexion.js"></script>
 </body>
 </html>

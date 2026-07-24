@@ -17,9 +17,13 @@ const { validateScenarioOverrides } = require('./automation/scenarioRuntime');
 const mailer = require('./mailer');
 const worker = require('./worker');
 
+const security = require('./security');
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
+app.disable('x-powered-by');
+app.use(security.securityHeaders);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -43,6 +47,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Anti-CSRF : toute requête modifiante venant d'un navigateur doit provenir de
+// notre propre origine (ou d'une origine explicitement autorisée via CORS).
+app.use(security.csrfOriginCheck(ALLOWED_ORIGINS));
+
 // Compte administrateur initial + purge des sessions expirées au démarrage.
 auth.ensureSeedAdmin();
 db.purgeExpiredSessions();
@@ -57,8 +65,8 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 // authentification, et la console démo (/demo) reste accessible au robot.
 // ---------------------------------------------------------------------------
 
-app.get('/auth/sso/login', sso.loginRoute);
-app.get('/auth/sso/callback', sso.callbackRoute);
+app.get('/auth/sso/login', security.rateLimit('sso', 30, 10 * 60 * 1000), sso.loginRoute);
+app.get('/auth/sso/callback', security.rateLimit('sso', 30, 10 * 60 * 1000), sso.callbackRoute);
 app.post('/auth/sso/logout', sso.logoutRoute);
 
 // Identité SSO du visiteur (préremplissage du formulaire + bandeau).
@@ -123,7 +131,8 @@ app.get('/api/apps/:id/schema', sso.requireApi, (req, res) => {
   res.json({ id, name, category, description, icon, color, logo: logo || null, schema: effectiveSchema(entry.config) });
 });
 
-app.post('/api/apps/:id/requests', sso.requireApi, (req, res) => {
+// 60 dépôts par IP et par 10 minutes : large pour les lots, bloque le spam.
+app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 1000), sso.requireApi, (req, res) => {
   const entry = registry.getAvailable(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue ou indisponible' });
 
@@ -150,7 +159,8 @@ app.post('/api/apps/:id/requests', sso.requireApi, (req, res) => {
 });
 
 // Suivi public d'une demande par sa référence (informations limitées).
-app.get('/api/requests/:reference', sso.requireApi, (req, res) => {
+// Limité par IP pour empêcher l'énumération de références.
+app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1000), sso.requireApi, (req, res) => {
   const row = db.getByReference(req.params.reference.toUpperCase());
   if (!row) return res.status(404).json({ error: 'Référence inconnue' });
   const appEntry = registry.get(row.app_id);
@@ -168,7 +178,8 @@ app.get('/api/requests/:reference', sso.requireApi, (req, res) => {
 // Authentification
 // ---------------------------------------------------------------------------
 
-app.post('/api/auth/login', (req, res) => {
+// 10 tentatives de connexion admin par IP et par quart d'heure.
+app.post('/api/auth/login', security.rateLimit('login', 10, 15 * 60 * 1000), (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
@@ -179,6 +190,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
   }
   db.audit(result.user.username, 'connexion_admin', '', '', sso.clientIp(req));
+  security.clearRateLimit('login', req);
   auth.setSessionCookie(res, result.token);
   // Le jeton est aussi renvoyé pour un frontend cross-domaine, qui pourra le
   // stocker et l'envoyer via l'en-tête « Authorization: Bearer <token> ».
@@ -193,6 +205,8 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.post('/api/auth/logout', (req, res) => {
+  const session = auth.currentSession(req);
+  if (session) db.audit(session.username, 'deconnexion_admin', '', '', sso.clientIp(req));
   const token = auth.parseCookies(req)[auth.COOKIE];
   if (token) auth.logout(token);
   auth.clearSessionCookie(res);
@@ -350,7 +364,7 @@ app.post('/api/admin/users', auth.requireApi, (req, res) => {
   const { username, displayName, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
   if (!/^[a-zA-Z0-9._-]{3,40}$/.test(username)) return res.status(422).json({ error: 'Identifiant invalide (3-40 car., lettres/chiffres/._-)' });
-  if (String(password).length < 6) return res.status(422).json({ error: 'Mot de passe trop court (6 caractères minimum)' });
+  if (String(password).length < 8) return res.status(422).json({ error: 'Mot de passe trop court (8 caractères minimum)' });
   if (db.getAdminByUsername(username)) return res.status(409).json({ error: 'Cet identifiant existe déjà' });
   const id = db.createAdmin(username, displayName || username, auth.hashPassword(String(password)), 'admin');
   db.audit(req.admin.username, 'creation_admin', username);
@@ -361,7 +375,7 @@ app.post('/api/admin/users/:id/password', auth.requireApi, (req, res) => {
   const user = db.getAdminById(Number(req.params.id));
   if (!user) return res.status(404).json({ error: 'Compte introuvable' });
   const { password } = req.body || {};
-  if (String(password || '').length < 6) return res.status(422).json({ error: 'Mot de passe trop court (6 caractères minimum)' });
+  if (String(password || '').length < 8) return res.status(422).json({ error: 'Mot de passe trop court (8 caractères minimum)' });
   db.setAdminPassword(user.id, auth.hashPassword(String(password)));
   db.audit(req.admin.username, 'maj_mdp_admin', user.username);
   res.json({ ok: true });
@@ -395,10 +409,18 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
       vars: vars.map((v) => ({ name: v, set: envSet(v) })),
     };
   });
+  // Détection du mot de passe par défaut « admin » (alerte de sécurité).
+  const seedUser = db.getAdminByUsername('admin');
+  const defaultAdminPassword = !!(seedUser && !seedUser.disabled && auth.verifyPassword('admin', seedUser.password_hash));
   res.json({
     automationMode: process.env.AUTOMATION_MODE === 'production' ? 'production' : 'demo',
     smtp: mailer.smtpConfigured(),
     sso: { configured: sso.configured(), required: sso.required(), tenant: process.env.M365_TENANT_ID || null },
+    security: {
+      defaultAdminPassword,
+      cookieSecure: process.env.ADMIN_COOKIE_SECURE === 'true',
+      https: req.headers['x-forwarded-proto'] === 'https' || req.secure,
+    },
     apps,
   });
 });

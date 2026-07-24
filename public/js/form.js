@@ -183,7 +183,7 @@
     switch (field.type) {
       case 'select':
         control = `
-          <select name="${field.name}">
+          <select name="${escapeHtml(field.name)}">
             <option value="">— Sélectionner —</option>
             ${field.options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
           </select>`;
@@ -195,7 +195,7 @@
               .map(
                 (o) => `
               <label class="choice">
-                <input type="radio" name="${field.name}" value="${escapeHtml(o.value)}" />
+                <input type="radio" name="${escapeHtml(field.name)}" value="${escapeHtml(o.value)}" />
                 <span>${escapeHtml(o.label)}</span>
               </label>`
               )
@@ -209,7 +209,7 @@
               .map(
                 (o) => `
               <label class="choice">
-                <input type="checkbox" name="${field.name}" value="${escapeHtml(o.value)}" />
+                <input type="checkbox" name="${escapeHtml(field.name)}" value="${escapeHtml(o.value)}" />
                 <span>${escapeHtml(o.label)}</span>
               </label>`
               )
@@ -217,7 +217,7 @@
           </div>`;
         break;
       case 'textarea':
-        control = `<textarea name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>`;
+        control = `<textarea name="${escapeHtml(field.name)}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>`;
         break;
       default: {
         // Champ texte, avec liste de suggestions (datalist) si `suggestions` fourni :
@@ -225,17 +225,17 @@
         const hasList = Array.isArray(field.suggestions) && field.suggestions.length > 0;
         const listId = `dl-${field.name}`;
         const datalist = hasList
-          ? `<datalist id="${listId}">${field.suggestions
+          ? `<datalist id="${escapeHtml(listId)}">${field.suggestions
               .map((s) => `<option value="${escapeHtml(s)}"></option>`)
               .join('')}</datalist>`
           : '';
         const locked = lockedFields.has(field.name) ? ' readonly title="Rempli automatiquement depuis votre connexion Microsoft 365"' : '';
-        control = `<input type="${field.type}" name="${field.name}" placeholder="${escapeHtml(field.placeholder || '')}"${hasList ? ` list="${listId}" autocomplete="off"` : ''}${locked} />${datalist}`;
+        control = `<input type="${escapeHtml(field.type)}" name="${escapeHtml(field.name)}" placeholder="${escapeHtml(field.placeholder || '')}"${hasList ? ` list="${escapeHtml(listId)}" autocomplete="off"` : ''}${locked} />${datalist}`;
       }
     }
 
     return `
-      <div class="field ${isWide ? 'full' : ''}" data-field="${field.name}">
+      <div class="field ${isWide ? 'full' : ''}" data-field="${escapeHtml(field.name)}">
         <label>${escapeHtml(field.label)}${req}</label>
         ${control}
         ${help}
@@ -248,9 +248,9 @@
   function saveSectionValues(section, form) {
     for (const field of section.fields) {
       if (field.type === 'checkboxes') {
-        values[field.name] = [...form.querySelectorAll(`input[name="${field.name}"]:checked`)].map((el) => el.value);
+        values[field.name] = [...form.querySelectorAll(`input[name="${escapeHtml(field.name)}"]:checked`)].map((el) => el.value);
       } else if (field.type === 'radio') {
-        const checked = form.querySelector(`input[name="${field.name}"]:checked`);
+        const checked = form.querySelector(`input[name="${escapeHtml(field.name)}"]:checked`);
         values[field.name] = checked ? checked.value : '';
       } else {
         values[field.name] = form.elements[field.name].value.trim();
@@ -263,12 +263,12 @@
       const value = values[field.name];
       if (field.type === 'checkboxes') {
         for (const v of value) {
-          const el = form.querySelector(`input[name="${field.name}"][value="${CSS.escape(v)}"]`);
+          const el = form.querySelector(`input[name="${escapeHtml(field.name)}"][value="${CSS.escape(v)}"]`);
           if (el) el.checked = true;
         }
       } else if (field.type === 'radio') {
         if (value) {
-          const el = form.querySelector(`input[name="${field.name}"][value="${CSS.escape(value)}"]`);
+          const el = form.querySelector(`input[name="${escapeHtml(field.name)}"][value="${CSS.escape(value)}"]`);
           if (el) el.checked = true;
         }
       } else if (form.elements[field.name]) {
