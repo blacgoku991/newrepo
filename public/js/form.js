@@ -66,17 +66,18 @@
 
   // -------------------------------------------------------------------------
 
+  // Étapes verticales, affichées dans le panneau latéral sombre.
   function stepperHtml() {
     const items = [
       ...sections.map((s, i) => ({ label: s.title, index: i })),
       { label: 'Récapitulatif', index: sections.length },
     ];
-    return `<div class="stepper">
+    return `<div class="vstepper">
       ${items
         .map((item) => {
           const state = item.index < current ? 'done' : item.index === current ? 'active' : '';
           const dot = item.index < current ? icon('check') : String(item.index + 1);
-          return `<div class="s ${state}"><span class="dot">${dot}</span><span class="lbl">${escapeHtml(item.label)}</span></div>`;
+          return `<div class="s ${state}"><span class="m"><span class="dot">${dot}</span><span class="lnk"></span></span><span class="lbl">${escapeHtml(item.label)}</span></div>`;
         })
         .join('')}
     </div>`;
@@ -85,16 +86,20 @@
   function render() {
     const isRecap = current === sections.length;
     content.innerHTML = `
-      <div class="panel form-card">
-        <div class="form-head">
-          ${appVisual(app)}
-          <div>
-            <h2>${escapeHtml(app.name)}</h2>
-            <div class="cat">${escapeHtml(app.category)}</div>
+      <div class="form-layout">
+        <aside class="form-side">
+          <div class="form-head">
+            ${appVisual(app)}
+            <div>
+              <h2>${escapeHtml(app.name)}</h2>
+              <div class="cat">${escapeHtml(app.category)}</div>
+            </div>
           </div>
-        </div>
+          ${stepperHtml()}
+          <div class="aside-note">Le robot Algonis saisit ces informations telles quelles dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.</div>
+        </aside>
+        <div class="panel form-main">
         ${current === 0 && app.schema.intro ? `<div class="intro">${escapeHtml(app.schema.intro)}</div>` : ''}
-        ${stepperHtml()}
         <form id="step-form" novalidate>
           <div class="step-panel">
             ${isRecap ? recapHtml() : sectionHtml(sections[current])}
@@ -113,6 +118,7 @@
             </div>
           </div>
         </form>
+        </div>
       </div>`;
 
     const form = document.getElementById('step-form');
