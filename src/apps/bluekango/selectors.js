@@ -56,9 +56,9 @@ module.exports = {
     password: '#UTL_pw',
     password2: '#UTL_pw2',
     reinitCheckbox: 'input[name="UTL_reinit"]', // réinitialisation du mdp au 1er login
-    // Cellules « date » de la fiche (début / fin de validité) : elles affichent
-    // l'aide « (jj/mm/aaaa) » à côté d'un champ de saisie sans libellé.
-    dateCellHint: '(jj/mm/aaaa)',
+    // Ligne « Date de fin de validité : (jj/mm/aaaa) » de la fiche : seul ce
+    // champ est saisi par le robot (la date de début reste celle de BlueKanGo).
+    dateFinRowLabel: 'Date de fin de validité',
     validerLabel: 'Valider',                    // bouton dans le cadre principal
   },
 };
