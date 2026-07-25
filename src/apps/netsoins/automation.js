@@ -249,6 +249,72 @@ async function cocherEtablissement(page, S, ctx, value) {
 }
 
 /**
+ * RETIRE un établissement de la liste des établissements autorisés.
+ *
+ * Pendant exact de `cocherEtablissement` : même repérage (recherche du menu puis
+ * dépliage), mêmes exclusions (copies masquées, lignes « Tous les
+ * établissements »), et surtout même prudence sur l'interrupteur — une case
+ * déjà décochée ne doit pas être cliquée, sous peine de la cocher.
+ */
+async function decocherEtablissement(page, S, ctx, value) {
+  const label = etabLabel(value);
+  const nom = label.split(' - ')[0].trim();
+
+  const chercherLigne = () => {
+    const lignes = L(page, S.compte.etabRow).filter({ hasNotText: S.compte.etabToutCocher });
+    return lignes.filter({ hasText: label }).or(lignes.filter({ hasText: nom })).first();
+  };
+
+  const recherche = L(page, S.compte.etabSearch).first();
+  try {
+    await recherche.waitFor({ state: 'visible', timeout: 3000 });
+    await recherche.click();
+    await recherche.fill(nom);
+    await page.waitForTimeout(700);
+  } catch {
+    /* pas de champ de recherche : la liste est déjà déployée */
+  }
+
+  const ligne = chercherLigne();
+  try {
+    await ligne.waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    // Introuvable : le compte n'y était peut-être plus rattaché. Ce n'est pas un
+    // échec du transfert — on le signale et on continue.
+    ctx.log(`Établissement « ${nom} » absent de la liste : rien à retirer.`);
+    return;
+  }
+
+  const caseACocher = ligne.locator('input[type="checkbox"]').first();
+  const estCochee = () => caseACocher.isChecked().catch(() => false);
+
+  if (!(await estCochee())) {
+    ctx.log(`Établissement « ${label} » déjà non rattaché : rien à retirer.`);
+  } else {
+    for (const cible of [ligne.locator('.checkbox').first(), ligne, caseACocher]) {
+      if (!(await estCochee())) break;
+      try {
+        await cible.click({ timeout: 3000 });
+      } catch {
+        continue;
+      }
+      await page.waitForTimeout(250);
+    }
+    if (await estCochee()) {
+      throw new Error(`Établissement « ${nom} » trouvé, mais sa case n'a pas pu être décochée`);
+    }
+    ctx.log(`Établissement retiré : ${label}.`);
+  }
+
+  try {
+    await recherche.fill('');
+    await page.waitForTimeout(400);
+  } catch {
+    /* pas de champ de recherche */
+  }
+}
+
+/**
  * Retrouve le bouton d'enregistrement en essayant les écritures déclarées dans
  * `selectors.save`, du plus précis au plus large. En cas d'échec total, liste
  * les boutons réellement présents sur la page : le journal devient alors un
@@ -600,38 +666,14 @@ async function createAccount(data, ctx) {
  * Le mot de passe posé est ALÉATOIRE et remis au bénéficiaire par lien
  * sécurisé : il n'est ni choisi par le demandeur, ni journalisé.
  */
-async function resetPassword(data, ctx) {
-  const identifiant = String(data.identifiant || '').trim();
-  const newPassword = randomProvisionalPassword();
-
-  if (getMode(ENV) === 'demo') {
-    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
-    const total = 6;
-    let done = 0;
-    for (const label of [
-      'Connexion au compte administrateur',
-      'Double authentification',
-      `Bascule sur l'établissement`,
-      `Recherche de l'intervenant « ${identifiant} »`,
-      'Nouveau mot de passe provisoire saisi',
-      'Fiche enregistrée',
-    ]) {
-      ctx.log(`Étape ${++done}/${total} — ${label}`);
-      if (ctx.progress) ctx.progress(done, total, label);
-    }
-    return {
-      success: true,
-      message: `Mot de passe réinitialisé pour « ${identifiant} » (environnement de démonstration)`,
-      account: { login: identifiant, password: newPassword, prenom: '', nom: '' },
-      artifacts: [],
-    };
-  }
-
-  const S = applySelectorPatches(BASE_SELECTORS, config.id);
-  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
-  const steps = buildLoginSteps({ S, ctx, base });
-
-  steps.push(
+/**
+ * Étapes menant à la fiche d'un intervenant EXISTANT : liste des intervenants,
+ * bascule sur son établissement, recherche, ouverture de la fiche.
+ * Partagé par la réinitialisation de mot de passe, la correction d'identité et
+ * le transfert d'établissement.
+ */
+function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
+  return [
     {
       id: 'liste',
       critical: true,
@@ -686,7 +728,43 @@ async function resetPassword(data, ctx) {
         await L(page, S.liste.ficheIntervenant).first().click();
         ctx.log('Fiche intervenant ouverte.');
       },
-    },
+    }
+  ];
+}
+
+async function resetPassword(data, ctx) {
+  const identifiant = String(data.identifiant || '').trim();
+  const newPassword = randomProvisionalPassword();
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const total = 6;
+    let done = 0;
+    for (const label of [
+      'Connexion au compte administrateur',
+      'Double authentification',
+      `Bascule sur l'établissement`,
+      `Recherche de l'intervenant « ${identifiant} »`,
+      'Nouveau mot de passe provisoire saisi',
+      'Fiche enregistrée',
+    ]) {
+      ctx.log(`Étape ${++done}/${total} — ${label}`);
+      if (ctx.progress) ctx.progress(done, total, label);
+    }
+    return {
+      success: true,
+      message: `Mot de passe réinitialisé pour « ${identifiant} » (environnement de démonstration)`,
+      account: { login: identifiant, password: newPassword, prenom: '', nom: '' },
+      artifacts: [],
+    };
+  }
+
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
+  const steps = buildLoginSteps({ S, ctx, base });
+
+  steps.push(
+    ...buildOuvrirFicheSteps({ S, ctx, data, identifiant }),
     {
       id: 'motdepasse',
       critical: true,
@@ -756,4 +834,164 @@ async function resetPassword(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, resetPassword, STEPS_META, RESET_STEPS_META, chooseStrategy };
+/**
+ * Correction de l'identité d'un intervenant existant : nom de naissance et
+ * premier prénom, sur l'onglet Informations. L'identifiant de connexion n'est
+ * PAS touché — il est déjà diffusé au titulaire.
+ */
+async function updateIdentity(data, ctx) {
+  const identifiant = String(data.identifiant || '').trim();
+  const nouvelleIdentite = `${data.prenom || ''} ${data.nom || ''}`.trim();
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const etapes = [
+      'Connexion au compte administrateur',
+      'Double authentification',
+      "Bascule sur l'établissement",
+      `Recherche de l'intervenant « ${identifiant} »`,
+      `Correction de l'identité (${nouvelleIdentite})`,
+      'Fiche enregistrée',
+    ];
+    etapes.forEach((label, i) => {
+      ctx.log(`Étape ${i + 1}/${etapes.length} — ${label}`);
+      if (ctx.progress) ctx.progress(i + 1, etapes.length, label);
+    });
+    return {
+      success: true,
+      message: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite} (environnement de démonstration)`,
+      artifacts: [],
+    };
+  }
+
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
+  const steps = buildLoginSteps({ S, ctx, base });
+
+  steps.push(
+    ...buildOuvrirFicheSteps({ S, ctx, data, identifiant }),
+    {
+      id: 'identite',
+      critical: true,
+      label: `Correction de l'identité (${nouvelleIdentite})`,
+      run: async (page) => {
+        // L'état civil se trouve sur l'onglet Informations.
+        await L(page, S.informations.tabZone).first().click().catch(() => {});
+        await L(page, S.informations.tab).first().click();
+        ctx.log('Onglet « Informations » ouvert.');
+
+        const nom = L(page, S.informations.nomNaissance).first();
+        await nom.click();
+        await nom.fill(data.nom);
+        const prenom = L(page, S.informations.premierPrenom).first();
+        await prenom.click();
+        await prenom.fill(data.prenom);
+        ctx.log(`Nom de naissance et premier prénom corrigés : ${nouvelleIdentite}.`);
+      },
+    },
+    {
+      id: 'enregistrement',
+      critical: true,
+      label: 'Enregistrement de la fiche',
+      run: async (page) => {
+        const save = await findSave(page, S, ctx);
+        await save.click();
+        await page.waitForTimeout(2500);
+        ctx.log('Fiche enregistrée.');
+      },
+    }
+  );
+
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    onProgress: ctx.progress,
+    successMessage: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite}`,
+    steps: composeSteps(config.id, steps, data, ctx.log),
+  });
+}
+
+/**
+ * Transfert d'un intervenant vers un autre établissement : on RETIRE le
+ * rattachement d'origine, puis on attribue le nouveau. À la différence de
+ * l'ajout d'établissement, l'intervenant perd l'accès à son établissement
+ * précédent — c'est bien l'intention de cette démarche.
+ */
+async function transferEstablishment(data, ctx) {
+  const identifiant = String(data.identifiant || '').trim();
+  const depart = String(data.etablissement || '');
+  const cible = String(data.etablissement_cible || '');
+
+  if (depart === cible) {
+    return {
+      success: false,
+      message: "L'établissement d'arrivée est identique à l'établissement de départ : il n'y a rien à transférer.",
+      artifacts: [],
+    };
+  }
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const etapes = [
+      'Connexion au compte administrateur',
+      'Double authentification',
+      "Bascule sur l'établissement de départ",
+      `Recherche de l'intervenant « ${identifiant} »`,
+      `Retrait de ${etabLabel(depart)}`,
+      `Rattachement à ${etabLabel(cible)}`,
+      'Fiche enregistrée',
+    ];
+    etapes.forEach((label, i) => {
+      ctx.log(`Étape ${i + 1}/${etapes.length} — ${label}`);
+      if (ctx.progress) ctx.progress(i + 1, etapes.length, label);
+    });
+    return {
+      success: true,
+      message: `« ${identifiant} » transféré de ${etabLabel(depart)} vers ${etabLabel(cible)} (environnement de démonstration)`,
+      artifacts: [],
+    };
+  }
+
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
+  const steps = buildLoginSteps({ S, ctx, base });
+
+  steps.push(
+    ...buildOuvrirFicheSteps({ S, ctx, data, identifiant }),
+    {
+      id: 'transfert',
+      critical: true,
+      label: `Transfert : ${etabLabel(depart)} → ${etabLabel(cible)}`,
+      run: async (page) => {
+        await L(page, S.compte.etabOpen).first().click();
+        // L'ordre compte : on rattache le nouvel établissement AVANT de retirer
+        // l'ancien. NetSoins exige au moins un établissement autorisé ; retirer
+        // d'abord laisserait la fiche momentanément invalide.
+        await cocherEtablissement(page, S, ctx, cible);
+        await decocherEtablissement(page, S, ctx, depart);
+      },
+    },
+    {
+      id: 'enregistrement',
+      critical: true,
+      label: 'Enregistrement de la fiche',
+      run: async (page) => {
+        const save = await findSave(page, S, ctx);
+        await save.click();
+        await page.waitForTimeout(2500);
+        ctx.log('Fiche enregistrée.');
+      },
+    }
+  );
+
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    onProgress: ctx.progress,
+    successMessage: `« ${identifiant} » transféré de ${etabLabel(depart)} vers ${etabLabel(cible)}`,
+    steps: composeSteps(config.id, steps, data, ctx.log),
+  });
+}
+
+
+module.exports = { createAccount, resetPassword, updateIdentity, transferEstablishment, STEPS_META, RESET_STEPS_META, chooseStrategy };

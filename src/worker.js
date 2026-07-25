@@ -11,6 +11,7 @@
 
 const db = require('./db');
 const registry = require('./registry');
+const demarches = require('./demarches');
 const otp = require('./otp');
 
 const POLL_INTERVAL = Number(process.env.WORKER_POLL_MS || 3000);
@@ -36,16 +37,16 @@ async function processOne(request) {
 
   const data = JSON.parse(request.payload);
 
-  // Type de demande : création, réinitialisation de mdp ou ajout d'établissement.
-  const isReset = request.request_type === 'reset_mdp';
-  const isExtension = request.request_type === 'ajout_etab';
-  const action = isReset
-    ? app.automation.resetPassword
-    : isExtension
-      ? app.automation.addEstablishment
-      : app.automation.createAccount;
+  // La démarche détermine la fonction du robot à appeler (voir demarches.js).
+  const demarche = demarches.get(request.request_type);
+  const action = demarche ? app.automation[demarche.action] : null;
   if (!action) {
-    db.markFinished(request.id, false, `Cette application ne prend pas en charge : ${request.request_type}`, logs);
+    db.markFinished(
+      request.id,
+      false,
+      `${app.config.name} ne prend pas en charge la démarche « ${demarche ? demarche.label : request.request_type} »`,
+      logs
+    );
     return;
   }
 
@@ -86,9 +87,9 @@ async function processOne(request) {
 
     const artifacts = (result && result.artifacts) || [];
     if (result && result.success) {
-      log('Compte créé avec succès');
-      db.markFinished(request.id, true, result.message || (isReset ? 'Mot de passe réinitialisé' : isExtension ? 'Établissement ajouté' : 'Compte créé avec succès'), logs, artifacts);
-      db.audit('robot', isReset ? 'reinit_mdp' : isExtension ? 'ajout_etab' : 'creation_compte', request.reference, result.message || '');
+      log(demarche.succes);
+      db.markFinished(request.id, true, result.message || demarche.succes, logs, artifacts);
+      db.audit('robot', demarche.audit, request.reference, result.message || '');
       // Mémorise l'identifiant généré (unicité future + affichage admin + e-mail).
       if (result.account && result.account.login) {
         db.setRequestLogin(request.id, result.account.login);

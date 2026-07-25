@@ -380,6 +380,90 @@ async function createAccount(data, ctx) {
  * provisoire (BLUEKANGO_DEFAULT_PASSWORD) + réinitialisation au 1er login →
  * Valider.
  */
+/**
+ * Étapes menant à la fiche d'un utilisateur EXISTANT : connexion, menu
+ * Utilisateurs, bascule sur son établissement, recherche par identifiant exact,
+ * ouverture de la fiche via « Modifier ».
+ *
+ * Partagé par la réinitialisation de mot de passe et la correction d'identité.
+ * `holder` porte la page : les étapes suivantes en ont besoin, et elle n'existe
+ * qu'au moment où le scénario démarre.
+ */
+function buildOuvrirFicheSteps({ S, ctx, data, identifiant, etabLabel, base, holder }) {
+  const main = () => holder.page.frameLocator(S.frames.main);
+  return [
+    {
+      id: 'ouverture',
+      label: 'Ouverture de BlueKanGo',
+      run: (p) => { holder.page = p; return holder.page.goto(`${base}/index.php?`); },
+    },
+    {
+      id: 'connexion',
+      label: 'Connexion avec le compte administrateur',
+      run: async () => {
+        await holder.page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
+        await holder.page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
+        await holder.page.getByRole('button', { name: S.login.submitLabel }).click();
+        const profile = holder.page.getByRole('link', { name: profileLinkPattern() }).first();
+        await profile.click({ timeout: 8000 }).catch(() => {});
+        await holder.page.getByText(S.nav.administration).first().waitFor();
+      },
+    },
+    {
+      id: 'menu-utilisateurs',
+      label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
+      run: async () => {
+        await holder.page.getByText(S.nav.administration).first().click();
+        await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+        await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+      },
+    },
+    {
+      id: 'etablissement',
+      label: `Bascule sur l'établissement « ${etabLabel} »`,
+      run: async () => {
+        const select = await findEtabSelect(page);
+        if (!select) throw new Error(`Sélecteur d'établissement introuvable dans les frames de la page.`);
+        const current = await select.inputValue().catch(() => null);
+        if (current !== data.etablissement) {
+          await select.selectOption(data.etablissement);
+          await holder.page.waitForLoadState('networkidle');
+          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
+          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
+        } else {
+          ctx.log(`Déjà sur « ${etabLabel} »`);
+        }
+      },
+    },
+    {
+      id: 'recherche',
+      label: `Recherche du compte « ${identifiant} »`,
+      run: async () => {
+        const list = main().frameLocator(S.frames.userList);
+        // 1. Saisir l'identifiant dans le champ « mots » et lancer la recherche.
+        const search = list.getByRole('textbox', { name: S.userList.searchLabel }).first();
+        await search.waitFor({ timeout: 20000 });
+        await search.fill(identifiant);
+        await list.getByTitle(S.userList.searchTriggerTitle).first().click().catch(() => {});
+        await holder.page.waitForTimeout(2500).catch(() => {});
+        // 2. Vérifier que le compte existe : cellule contenant l'identifiant exact.
+        const cell = list.getByRole('gridcell', { name: new RegExp(`^\\s*${identifiant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i') }).first();
+        try {
+          await cell.waitFor({ timeout: 15000 });
+        } catch {
+          throw new Error(
+            `Aucun compte « ${identifiant} » trouvé dans « ${etabLabel} ». Vérifiez l'identifiant ` +
+              `EXACT et l'établissement de rattachement — aucune modification effectuée.`
+          );
+        }
+        await cell.click();
+        // 3. Ouvrir la fiche via le bouton « Modifier ».
+        await list.getByRole('button', { name: S.userList.modifyButton }).first().click();
+      },
+    }
+  ];
+}
+
 async function resetPassword(data, ctx) {
   // Identifiant EXACT du compte à réinitialiser (saisi dans le formulaire).
   const identifiant = String(data.identifiant || '').trim();
@@ -406,80 +490,13 @@ async function resetPassword(data, ctx) {
       ?.label || data.etablissement;
   const S = applySelectorPatches(BASE_SELECTORS, config.id);
 
-  let page;
-  const main = () => page.frameLocator(S.frames.main);
+  // Porteur de la page : les étapes partagées la renseignent au démarrage.
+  const holder = { page: null };
+  const main = () => holder.page.frameLocator(S.frames.main);
   const fancy = () => main().frameLocator(S.frames.fancybox);
 
   const steps = [
-    {
-      id: 'ouverture',
-      label: 'Ouverture de BlueKanGo',
-      run: (p) => { page = p; return page.goto(`${base}/index.php?`); },
-    },
-    {
-      id: 'connexion',
-      label: 'Connexion avec le compte administrateur',
-      run: async () => {
-        await page.getByRole('textbox', { name: S.login.userLabel }).fill(process.env.BLUEKANGO_ADMIN_USER);
-        await page.getByRole('textbox', { name: S.login.passwordLabel }).fill(process.env.BLUEKANGO_ADMIN_PASSWORD);
-        await page.getByRole('button', { name: S.login.submitLabel }).click();
-        const profile = page.getByRole('link', { name: profileLinkPattern() }).first();
-        await profile.click({ timeout: 8000 }).catch(() => {});
-        await page.getByText(S.nav.administration).first().waitFor();
-      },
-    },
-    {
-      id: 'menu-utilisateurs',
-      label: 'Ouverture de Administration > Gestion des ressources > Utilisateurs',
-      run: async () => {
-        await page.getByText(S.nav.administration).first().click();
-        await main().getByRole('button', { name: S.nav.gestionRessources }).click();
-        await main().getByRole('link', { name: S.nav.utilisateurs }).click();
-      },
-    },
-    {
-      id: 'etablissement',
-      label: `Bascule sur l'établissement « ${etabLabel} »`,
-      run: async () => {
-        const select = await findEtabSelect(page);
-        if (!select) throw new Error(`Sélecteur d'établissement introuvable dans les frames de la page.`);
-        const current = await select.inputValue().catch(() => null);
-        if (current !== data.etablissement) {
-          await select.selectOption(data.etablissement);
-          await page.waitForLoadState('networkidle');
-          await main().getByRole('button', { name: S.nav.gestionRessources }).click();
-          await main().getByRole('link', { name: S.nav.utilisateurs }).click();
-        } else {
-          ctx.log(`Déjà sur « ${etabLabel} »`);
-        }
-      },
-    },
-    {
-      id: 'recherche',
-      label: `Recherche du compte « ${identifiant} »`,
-      run: async () => {
-        const list = main().frameLocator(S.frames.userList);
-        // 1. Saisir l'identifiant dans le champ « mots » et lancer la recherche.
-        const search = list.getByRole('textbox', { name: S.userList.searchLabel }).first();
-        await search.waitFor({ timeout: 20000 });
-        await search.fill(identifiant);
-        await list.getByTitle(S.userList.searchTriggerTitle).first().click().catch(() => {});
-        await page.waitForTimeout(2500).catch(() => {});
-        // 2. Vérifier que le compte existe : cellule contenant l'identifiant exact.
-        const cell = list.getByRole('gridcell', { name: new RegExp(`^\\s*${identifiant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i') }).first();
-        try {
-          await cell.waitFor({ timeout: 15000 });
-        } catch {
-          throw new Error(
-            `Aucun compte « ${identifiant} » trouvé dans « ${etabLabel} ». Vérifiez l'identifiant ` +
-              `EXACT et l'établissement de rattachement — aucune modification effectuée.`
-          );
-        }
-        await cell.click();
-        // 3. Ouvrir la fiche via le bouton « Modifier ».
-        await list.getByRole('button', { name: S.userList.modifyButton }).first().click();
-      },
-    },
+    ...buildOuvrirFicheSteps({ S, ctx, data, identifiant, etabLabel, base, holder }),
     {
       id: 'nouveau-mdp',
       label: 'Vérification de l’identifiant puis saisie du nouveau mot de passe',
@@ -507,8 +524,8 @@ async function resetPassword(data, ctx) {
         await main().getByRole('button', { name: S.form.validerLabel }).click();
         // BlueKanGo affiche une fenêtre « Information » (bouton OK) après la
         // modification : on la confirme si elle apparaît.
-        await page.waitForTimeout(1500).catch(() => {});
-        for (const scope of [fancy(), main(), page]) {
+        await holder.page.waitForTimeout(1500).catch(() => {});
+        for (const scope of [fancy(), main(), holder.page]) {
           const ok = scope.getByRole('button', { name: /^OK$/i }).first();
           if (await ok.isVisible().catch(() => false)) { await ok.click().catch(() => {}); break; }
         }
@@ -530,4 +547,91 @@ async function resetPassword(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, resetPassword, STEPS_META };
+
+/**
+ * Correction de l'identité d'un compte existant : nom et prénom sur la fiche.
+ * L'identifiant de connexion n'est PAS touché — il est déjà diffusé au
+ * titulaire, le changer romprait son accès.
+ */
+async function updateIdentity(data, ctx) {
+  const identifiant = String(data.identifiant || '').trim();
+  const nouvelleIdentite = `${data.prenom || ''} ${data.nom || ''}`.trim();
+  const etabLabel =
+    config.formSchema.sections[1].fields.find((f) => f.name === 'etablissement')
+      ?.options.find((o) => o.value === data.etablissement)?.label || data.etablissement;
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const etapes = [
+      'Connexion au compte administrateur',
+      "Bascule sur l'établissement",
+      `Recherche du compte « ${identifiant} »`,
+      `Correction de l'identité (${nouvelleIdentite})`,
+      'Fiche validée',
+    ];
+    etapes.forEach((label, i) => {
+      ctx.log(`Étape ${i + 1}/${etapes.length} — ${label}`);
+      if (ctx.progress) ctx.progress(i + 1, etapes.length, label);
+    });
+    return {
+      success: true,
+      message: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite} (environnement de démonstration)`,
+      artifacts: [],
+    };
+  }
+
+  const base = process.env.BLUEKANGO_URL.replace(/\/$/, '');
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const holder = { page: null };
+  const main = () => holder.page.frameLocator(S.frames.main);
+  const fancy = () => main().frameLocator(S.frames.fancybox);
+
+  const steps = [
+    ...buildOuvrirFicheSteps({ S, ctx, data, identifiant, etabLabel, base, holder }),
+    {
+      id: 'identite',
+      label: `Vérification de l'identifiant puis correction de l'identité`,
+      run: async () => {
+        // Garde-fou identique à la réinitialisation : la fiche ouverte doit bien
+        // porter l'identifiant demandé, sinon on modifierait le compte d'un tiers.
+        await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click().catch(() => {});
+        const onFiche = await fancy().locator(S.form.loginField).inputValue().catch(() => null);
+        if (onFiche && onFiche.trim().toLowerCase() !== identifiant.toLowerCase()) {
+          throw new Error(
+            `La fiche ouverte porte l'identifiant « ${onFiche} », différent de « ${identifiant} ». ` +
+              `Aucune modification effectuée.`
+          );
+        }
+        ctx.log(`Identifiant confirmé : « ${identifiant} »`);
+
+        await fancy().locator(S.form.nom).fill(data.nom);
+        await fancy().locator(S.form.prenom).fill(data.prenom);
+        ctx.log(`Nom et prénom corrigés : ${nouvelleIdentite}.`);
+      },
+    },
+    {
+      id: 'enregistrement',
+      label: 'Enregistrement de la fiche',
+      run: async () => {
+        await main().getByRole('button', { name: S.form.validerLabel }).click();
+        // BlueKanGo confirme par une fenêtre « Information » (bouton OK).
+        await holder.page.waitForTimeout(1500).catch(() => {});
+        for (const scope of [fancy(), main(), holder.page]) {
+          const ok = scope.getByRole('button', { name: /^OK$/i }).first();
+          if (await ok.isVisible().catch(() => false)) { await ok.click().catch(() => {}); break; }
+        }
+        await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+      },
+    },
+  ];
+
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    onProgress: ctx.progress,
+    successMessage: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite} (établissement ${etabLabel})`,
+    steps,
+  });
+}
+
+module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META };
