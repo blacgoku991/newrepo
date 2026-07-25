@@ -93,3 +93,20 @@ mises en place et la checklist de mise en production.
 - La console de démonstration `/demo` (comptes factices, identifiants de démo
   publics) est nécessaire au mode démo du robot ; elle ne touche à aucune
   donnée réelle.
+
+---
+
+## Audit du 25 juillet 2026
+
+Audit complet (backend, frontend, robots, licence, dépendances) : voir
+`docs/AUDIT-2026-07-25.md`. Deux failles réelles corrigées — un référent
+pouvait viser le compte de service du robot (donc prendre la main sur
+l'application métier), et le détail d'une demande était lisible par tout
+compte du tenant. 48 tentatives d'attaque rejouables, toutes bloquées.
+
+Deux réglages d'exploitation en découlent :
+
+- `<APP>_PROTECTED_LOGINS` : comptes techniques du client à sanctuariser, en
+  plus du compte d'administration du robot (déjà protégé d'office) ;
+- durée de conservation des captures d'écran des robots (`data/artifacts/`) :
+  à décider, aucune purge automatique aujourd'hui.

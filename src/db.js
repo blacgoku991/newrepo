@@ -6,10 +6,29 @@ const Database = require('better-sqlite3');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const ARTIFACTS_DIR = path.join(DATA_DIR, 'artifacts');
-fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+fs.mkdirSync(ARTIFACTS_DIR, { recursive: true, mode: 0o700 });
 
-const db = new Database(path.join(DATA_DIR, 'portail.db'));
+const DB_FILE = path.join(DATA_DIR, 'portail.db');
+const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
+
+/**
+ * La base contient des données personnelles (noms, identifiants, établissements)
+ * et les secrets chiffrés des liens d'identifiants : elle ne doit être lisible
+ * que par le compte qui fait tourner le portail. En mode WAL, les fichiers
+ * annexes (-wal, -shm) portent les mêmes données : on les restreint aussi.
+ * Best effort : sur un système de fichiers qui ne gère pas les permissions
+ * POSIX (montage Windows), on n'échoue pas au démarrage pour autant.
+ */
+for (const fichier of [DB_FILE, `${DB_FILE}-wal`, `${DB_FILE}-shm`, DATA_DIR, ARTIFACTS_DIR]) {
+  try {
+    if (fs.existsSync(fichier)) {
+      fs.chmodSync(fichier, fs.statSync(fichier).isDirectory() ? 0o700 : 0o600);
+    }
+  } catch {
+    /* permissions non gérées par ce système de fichiers */
+  }
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS requests (

@@ -31,6 +31,7 @@ const { runScenario } = require('../../automation/engine');
 const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
 const demo = require('../../automation/demoDriver');
 const db = require('../../db');
+const comptesProteges = require('../../comptesProteges');
 const config = require('./config');
 const { baseLogin } = require('./login');
 const { PROFILS_DROIT, ETABLISSEMENTS } = require('./data');
@@ -733,6 +734,11 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
 }
 
 async function resetPassword(data, ctx) {
+  // Défense en profondeur : le portail refuse déjà ces demandes au dépôt, mais
+  // un robot ne doit jamais toucher au compte de service dont il se sert —
+  // y compris pour une demande déposée avant la mise en place du contrôle.
+  const refusProtege = comptesProteges.refus(config.id, data);
+  if (refusProtege) return { success: false, message: refusProtege, artifacts: [] };
   const identifiant = String(data.identifiant || '').trim();
   const newPassword = randomProvisionalPassword();
 
@@ -840,6 +846,11 @@ async function resetPassword(data, ctx) {
  * PAS touché — il est déjà diffusé au titulaire.
  */
 async function updateIdentity(data, ctx) {
+  // Défense en profondeur : le portail refuse déjà ces demandes au dépôt, mais
+  // un robot ne doit jamais toucher au compte de service dont il se sert —
+  // y compris pour une demande déposée avant la mise en place du contrôle.
+  const refusProtege = comptesProteges.refus(config.id, data);
+  if (refusProtege) return { success: false, message: refusProtege, artifacts: [] };
   const identifiant = String(data.identifiant || '').trim();
   const nouvelleIdentite = `${data.prenom || ''} ${data.nom || ''}`.trim();
 
@@ -921,6 +932,11 @@ async function updateIdentity(data, ctx) {
  * coche le nouveau (`etablissement_cible`).
  */
 async function addEstablishment(data, ctx) {
+  // Défense en profondeur : le portail refuse déjà ces demandes au dépôt, mais
+  // un robot ne doit jamais toucher au compte de service dont il se sert —
+  // y compris pour une demande déposée avant la mise en place du contrôle.
+  const refusProtege = comptesProteges.refus(config.id, data);
+  if (refusProtege) return { success: false, message: refusProtege, artifacts: [] };
   const identifiant = String(data.identifiant || '').trim();
   const actuel = String(data.etablissement || '');
   const cible = String(data.etablissement_cible || '');
@@ -999,6 +1015,11 @@ async function addEstablishment(data, ctx) {
  * précédent — c'est bien l'intention de cette démarche.
  */
 async function transferEstablishment(data, ctx) {
+  // Défense en profondeur : le portail refuse déjà ces demandes au dépôt, mais
+  // un robot ne doit jamais toucher au compte de service dont il se sert —
+  // y compris pour une demande déposée avant la mise en place du contrôle.
+  const refusProtege = comptesProteges.refus(config.id, data);
+  if (refusProtege) return { success: false, message: refusProtege, artifacts: [] };
   const identifiant = String(data.identifiant || '').trim();
   const depart = String(data.etablissement || '');
   const cible = String(data.etablissement_cible || '');

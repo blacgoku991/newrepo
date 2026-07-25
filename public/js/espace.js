@@ -228,7 +228,18 @@
   }
 
   function setupViews(data) {
-    V.accounts = data.accounts || [];
+    // Les comptes créés ici (et les plus récents) d'abord : c'est ce qu'on vient
+    // de faire qu'on veut retrouver, pas la fin d'un annuaire alphabétique. Les
+    // comptes importés viennent ensuite, du plus récemment mis à jour au plus
+    // ancien, et à date égale par ordre alphabétique.
+    V.accounts = (data.accounts || []).slice().sort((a, b) => {
+      const rang = (c) => (c.source === 'portail' ? 0 : 1);
+      if (rang(a) !== rang(b)) return rang(a) - rang(b);
+      const dateA = a.createdAt || '';
+      const dateB = b.createdAt || '';
+      if (dateA !== dateB) return dateA < dateB ? 1 : -1;
+      return `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr');
+    });
     // Un onglet par application (avec le logo de l'éditeur) + l'activité.
     const byId = new Map((data.apps || []).map((a) => [a.appId, a]));
     V.apps = byId;
@@ -306,6 +317,7 @@
       <td data-label="Établissement">${etabCell(a.etablissement, a.etablissementLabel)}</td>
       <td data-label="Fonction">${escapeHtml(a.fonction || '—')}</td>
       <td data-label="État">${src}${inactif}</td>
+      <td data-label="Ajouté le">${a.createdAt ? formatDate(a.createdAt) : '—'}</td>
       <td class="acc-row-actions">${accActions(a)}</td>
     </tr>`;
   }
@@ -318,7 +330,7 @@
 
   function accountsTable(rows) {
     return `<div class="tablecard"><table class="data acc-table">
-      <thead><tr><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Fonction</th><th>État</th><th></th></tr></thead>
+      <thead><tr><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Fonction</th><th>État</th><th>Ajouté le</th><th></th></tr></thead>
       <tbody>${rows.map(accRow).join('')}</tbody>
     </table></div>`;
   }

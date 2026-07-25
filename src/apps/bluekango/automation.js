@@ -27,6 +27,7 @@ const { runScenario } = require('../../automation/engine');
 const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
 const { pickUniqueLogin } = require('../../automation/identifiants');
 const demo = require('../../automation/demoDriver');
+const comptesProteges = require('../../comptesProteges');
 const config = require('./config');
 const BASE_SELECTORS = require('./selectors');
 
@@ -628,6 +629,11 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant, etabLabel, base, hol
 }
 
 async function resetPassword(data, ctx) {
+  // Défense en profondeur : le portail refuse déjà ces demandes au dépôt, mais
+  // un robot ne doit jamais toucher au compte de service dont il se sert —
+  // y compris pour une demande déposée avant la mise en place du contrôle.
+  const refusProtege = comptesProteges.refus(config.id, data);
+  if (refusProtege) return { success: false, message: refusProtege, artifacts: [] };
   // Identifiant EXACT du compte à réinitialiser (saisi dans le formulaire).
   const identifiant = String(data.identifiant || '').trim();
   // Mot de passe provisoire ALÉATOIRE : BlueKanGo refuse de remettre un mot de
@@ -712,6 +718,11 @@ async function resetPassword(data, ctx) {
  * demande. Le mot de passe, lui, n'est pas touché.
  */
 async function updateIdentity(data, ctx) {
+  // Défense en profondeur : le portail refuse déjà ces demandes au dépôt, mais
+  // un robot ne doit jamais toucher au compte de service dont il se sert —
+  // y compris pour une demande déposée avant la mise en place du contrôle.
+  const refusProtege = comptesProteges.refus(config.id, data);
+  if (refusProtege) return { success: false, message: refusProtege, artifacts: [] };
   const identifiant = String(data.identifiant || '').trim();
   const nouvelleIdentite = `${data.prenom || ''} ${data.nom || ''}`.trim();
   // Nouvel identifiant, unique : l'identifiant ACTUEL ne compte pas comme une

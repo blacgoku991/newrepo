@@ -21,6 +21,7 @@ const worker = require('./worker');
 
 const security = require('./security');
 const licence = require('./licence');
+const comptesProteges = require('./comptesProteges');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -102,6 +103,14 @@ app.use((req, res, next) => {
 auth.ensureSeedAdmin();
 db.purgeExpiredSessions();
 db.purgeExpiredSsoSessions();
+// Purge périodique : un portail qui tourne des mois ne doit pas conserver des
+// sessions expirées en base (surface inutile en cas de vol de la base).
+setInterval(() => {
+  try {
+    db.purgeExpiredSessions();
+    db.purgeExpiredSsoSessions();
+  } catch { /* purge de confort : jamais bloquante */ }
+}, 6 * 3600 * 1000).unref();
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -225,7 +234,7 @@ app.get('/api/apps', sso.requireApi, (req, res) => {
   res.json(registry.publicList());
 });
 
-app.get('/api/apps/:id/schema', sso.requireApi, (req, res) => {
+app.get('/api/apps/:id/schema', security.rateLimit('schema', 300, 10 * 60 * 1000), sso.requireApi, (req, res) => {
   const entry = registry.get(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue' });
   if (entry.config.comingSoon) {
@@ -318,6 +327,22 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
   }
 
+  // Comptes de service du robot : jamais visés par une démarche. Réinitialiser
+  // le mot de passe du compte administrateur reviendrait à le remettre au
+  // demandeur — donc à lui livrer l'application métier entière.
+  const refusCompte = comptesProteges.refus(entry.config.id, data);
+  if (refusCompte) {
+    const u = sso.currentUser(req);
+    db.audit(
+      u ? `${u.name} <${u.email}>` : 'inconnu',
+      'depot_refuse_compte_protege',
+      '',
+      `${entry.config.id} — ${String(data.identifiant || `${data.prenom || ''} ${data.nom || ''}`).trim()}`,
+      sso.clientIp(req)
+    );
+    return res.status(403).json({ error: refusCompte });
+  }
+
   // Cloisonnement par établissement : le référent ne peut agir QUE sur ses
   // établissements. Sans ce contrôle, il suffirait de modifier la valeur
   // envoyée pour créer un compte — ou réinitialiser un mot de passe, et donc
@@ -372,6 +397,41 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   res.status(201).json({ reference });
 });
 
+/**
+ * Qui a le droit de consulter le détail d'une demande ?
+ *
+ * Les références sont courtes (PREFIXE-AAMMJJ-XXXX) : sans ce contrôle, un
+ * compte Microsoft quelconque du tenant pouvait, en essayant des références,
+ * lire le nom du bénéficiaire, son identifiant de connexion et son
+ * établissement. On limite donc la lecture aux personnes concernées :
+ *  - celle qui a déposé la demande (compte Microsoft du dépôt) ;
+ *  - le bénéficiaire (e-mail renseigné dans la demande) ;
+ *  - un référent de l'établissement visé, sur la bonne application ;
+ *  - un administrateur connecté au panel.
+ * Sans SSO (démonstration), le comportement d'origine est conservé.
+ */
+function peutVoirDemande(req, row) {
+  if (!sso.required()) return true;
+  if (auth.currentSession(req)) return true; // administrateur du portail
+
+  const user = sso.currentUser(req);
+  const email = String((user && user.email) || '').toLowerCase();
+  if (!email) return false;
+
+  let data = {};
+  try { data = JSON.parse(row.payload || '{}'); } catch { /* charge illisible : on s'en tient aux e-mails de la demande */ }
+  const concernes = [row.sso_email, data.email, data._demandeur_email]
+    .map((e) => String(e || '').toLowerCase())
+    .filter(Boolean);
+  if (concernes.includes(email)) return true;
+
+  // Référent de l'établissement visé (départ ou arrivée pour un transfert).
+  const ref = referents.resolve(req);
+  if (!ref) return false;
+  const cibles = [data.etablissement, data.etablissement_cible, ...(data.etablissements_autorises || [])].filter(Boolean);
+  return cibles.some((v) => referents.allows(ref, row.app_id, String(v)));
+}
+
 // État de la licence pour le bandeau du site : ce qu'il faut pour prévenir
 // l'utilisateur, sans rien exposer d'autre (ni jeton, ni détail interne).
 app.get('/api/licence', sso.requireApi, (req, res) => {
@@ -392,6 +452,13 @@ app.get('/api/licence', sso.requireApi, (req, res) => {
 app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1000), sso.requireApi, (req, res) => {
   const row = db.getByReference(req.params.reference.toUpperCase());
   if (!row) return res.status(404).json({ error: 'Référence inconnue' });
+  // Même réponse qu'une référence inconnue : on ne confirme pas l'existence
+  // d'une demande à quelqu'un qui n'a rien à y voir.
+  if (!peutVoirDemande(req, row)) {
+    const u = sso.currentUser(req);
+    db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'suivi_refuse', row.reference, '', sso.clientIp(req));
+    return res.status(404).json({ error: 'Référence inconnue' });
+  }
   const appEntry = registry.get(row.app_id);
   const total = row.progress_total || 0;
   const done = row.progress_done || 0;
@@ -425,6 +492,14 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
 app.post('/api/requests/:reference/credentials-access', security.rateLimit('credaccess', 15, 10 * 60 * 1000), sso.requireApi, (req, res) => {
   const row = db.getByReference(String(req.params.reference).toUpperCase());
   if (!row) return res.status(404).json({ error: 'Référence inconnue' });
+  // L'habilitation se vérifie AVANT l'état de la demande : sinon les codes de
+  // réponse renseignent un tiers sur l'existence de la demande et sur le fait
+  // qu'un mot de passe y est disponible.
+  if (!peutVoirDemande(req, row)) {
+    const u = sso.currentUser(req);
+    db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'acces_identifiants_refuse', row.reference, 'hors périmètre', sso.clientIp(req));
+    return res.status(404).json({ error: 'Référence inconnue' });
+  }
   if (row.status !== 'terminee' || !row.generated_login) {
     return res.status(409).json({ error: 'Le compte n\'est pas encore créé' });
   }
@@ -464,7 +539,7 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
 
 // Comptes et activité des établissements dont l'utilisateur connecté est
 // référent. Un compte non habilité reçoit { referent: null }.
-app.get('/api/espace/me', sso.requireApi, (req, res) => {
+app.get('/api/espace/me', security.rateLimit('espace', 300, 10 * 60 * 1000), sso.requireApi, (req, res) => {
   const user = sso.currentUser(req);
   const ref = referents.resolve(req);
   if (!ref) {

@@ -76,10 +76,26 @@ function clientIp(req) {
  * Crée un middleware de limitation : au plus `max` requêtes par `windowMs`
  * et par adresse IP. Au-delà : 429 avec délai de réessai.
  */
+/**
+ * Purge des compteurs échus. Sans elle, la table grossit indéfiniment (une
+ * entrée par IP et par quota) : un flot d'adresses différentes finirait par
+ * saturer la mémoire du portail. On nettoie au plus une fois par minute, et
+ * seulement quand il y a matière.
+ */
+let dernierNettoyage = 0;
+function nettoyerCompteurs(now) {
+  if (now - dernierNettoyage < 60 * 1000 || buckets.size < 500) return;
+  dernierNettoyage = now;
+  for (const [cle, seau] of buckets) {
+    if (seau.resetAt <= now) buckets.delete(cle);
+  }
+}
+
 function rateLimit(name, max, windowMs) {
   return (req, res, next) => {
     const key = `${name}:${clientIp(req)}`;
     const now = Date.now();
+    nettoyerCompteurs(now);
     let bucket = buckets.get(key);
     if (!bucket || bucket.resetAt <= now) {
       bucket = { count: 0, resetAt: now + windowMs };
