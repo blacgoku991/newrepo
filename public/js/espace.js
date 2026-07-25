@@ -10,14 +10,6 @@
 (function () {
   const root = document.getElementById('esp');
 
-  const TYPE_LABELS = {
-    creation: 'Création',
-    reset_mdp: 'Réinit. mot de passe',
-    ajout_etab: 'Ajout établissement',
-    maj_identite: 'Correction identité',
-    transfert_etab: 'Transfert établissement',
-  };
-
   boot();
 
   async function boot() {
@@ -62,8 +54,9 @@
       <div id="dmd-box"></div>
 
       <div class="esp-section-head">
-        <h2>Comptes &amp; activité</h2>
+        <h2>Comptes existants</h2>
         <span class="hint" id="esp-count"></span>
+        <a class="esp-lien" href="/suivi.html">Voir mes demandes et leur statut ${icon('arrow')}</a>
       </div>
       <div id="esp-tabs"></div>
       <label class="esp-search"><input type="text" id="esp-search-input" placeholder="Rechercher un identifiant, un nom, une référence…" autocomplete="off" /></label>
@@ -226,7 +219,7 @@
   // Un seul espace paginé, organisé en onglets : une application par onglet
   // (BlueKanGo, NetSoins…) plus « Activité ». Évite de scroller une longue page.
   const PAGE_SIZE = 15;
-  const V = { accounts: [], activity: [], tabs: [], view: '', query: '', page: 1, apps: new Map() };
+  const V = { accounts: [], tabs: [], view: '', query: '', page: 1, apps: new Map() };
 
   function appsOf(accounts) {
     const seen = new Map();
@@ -236,7 +229,6 @@
 
   function setupViews(data) {
     V.accounts = data.accounts || [];
-    V.activity = data.activity || [];
     // Un onglet par application (avec le logo de l'éditeur) + l'activité.
     const byId = new Map((data.apps || []).map((a) => [a.appId, a]));
     V.apps = byId;
@@ -245,7 +237,9 @@
       label: a.app,
       visual: visualFor(byId.get(a.appId)),
     }));
-    V.tabs.push({ key: '__activity', label: 'Activité', visual: icon('clock') });
+    // Aucun onglet « Activité » ici : les demandes et leur statut sont sur la
+    // page « Suivre une demande ». Cette page-ci sert à AGIR sur les comptes.
+    if (V.tabs.length === 0) V.tabs.push({ key: '__vide', label: 'Comptes', visual: icon('users') });
     V.view = V.tabs[0].key;
     V.query = '';
     V.page = 1;
@@ -266,11 +260,6 @@
 
   function currentList() {
     const q = V.query;
-    if (V.view === '__activity') {
-      return !q ? V.activity : V.activity.filter((r) =>
-        [r.reference, r.who, r.login, r.etablissementLabel, TYPE_LABELS[r.type]]
-          .some((v) => (v || '').toLowerCase().includes(q)));
-    }
     return V.accounts.filter((a) => {
       if (a.appId !== V.view) return false;
       if (!q) return true;
@@ -334,52 +323,9 @@
     </table></div>`;
   }
 
-  function activityTable(rows) {
-    return `<div class="tablecard"><table class="data">
-      <thead><tr><th>Référence</th><th>Type</th><th>Bénéficiaire</th><th>Identifiant</th><th>Établissement</th><th>Déposée le</th><th>Statut</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr>
-        <td data-label="Référence"><a class="ref" href="/suivi.html?ref=${encodeURIComponent(r.reference)}">${escapeHtml(r.reference)}</a></td>
-        <td data-label="Type">${escapeHtml(TYPE_LABELS[r.type] || r.type)}</td>
-        <td data-label="Bénéficiaire">${escapeHtml(r.who || '—')}</td>
-        <td data-label="Identifiant">${r.login ? `<span class="ref">${escapeHtml(r.login)}</span>` : '—'}</td>
-        <td data-label="Établissement">${etabCell(r.etablissement, r.etablissementLabel)}</td>
-        <td data-label="Déposée le">${formatDate(r.createdAt)}</td>
-        <td data-label="Statut">${statusBadge(r.status)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
-  }
-
-  // Numéros de page à afficher (1 … n-1 n n+1 … N).
-  function pageNumbers(page, pages) {
-    const wanted = [1, pages, page, page - 1, page + 1].filter((n) => n >= 1 && n <= pages);
-    const uniq = [...new Set(wanted)].sort((a, b) => a - b);
-    const out = [];
-    let prev = 0;
-    for (const n of uniq) { if (n - prev > 1) out.push('…'); out.push(n); prev = n; }
-    return out;
-  }
-
-  function pager(page, pages, from, to, total, noun) {
-    const info = `<span class="pg-info">${from}–${to} sur ${total} ${noun}</span>`;
-    if (pages <= 1) return `<div class="esp-pager">${info}</div>`;
-    const btns = pageNumbers(page, pages)
-      .map((n) => n === '…'
-        ? '<span class="pg-ell">…</span>'
-        : `<button class="pg${n === page ? ' on' : ''}" data-page="${n}">${n}</button>`)
-      .join('');
-    return `<div class="esp-pager">${info}
-      <div class="pg-btns">
-        <button class="pg" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''} aria-label="Précédent">‹</button>
-        ${btns}
-        <button class="pg" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''} aria-label="Suivant">›</button>
-      </div>
-    </div>`;
-  }
-
   function draw() {
     drawTabs();
-    const isActivity = V.view === '__activity';
-    const noun = isActivity ? 'demandes' : 'comptes';
+    const noun = 'comptes';
     const list = currentList();
     const total = list.length;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -394,21 +340,12 @@
     if (!total) {
       box.innerHTML = V.query
         ? `<div class="empty-box">Aucun résultat pour « ${escapeHtml(V.query)} ».</div>`
-        : isActivity
-          ? `<div class="empty-box">Aucune demande enregistrée pour vos établissements.</div>`
-          : `<div class="empty-box">Aucun compte pour cette sélection.<br />Les comptes apparaissent après une création ou un import.</div>`;
+        : `<div class="empty-box">Aucun compte pour cette sélection.<br />Les comptes apparaissent après une création ou un import.</div>`;
       return;
     }
     box.innerHTML =
-      (isActivity ? activityTable(slice) : accountsTable(slice)) +
-      pager(V.page, pages, start + 1, start + slice.length, total, noun);
-
-    box.querySelectorAll('.pg[data-page]').forEach((b) => {
-      if (b.disabled) return;
-      b.addEventListener('click', () => {
-        const p = Number(b.dataset.page);
-        if (p >= 1 && p <= pages && p !== V.page) { V.page = p; draw(); }
-      });
-    });
+      accountsTable(slice) +
+      pagerHtml(V.page, pages, start + 1, start + slice.length, total, noun);
+    bindPager(box, V.page, pages, (p) => { V.page = p; draw(); });
   }
 })();

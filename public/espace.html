@@ -74,9 +74,6 @@
     .dmd-card b { color: #fff; font-size: 1rem; }
     .dmd-card > span:last-child { color: var(--muted); font-size: .85rem; line-height: 1.55; }
     @media (max-width: 820px) { .dmd-apps, .dmd-cards { grid-template-columns: 1fr; } }
-    .esp-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 34px 0 14px; }
-    .esp-section-head h2 { font-size: 1.18rem; color: #fff; }
-    .esp-section-head .hint { color: var(--faint); font-size: .84rem; }
     .acc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
     .acc-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
     .acc-card .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -91,27 +88,11 @@
     .acc-card .actions .btn svg { width: 15px; height: 15px; flex: none; }
     .acc-card .acc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
     .acc-card .acc-src { font-size: .68rem; }
-    .esp-search { display: block; margin: 4px 0 16px; }
-    .esp-search input { width: 100%; padding: 11px 14px; font-size: .92rem; color: var(--text); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius); }
-    .esp-search input:focus { outline: none; border-color: var(--gold-bright); box-shadow: 0 0 0 3px var(--gold-soft); }
-    .esp-search input::placeholder { color: var(--faint); }
     /* Sélecteur d'application : le choix doit être évident au premier regard.
        L'option retenue se distingue par le logo en couleur, le cadre doré et
        une coche — jamais par la seule couleur. */
     .app-switch-hint { font-size: .82rem; color: var(--muted); margin: 2px 0 8px; }
-    .app-switch { display: inline-flex; gap: 6px; padding: 6px; margin-bottom: 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; flex-wrap: wrap; }
-    .app-opt { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 18px 8px 10px; border-radius: 11px; border: 1px solid transparent; background: transparent; color: var(--muted); font-family: inherit; font-size: .93rem; font-weight: 650; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-    .app-opt:hover { color: var(--text); background: var(--surface-3); }
-    .app-opt:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
-    .app-opt .lg { width: 34px; height: 34px; flex: none; border-radius: 8px; background: #fff; display: grid; place-items: center; padding: 4px; }
-    .app-opt .lg img, .app-opt .lg .logo { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
-    .app-opt .lg svg { width: 18px; height: 18px; color: var(--surface-2); }
-    .app-opt .lg .logo-fallback { width: 100%; height: 100%; border-radius: 5px; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: .8rem; }
     /* Option non retenue : logo éteint, pour que l'active ressorte. */
-    .app-opt:not(.on) .lg { filter: grayscale(1); opacity: .5; }
-    .app-opt.on { background: var(--gold-soft); border-color: var(--gold-line); color: var(--gold-bright); }
-    .app-opt.on .ck { width: 15px; height: 15px; flex: none; }
-    @media (max-width: 600px) { .app-switch { display: flex; width: 100%; } .app-opt { flex: 1; justify-content: center; } }
     .acc-src { font-size: .68rem; }
     .acc-table td { vertical-align: middle; }
     .acc-table .ref { font-size: .86rem; }
@@ -120,15 +101,6 @@
     .acc-row-actions .btn svg { width: 14px; height: 14px; }
     @media (max-width: 760px) { .acc-row-actions .btn span { display: none; } }
     /* Pagination. */
-    .esp-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
-    .esp-pager .pg-info { color: var(--muted); font-size: .82rem; }
-    .pg-btns { display: flex; gap: 5px; align-items: center; }
-    .pg { min-width: 34px; height: 34px; padding: 0 9px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); font-size: .85rem; font-weight: 600; cursor: pointer; }
-    .pg:hover:not(:disabled) { color: var(--text); border-color: var(--gold-line); }
-    .pg.on { background: var(--gold-soft); color: var(--gold-bright); border-color: var(--gold-line); }
-    .pg:disabled { opacity: .4; cursor: default; }
-    .pg-ell { color: var(--faint); padding: 0 2px; }
-    .empty-box { background: var(--surface); border: 1px dashed var(--line-2); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; color: var(--muted); }
     .notauth { max-width: 620px; margin: 60px auto; text-align: center; }
     .notauth .ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; margin: 0 auto 18px; background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }
     .notauth .ic svg { width: 30px; height: 30px; }

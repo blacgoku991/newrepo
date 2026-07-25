@@ -447,6 +447,10 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
     return res.json({ user, referent: null, enforced: referents.enforced() });
   }
 
+  // `?vue=demandes` : la page de suivi n'a besoin que des demandes. On évite de
+  // parcourir le registre de comptes (plusieurs milliers de lignes) pour rien.
+  const sansComptes = req.query.vue === 'demandes';
+
   // Établissements regroupés par application.
   const byApp = new Map();
   for (const e of ref.etablissements) {
@@ -462,7 +466,7 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
 
     // Comptes déjà existants importés (ex. export NetSoins) rattachés aux
     // établissements du référent : il les voit et peut demander un reset dessus.
-    for (const acc of db.accountsForEtablissements(appId, values)) {
+    for (const acc of sansComptes ? [] : db.accountsForEtablissements(appId, values)) {
       const key = `${appId}:${(acc.login || '').toLowerCase()}`;
       if (!acc.login || accountsMap.has(key)) continue;
       accountsMap.set(key, {
@@ -499,7 +503,7 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
         etablissementLabel: referents.labelFor(appId, data.etablissement),
         createdAt: row.created_at,
       });
-      if (login && type === 'creation' && row.status === 'terminee') {
+      if (!sansComptes && login && type === 'creation' && row.status === 'terminee') {
         // Un compte créé via le portail fait autorité : il remplace l'éventuelle
         // entrée importée du même identifiant (référence + lien d'identifiants).
         const key = `${appId}:${login.toLowerCase()}`;

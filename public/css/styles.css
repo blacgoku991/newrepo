@@ -734,3 +734,46 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
 
 /* Lien de retour en tête de formulaire. */
 .back-link { display: inline-block; font-size: .9rem; margin-bottom: 16px; }
+
+
+/* --------------------------------------------------------------------------
+   Listes du portail (espace du référent ET suivi des demandes) : en-tête de
+   section, recherche, onglets par application, pagination, liste vide.
+   Ces règles servent plusieurs pages : elles vivent donc ici et non dans le
+   <style> d'une page.
+   -------------------------------------------------------------------------- */
+.esp-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 34px 0 14px; }
+.esp-section-head h2 { font-size: 1.18rem; color: #fff; }
+.esp-section-head .hint { color: var(--faint); font-size: .84rem; }
+.esp-search { display: block; margin: 4px 0 16px; }
+.esp-search input { width: 100%; padding: 11px 14px; font-size: .92rem; color: var(--text); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius); }
+.esp-search input:focus { outline: none; border-color: var(--gold-bright); box-shadow: 0 0 0 3px var(--gold-soft); }
+.esp-search input::placeholder { color: var(--faint); }
+.app-switch { display: inline-flex; gap: 6px; padding: 6px; margin-bottom: 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; flex-wrap: wrap; }
+.app-opt { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 18px 8px 10px; border-radius: 11px; border: 1px solid transparent; background: transparent; color: var(--muted); font-family: inherit; font-size: .93rem; font-weight: 650; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.app-opt:hover { color: var(--text); background: var(--surface-3); }
+.app-opt:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.app-opt .lg { width: 34px; height: 34px; flex: none; border-radius: 8px; background: #fff; display: grid; place-items: center; padding: 4px; }
+.app-opt .lg img, .app-opt .lg .logo { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
+.app-opt .lg svg { width: 18px; height: 18px; color: var(--surface-2); }
+.app-opt .lg .logo-fallback { width: 100%; height: 100%; border-radius: 5px; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: .8rem; }
+.app-opt:not(.on) .lg { filter: grayscale(1); opacity: .5; }
+.app-opt.on { background: var(--gold-soft); border-color: var(--gold-line); color: var(--gold-bright); }
+.app-opt.on .ck { width: 15px; height: 15px; flex: none; }
+@media (max-width: 600px) { .app-switch { display: flex; width: 100%; } .app-opt { flex: 1; justify-content: center; } }
+.esp-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.esp-pager .pg-info { color: var(--muted); font-size: .82rem; }
+.pg-btns { display: flex; gap: 5px; align-items: center; }
+.pg { min-width: 34px; height: 34px; padding: 0 9px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); font-size: .85rem; font-weight: 600; cursor: pointer; }
+.pg:hover:not(:disabled) { color: var(--text); border-color: var(--gold-line); }
+.pg.on { background: var(--gold-soft); color: var(--gold-bright); border-color: var(--gold-line); }
+.pg:disabled { opacity: .4; cursor: default; }
+.pg-ell { color: var(--faint); padding: 0 2px; }
+.empty-box { background: var(--surface); border: 1px dashed var(--line-2); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; color: var(--muted); }
+/* Références et identifiants : jamais coupés sur plusieurs lignes, sinon les
+   tableaux de demandes deviennent illisibles. */
+.tablecard .data td .ref { white-space: nowrap; }
+/* Lien de renvoi entre les deux pages (« Voir mes demandes », « Toutes mes
+   demandes ») : discret mais toujours atteignable au clavier. */
+.esp-lien { margin-left: auto; font-size: .85rem; font-weight: 600; color: var(--link); display: inline-flex; align-items: center; gap: 6px; }
+.esp-lien svg { width: 15px; height: 15px; }

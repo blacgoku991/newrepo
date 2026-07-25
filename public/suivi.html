@@ -28,13 +28,29 @@
   </header>
 
   <main>
-    <div class="wrap narrow" style="padding-top:40px;padding-bottom:60px">
-      <div class="section-head" style="margin-top:0"><h2>Suivre une demande</h2><p>Saisissez votre référence de suivi.</p></div>
-      <form class="track-form" id="track-form">
-        <input type="text" id="ref-input" placeholder="Ex. BKG-260721-AB12" autocomplete="off" spellcheck="false" />
-        <button type="submit" class="btn btn-primary">Rechercher</button>
-      </form>
-      <div id="track-result" class="panel track-result"></div>
+    <div class="wrap" style="max-width:1080px;padding-top:40px;padding-bottom:60px">
+      <!-- Détail d'une demande (avec ?ref=…) : la référence prime sur la liste. -->
+      <div id="track-detail" hidden>
+        <a class="esp-lien" href="/suivi.html" id="back-list">← Toutes mes demandes</a>
+        <div id="track-result" class="panel track-result" style="margin-top:14px"></div>
+      </div>
+
+      <!-- Liste des demandes des établissements du référent. -->
+      <div id="mes-demandes">
+        <div class="section-head" style="margin-top:0">
+          <h2>Mes demandes</h2>
+          <p>Toutes les demandes déposées sur vos établissements, et où elles en sont.</p>
+        </div>
+        <div id="dm-tabs"></div>
+        <label class="esp-search"><input type="text" id="dm-search" placeholder="Rechercher une référence, un bénéficiaire, un identifiant…" autocomplete="off" /></label>
+        <div id="dm-view"><div class="loading">Chargement de vos demandes…</div></div>
+
+        <div class="section-head"><h2>Une référence en main ?</h2><p>Saisissez-la pour ouvrir directement le suivi de cette demande.</p></div>
+        <form class="track-form" id="track-form">
+          <input type="text" id="ref-input" placeholder="Ex. BKG-260721-AB12" autocomplete="off" spellcheck="false" />
+          <button type="submit" class="btn btn-primary">Rechercher</button>
+        </form>
+      </div>
     </div>
   </main>
 

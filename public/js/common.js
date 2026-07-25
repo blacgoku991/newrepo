@@ -247,3 +247,60 @@ async function fetchJson(url, options) {
   }
   return body;
 }
+
+/* ---------------------------------------------------------------------------
+   Libellés des démarches et pagination — partagés par l'espace du référent,
+   la page de suivi et le panel d'administration, pour que les mêmes demandes
+   portent partout le même nom et la même mécanique de pages.
+   --------------------------------------------------------------------------- */
+
+const DEMARCHE_LABELS = {
+  creation: 'Création',
+  reset_mdp: 'Réinit. mot de passe',
+  ajout_etab: 'Ajout établissement',
+  maj_identite: 'Correction identité',
+  transfert_etab: 'Transfert établissement',
+};
+
+function demarcheLabel(type) {
+  return DEMARCHE_LABELS[type] || type || '—';
+}
+
+/** Numéros de page à afficher (1 … n-1 n n+1 … N). */
+function pageNumbers(page, pages) {
+  const wanted = [1, pages, page, page - 1, page + 1].filter((n) => n >= 1 && n <= pages);
+  const uniq = [...new Set(wanted)].sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  for (const n of uniq) { if (n - prev > 1) out.push('…'); out.push(n); prev = n; }
+  return out;
+}
+
+/** Pied de liste : « 1–15 sur 42 comptes » + numéros de page. */
+function pagerHtml(page, pages, from, to, total, noun) {
+  const info = `<span class="pg-info">${from}–${to} sur ${total} ${escapeHtml(noun)}</span>`;
+  if (pages <= 1) return `<div class="esp-pager">${info}</div>`;
+  const btns = pageNumbers(page, pages)
+    .map((n) => (n === '…'
+      ? '<span class="pg-ell">…</span>'
+      : `<button class="pg${n === page ? ' on' : ''}" data-page="${n}">${n}</button>`))
+    .join('');
+  return `<div class="esp-pager">${info}
+    <div class="pg-btns">
+      <button class="pg" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''} aria-label="Précédent">‹</button>
+      ${btns}
+      <button class="pg" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''} aria-label="Suivant">›</button>
+    </div>
+  </div>`;
+}
+
+/** Branche les boutons de pagination d'un conteneur. */
+function bindPager(box, page, pages, onChange) {
+  for (const b of box.querySelectorAll('.pg[data-page]')) {
+    if (b.disabled) continue;
+    b.addEventListener('click', () => {
+      const p = Number(b.dataset.page);
+      if (p >= 1 && p <= pages && p !== page) onChange(p);
+    });
+  }
+}
