@@ -12,8 +12,8 @@
  *
  * - Signature Ed25519 (`node:crypto`, aucune dépendance ajoutée) : modifier la
  *   date de fin dans la charge utile invalide la signature.
- * - La clé PRIVÉE ne quitte jamais le poste de l'éditeur (voir
- *   `outils-editeur/`, à garder hors du serveur client).
+ * - La clé PRIVÉE ne quitte jamais le poste de l'éditeur (elle vit dans ses
+ *   outils de l’éditeur, conservés hors du dépôt et hors du serveur client).
  * - La licence peut être liée à une INSTALLATION précise (`install`) : la
  *   recopier sur un autre serveur ne sert à rien.
  * - Une borne haute d'horloge (« high-water mark ») est mémorisée : reculer la
@@ -34,7 +34,7 @@ const db = require('./db');
 
 /**
  * Clé publique de l'éditeur (DER SPKI, base64). À REMPLACER par la vôtre avant
- * toute distribution : `outils-editeur/scripts/licence-keygen.js` l'affiche prête à
+ * toute distribution : l’outil `licence-keygen.js` de l’éditeur l’affiche prête à
  * coller. Tant que la valeur ci-dessous est le gabarit, le portail fonctionne
  * sans limitation (« licence non configurée ») — pratique en développement,
  * mais à ne jamais laisser chez un client.

@@ -944,7 +944,7 @@
       ? `<div class="alert alert-warn" style="margin-top:14px;font-size:.86rem">
            <b>Étape éditeur manquante — l'installation d'une licence est impossible en l'état.</b>
            <ol style="margin:8px 0 0 18px;line-height:1.7">
-             <li>sur votre poste : <code>node outils-editeur/scripts/licence-keygen.js</code></li>
+             <li>sur votre poste : <code>node licence-keygen.js (outils éditeur)</code></li>
              <li>coller la ligne <code>const CLE_PUBLIQUE = '…'</code> affichée dans <code>src/licence.js</code></li>
              <li>redémarrer le portail, puis revenir installer la licence ici</li>
            </ol>

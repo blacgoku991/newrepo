@@ -11,3 +11,7 @@ licence-public*
 .algonis/
 # Archive des outils éditeur (regénérable : zip -r outils-editeur-algonis.zip outils-editeur)
 outils-editeur-algonis.zip
+
+# Outils de l’éditeur (génération des licences, console, récapitulatif) :
+# ils ne doivent PAS partir chez le client avec le projet.
+outils-editeur/
