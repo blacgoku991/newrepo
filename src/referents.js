@@ -18,6 +18,7 @@
 const db = require('./db');
 const registry = require('./registry');
 const sso = require('./sso');
+const habilitation = require('./habilitation');
 
 /** Options « établissement » d'une application ({value,label}), pour le picker admin. */
 function establishmentsFor(appId) {
@@ -38,22 +39,67 @@ function labelFor(appId, value) {
   return found ? found.label : String(value || '');
 }
 
-/** Le contrôle des référents est-il actif ? (dès que le SSO est requis). */
+/** Le contrôle d'accès est-il actif ? (dès que le SSO est requis). */
 function enforced() {
-  // Fermé par défaut : dès que le SSO est actif, seuls les référents déclarés
-  // peuvent déposer. Auparavant, une base SANS aucun référent ouvrait le dépôt
-  // à tout compte Microsoft du tenant — sur n'importe quel établissement, et
-  // sans que rien ne le signale. Un portail neuf refuse donc les dépôts jusqu'à
-  // ce qu'un administrateur déclare les référents (le panel l'affiche en alerte).
+  // La porte reste fermée par défaut au sens où il faut être connecté ; ce que
+  // « être habilité » veut dire dépend de la politique choisie (habilitation.js) :
+  // tout le tenant, les porteurs d'un attribut, ou les référents déclarés.
   return sso.required();
 }
 
-/** Référent actif correspondant à l'utilisateur SSO connecté, ou null. */
+/** Tous les établissements connus, application par application. */
+function tousEtablissements() {
+  const out = [];
+  for (const app of registry.publicList()) {
+    if (app.comingSoon) continue;
+    for (const opt of establishmentsFor(app.id)) {
+      out.push({ appId: app.id, value: opt.value, label: opt.label });
+    }
+  }
+  return out;
+}
+
+/**
+ * Référent effectif de l'utilisateur connecté, ou null s'il n'a pas accès.
+ *
+ * Une fiche référent l'emporte toujours : elle restreint la portée aux
+ * établissements déclarés. Sans fiche, si la politique d'accès ouvre la porte
+ * (tenant, ou attribut satisfait), on rend un référent « de plein exercice »
+ * dont la portée couvre tous les établissements.
+ */
 function resolve(req) {
   const user = sso.currentUser(req);
   if (!user || !user.email) return null;
+
   const ref = db.getReferentByEmail(user.email);
-  return ref && ref.active ? ref : null;
+  if (ref && ref.active) return ref;
+  // Une fiche désactivée est un refus explicite : la politique ne la contourne pas.
+  if (ref && !ref.active) return null;
+
+  const porte = habilitation.ouvertePour(req);
+  if (!porte.ok) return null;
+  return {
+    id: null,
+    email: user.email,
+    prenom: user.prenom || '',
+    nom: user.nom || '',
+    active: 1,
+    tous: true,
+    origine: porte.detail,
+    etablissements: tousEtablissements(),
+  };
+}
+
+/** Motif de refus, pour le message et le journal. */
+function refus(req) {
+  const user = sso.currentUser(req);
+  if (!user) return 'Connectez-vous avec votre compte Microsoft 365 pour déposer une demande.';
+  const ref = db.getReferentByEmail(user.email);
+  if (ref && !ref.active) return 'Votre habilitation a été désactivée. Contactez votre administrateur.';
+  if (habilitation.mode() === 'attribut') {
+    return "Votre compte Microsoft 365 ne porte pas l'attribut requis pour utiliser ce portail. Contactez votre administrateur.";
+  }
+  return "Votre compte n'est pas habilité à déposer des demandes. Contactez votre administrateur pour être ajouté comme référent de votre établissement.";
 }
 
 /** Valeurs d'établissement rattachées à ce référent pour une application. */
@@ -73,7 +119,14 @@ function allowedEtablissements(ref, appId) {
  * groupe en modifiant simplement la valeur envoyée.
  */
 function allows(ref, appId, value) {
+  if (!ref) return false;
+  // Portée « tous les établissements » : accordée par la politique d'accès à
+  // qui n'a pas de fiche nominative. Une fiche, elle, reste limitative.
+  if (ref.tous === true) return true;
   return allowedEtablissements(ref, appId).includes(String(value));
 }
 
-module.exports = { establishmentsFor, labelFor, enforced, resolve, allowedEtablissements, allows };
+module.exports = {
+  establishmentsFor, labelFor, enforced, resolve, refus,
+  allowedEtablissements, allows, tousEtablissements,
+};

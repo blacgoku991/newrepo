@@ -652,6 +652,17 @@ const api = {
       .get(token);
   },
 
+  /**
+   * Attributs d'annuaire observés dans les jetons récents. Sert au panneau
+   * d'administration pour choisir sur quel attribut ouvrir l'accès : on ne
+   * peut pas deviner ce que le tenant du client émet, il faut le regarder.
+   */
+  recentSsoClaims(limit = 200) {
+    return db
+      .prepare(`SELECT email, name, claims, created_at FROM sso_sessions ORDER BY created_at DESC LIMIT ?`)
+      .all(limit);
+  },
+
   deleteSsoSession(token) {
     db.prepare(`DELETE FROM sso_sessions WHERE token = ?`).run(token);
   },

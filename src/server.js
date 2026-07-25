@@ -11,6 +11,7 @@ const registry = require('./registry');
 const auth = require('./auth');
 const sso = require('./sso');
 const referents = require('./referents');
+const habilitation = require('./habilitation');
 const stats = require('./stats');
 const { validate } = require('./validate');
 const { augmentSchema, effectiveSchema, effectiveSchemaFor, validateOverrides, requesterLabel } = require('./schema');
@@ -280,16 +281,15 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     return res.status(403).json({ error: `${droit.titre} — ${droit.message}`, licence: droit.etat });
   }
 
-  // Habilitation : quand des référents sont configurés, seuls les référents
-  // actifs (compte Microsoft 365 dans la liste blanche) peuvent déposer.
+  // Habilitation : selon la politique d'accès (ACCES_PORTAIL), tout le tenant
+  // Microsoft 365, les seuls porteurs d'un attribut, ou les référents déclarés.
   const enforce = referents.enforced();
   const referent = enforce ? referents.resolve(req) : null;
   if (enforce && !referent) {
     const u = sso.currentUser(req);
-    db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'depot_refuse_non_referent', '', entry.config.id, sso.clientIp(req));
-    return res.status(403).json({
-      error: "Votre compte n'est pas habilité à déposer des demandes. Contactez votre administrateur pour être ajouté comme référent de votre établissement.",
-    });
+    db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'depot_refuse_non_referent',
+      '', `${entry.config.id} — ${habilitation.mode()}`, sso.clientIp(req));
+    return res.status(403).json({ error: referents.refus(req) });
   }
 
   const demande = demarches.fromQuery(req.query.type);
@@ -410,7 +410,7 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
  *  - un administrateur connecté au panel.
  * Sans SSO (démonstration), le comportement d'origine est conservé.
  */
-function peutVoirDemande(req, row) {
+function peutVoirDemande(req, row, { motDePasse = false } = {}) {
   if (!sso.required()) return true;
   if (auth.currentSession(req)) return true; // administrateur du portail
 
@@ -428,6 +428,11 @@ function peutVoirDemande(req, row) {
   // Référent de l'établissement visé (départ ou arrivée pour un transfert).
   const ref = referents.resolve(req);
   if (!ref) return false;
+  // Remise d'un mot de passe : la portée « tous les établissements » accordée
+  // par la politique d'accès ne suffit pas. Ce lien révèle le mot de passe d'un
+  // tiers ; il reste réservé au demandeur, au bénéficiaire, à un référent
+  // NOMMÉMENT déclaré sur l'établissement, ou à un administrateur.
+  if (motDePasse && ref.tous === true) return false;
   const cibles = [data.etablissement, data.etablissement_cible, ...(data.etablissements_autorises || [])].filter(Boolean);
   return cibles.some((v) => referents.allows(ref, row.app_id, String(v)));
 }
@@ -461,7 +466,10 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
     demarche: { type, label: demarches.libelle(type), court: demarches.court(type), suivi: demarches.suivi(type, appName) },
     // Identifiants à récupérer : seulement si un mot de passe a été remis
     // (création, réinitialisation). Une correction d'identité n'en produit pas.
-    credentials: Boolean(row.status === 'terminee' && row.generated_login && db.credentialLinkForRequest(row.id)),
+    credentials: Boolean(
+      row.status === 'terminee' && row.generated_login && db.credentialLinkForRequest(row.id)
+      && peutVoirDemande(req, row, { motDePasse: true })
+    ),
     progress: {
       done,
       total,
@@ -480,7 +488,7 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
   // L'habilitation se vérifie AVANT l'état de la demande : sinon les codes de
   // réponse renseignent un tiers sur l'existence de la demande et sur le fait
   // qu'un mot de passe y est disponible.
-  if (!peutVoirDemande(req, row)) {
+  if (!peutVoirDemande(req, row, { motDePasse: true })) {
     const u = sso.currentUser(req);
     db.audit(u ? `${u.name} <${u.email}>` : 'inconnu', 'acces_identifiants_refuse', row.reference, 'hors périmètre', sso.clientIp(req));
     return res.status(404).json({ error: 'Référence inconnue' });
@@ -637,6 +645,9 @@ app.get('/api/espace/me', security.rateLimit('espace', 300, 10 * 60 * 1000), sso
       email: ref.email,
       nom: ref.nom,
       prenom: ref.prenom,
+      // Portée « tous les établissements » : accès ouvert par la politique
+      // (tenant ou attribut) plutôt que par une fiche nominative.
+      tous: ref.tous === true,
       // Libellé de repli : un rattachement enregistré sans libellé afficherait
       // une pastille vide.
       etablissements: ref.etablissements.map((e) => ({
@@ -957,6 +968,7 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
     automationMode: process.env.AUTOMATION_MODE === 'production' ? 'production' : 'demo',
     smtp: mailer.smtpConfigured(),
     sso: { configured: sso.configured(), required: sso.required(), tenant: process.env.M365_TENANT_ID || null },
+    acces: habilitation.etat(),
     nav: siteNav(),
     security: {
       defaultAdminPassword,
@@ -965,6 +977,62 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
     },
     licence: licence.etat(),
     apps,
+  });
+});
+
+/**
+ * Attributs Microsoft 365 réellement reçus lors des connexions récentes.
+ *
+ * Impossible de deviner ce que le tenant d'un client émet : les rôles
+ * d'application, les groupes et les attributs d'extension ne sortent que si
+ * Entra ID est configuré pour les mettre dans le jeton. Cette vue montre ce
+ * qui arrive vraiment, pour composer ACCES_ATTRIBUT sans tâtonner.
+ */
+app.get('/api/admin/sso/attributs', auth.requireApi, (req, res) => {
+  const sessions = db.recentSsoClaims(200);
+  const par = new Map();
+  for (const s of sessions) {
+    let claims = {};
+    try { claims = JSON.parse(s.claims || '{}'); } catch { claims = {}; }
+    for (const [nom, brut] of Object.entries(claims)) {
+      if (!par.has(nom)) par.set(nom, { attribut: nom, valeurs: new Map(), comptes: new Set() });
+      const item = par.get(nom);
+      item.comptes.add(s.email);
+      for (const v of habilitation.valeursDe(brut)) {
+        item.valeurs.set(v, (item.valeurs.get(v) || 0) + 1);
+      }
+    }
+  }
+  res.json({
+    acces: habilitation.etat(),
+    connexions: sessions.length,
+    // Les dernières connexions avec ce que leur jeton portait : c'est la vue
+    // « je me connecte et je regarde ce que Microsoft envoie ».
+    dernieres: sessions.slice(0, 15).map((s) => {
+      let claims = {};
+      try { claims = JSON.parse(s.claims || '{}'); } catch { claims = {}; }
+      return {
+        email: s.email,
+        name: s.name,
+        date: s.created_at,
+        attributs: Object.entries(claims).map(([nom, brut]) => ({
+          nom,
+          valeurs: habilitation.valeursDe(brut),
+          brut: typeof brut === 'object' ? JSON.stringify(brut) : String(brut),
+        })),
+        satisfait: habilitation.verifie(claims),
+      };
+    }),
+    attributs: [...par.values()]
+      .map((i) => ({
+        attribut: i.attribut,
+        comptes: i.comptes.size,
+        valeurs: [...i.valeurs.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 25)
+          .map(([valeur, n]) => ({ valeur, n })),
+      }))
+      .sort((a, b) => b.comptes - a.comptes),
   });
 });
 

@@ -104,6 +104,29 @@ pouvait viser le compte de service du robot (donc prendre la main sur
 l'application métier), et le détail d'une demande était lisible par tout
 compte du tenant. 48 tentatives d'attaque rejouables, toutes bloquées.
 
+### Qui a accès au portail (`ACCES_PORTAIL`)
+
+La porte d'entrée reste le SSO Microsoft 365 : sans session valide, aucune API
+métier ne répond. Ce que « être habilité » signifie ensuite se règle :
+
+| Valeur | Qui entre | Portée |
+|---|---|---|
+| `tenant` (défaut) | toute personne du tenant Microsoft 365 | tous les établissements |
+| `attribut` | les comptes dont le jeton porte l'attribut de `ACCES_ATTRIBUT` | tous les établissements |
+| `liste` | les référents déclarés dans le panneau | leurs établissements |
+
+Dans tous les modes : une **fiche référent l'emporte** (elle limite la personne
+à ses établissements), une fiche **désactivée est un refus** que la politique ne
+contourne pas, et la **remise d'un mot de passe** (lien à usage unique) reste
+réservée au demandeur, au bénéficiaire, à un référent nommément déclaré sur
+l'établissement, ou à un administrateur — la portée « tous les établissements »
+accordée par la politique ne l'ouvre pas.
+
+En mode `tenant`, un membre du tenant peut lire le détail des demandes du
+groupe (nom du bénéficiaire, identifiant, établissement) : c'est la contrepartie
+assumée d'un portail ouvert à toute l'organisation. Passer à `attribut` ou
+`liste` referme ce périmètre.
+
 Deux réglages d'exploitation en découlent :
 
 - `<APP>_PROTECTED_LOGINS` : comptes techniques du client à sanctuariser, en

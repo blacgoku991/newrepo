@@ -65,6 +65,12 @@ function parseCookies(req) {
   return out;
 }
 
+/** Ligne de session SSO du visiteur, attributs d'annuaire compris (ou null). */
+function session(req) {
+  const token = parseCookies(req)[COOKIE];
+  return token ? db.getSsoSession(token) || null : null;
+}
+
 /** Session SSO du visiteur (ou null). */
 function currentUser(req) {
   const token = parseCookies(req)[COOKIE];
@@ -227,6 +233,7 @@ module.exports = {
   COOKIE,
   configured,
   required,
+  session,
   currentUser,
   clientIp,
   loginRoute,

@@ -150,6 +150,7 @@ function compute() {
         actifs: liste.filter((r) => r.active).length,
         sansEtablissement: liste.filter((r) => (r.etablissements || []).length === 0).length,
         enforced: require('./referents').enforced(),
+        acces: require('./habilitation').etat(),
       };
     })(),
   };

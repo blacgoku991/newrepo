@@ -810,7 +810,19 @@
    */
   function alerteReferentsHtml(ref) {
     if (!ref.enforced) return '';
-    if (!ref.actifs) {
+    const acces = ref.acces || { mode: 'liste' };
+
+    // Mode « attributs » mal configuré : plus personne n'entre, sans que rien
+    // ne l'explique côté utilisateur.
+    if (acces.mode === 'attribut' && acces.configure === false) {
+      return `<div class="alert alert-err" style="margin-bottom:18px">
+        <b>Accès par attributs actif, mais aucune règle définie.</b> Personne ne peut entrer.
+        Renseignez <code>ACCES_ATTRIBUT</code> dans le <code>.env</code>, ou repassez
+        <code>ACCES_PORTAIL</code> sur <code>tenant</code>.</div>`;
+    }
+    // Hors mode « liste », l'absence de référent n'est pas un problème : la
+    // porte est tenue par le SSO ou par les attributs.
+    if (!ref.actifs && acces.mode === 'liste') {
       return `<div class="alert alert-err" style="margin-bottom:18px">
         <b>Aucun référent habilité.</b> Personne ne peut déposer de demande pour l'instant :
         le dépôt est réservé aux référents déclarés. Ajoutez-les dans
@@ -929,6 +941,77 @@
    * Carte « Licence » : état, échéance, identifiant d'installation à
    * communiquer à l'éditeur, et champ pour coller la licence reçue.
    */
+  const ACCES_LIBELLES = {
+    tenant: ['Ouvert à tout le tenant Microsoft 365', 'st-terminee',
+      'Toute personne qui se connecte avec un compte du tenant peut déposer des demandes, sur tous les établissements. Un référent déclaré reste, lui, limité à ses établissements.'],
+    attribut: ['Selon les attributs du compte Microsoft', 'st-terminee',
+      'Seuls les comptes dont le jeton porte l’attribut attendu entrent. Les autres sont refusés à la porte.'],
+    liste: ['Référents déclarés uniquement', 'st-en_cours',
+      'Seules les personnes inscrites dans Configuration → Référents peuvent déposer, sur leurs établissements.'],
+  };
+
+  /**
+   * Politique d'accès + inspection des attributs réellement reçus.
+   * Sans cette vue, impossible de savoir ce que le tenant du client émet :
+   * rôles, groupes et attributs d'extension ne sortent que si Entra ID est
+   * configuré pour les mettre dans le jeton.
+   */
+  function accesCardHtml(acces) {
+    const [titre, cls, aide] = ACCES_LIBELLES[acces.mode] || ACCES_LIBELLES.tenant;
+    const regles = (acces.regles || []).map((r) =>
+      `<code>${escapeHtml(r.attribut)}${r.valeurs.length ? ` = ${r.valeurs.join(', ')}` : ''}</code>`).join(' ou ');
+    return `
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Qui a accès au portail</h3><span class="hint">variable ACCES_PORTAIL</span></div><div class="cb">
+        <p style="font-size:.92rem"><span class="badge ${cls}">${escapeHtml(titre)}</span></p>
+        <p style="font-size:.84rem;color:var(--muted);margin-top:8px">${escapeHtml(aide)}</p>
+        ${acces.mode === 'attribut' ? (regles
+    ? `<p style="font-size:.84rem;margin-top:10px">Règle appliquée : ${regles}</p>`
+    : `<div class="alert alert-err" style="margin-top:10px"><b>Aucune règle définie.</b> Renseignez <code>ACCES_ATTRIBUT</code> dans le <code>.env</code> : personne ne peut entrer en l'état.</div>`) : ''}
+        <p style="font-size:.84rem;color:var(--muted);margin-top:10px">
+          Se règle dans le <code>.env</code> : <code>ACCES_PORTAIL=tenant</code> (défaut),
+          <code>attribut</code> ou <code>liste</code>.
+        </p>
+        <button class="btn btn-sm" id="acces-voir" style="margin-top:14px">Voir les attributs reçus des connexions SSO</button>
+        <div id="acces-attributs" style="margin-top:14px"></div>
+      </div></div>`;
+  }
+
+  function attributsHtml(d) {
+    if (!d.connexions) {
+      return `<div class="alert alert-warn">Aucune connexion SSO enregistrée pour l'instant.
+        Connectez-vous une fois au site avec votre compte Microsoft, puis revenez ici.</div>`;
+    }
+    const derniere = (d.dernieres || [])[0];
+    return `
+      ${derniere ? `<div class="card" style="margin-bottom:14px"><div class="ch"><h3>Dernière connexion</h3>
+        <span class="hint">${escapeHtml(derniere.date || '')}</span></div><div class="cb">
+        <p style="font-size:.92rem"><b>${escapeHtml(derniere.name || '')}</b> &lt;${escapeHtml(derniere.email || '')}&gt;</p>
+        ${derniere.attributs.length ? `<div style="overflow-x:auto;margin-top:10px"><table class="data" style="margin:0"><thead><tr>
+            <th>Attribut</th><th>Valeur(s) reçue(s)</th><th>Règle à écrire</th></tr></thead><tbody>
+          ${derniere.attributs.map((a) => `<tr>
+            <td><code>${escapeHtml(a.nom)}</code></td>
+            <td>${a.valeurs.length ? a.valeurs.map((v) => `<code>${escapeHtml(v)}</code>`).join(' ') : escapeHtml(a.brut)}</td>
+            <td><code>ACCES_ATTRIBUT=${escapeHtml(a.nom)}${a.valeurs.length ? `=${a.valeurs[0]}` : ''}</code></td>
+          </tr>`).join('')}
+        </tbody></table></div>` : `<div class="alert alert-warn" style="margin-top:10px">
+          <b>Ce jeton ne porte aucun attribut personnalisé.</b> Microsoft n'envoie que le strict nécessaire
+          tant qu'on ne le lui demande pas : dans Entra ID, ouvrez votre application →
+          <i>Configuration du jeton</i> → <i>Ajouter une revendication facultative</i> (ou
+          <i>Ajouter une revendication de groupe</i>), ou attribuez un <i>rôle d'application</i>
+          aux comptes autorisés. Reconnectez-vous ensuite et rechargez cette page.</div>`}
+      </div></div>` : ''}
+      <div class="card"><div class="ch"><h3>Vu sur les ${d.connexions} dernières connexions</h3></div><div class="cb">
+        ${d.attributs.length ? `<div style="overflow-x:auto"><table class="data" style="margin:0"><thead><tr>
+            <th>Attribut</th><th>Comptes</th><th>Valeurs les plus fréquentes</th></tr></thead><tbody>
+          ${d.attributs.map((a) => `<tr>
+            <td><code>${escapeHtml(a.attribut)}</code></td>
+            <td>${a.comptes}</td>
+            <td>${a.valeurs.map((v) => `<code>${escapeHtml(v.valeur)}</code> <span style="color:var(--muted)">×${v.n}</span>`).join(' · ')}</td>
+          </tr>`).join('')}
+        </tbody></table></div>` : '<p style="font-size:.88rem;color:var(--muted)">Aucun attribut personnalisé dans les jetons reçus.</p>'}
+      </div></div>`;
+  }
+
   function licenceCardHtml(l) {
     const classes = { ok: 'st-terminee', warn: 'st-en_cours', danger: 'st-echec', info: 'st-en_attente' };
     const etiquette = `<span class="badge ${classes[l.niveau] || 'st-en_attente'}">${escapeHtml(l.titre || '—')}</span>`;
@@ -995,6 +1078,7 @@
         <p style="font-size:.92rem">État : ${s.sso && s.sso.required ? '<span class="badge st-terminee">Actif — accès réservé aux comptes ADEF</span>' : s.sso && s.sso.configured ? '<span class="badge st-en_attente">Configuré mais désactivé (SSO_REQUIRED=false)</span>' : '<span class="badge st-en_attente">Non configuré — site en accès libre</span>'}</p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Renseignez <code>M365_TENANT_ID</code>, <code>M365_CLIENT_ID</code>, <code>M365_CLIENT_SECRET</code> et <code>M365_REDIRECT_URI</code> dans le <code>.env</code> (application « Web » enregistrée dans Entra ID). Seuls les comptes Microsoft 365 du tenant ADEF pourront alors accéder au portail.</p>
       </div></div>
+      ${accesCardHtml(s.acces || {})}
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Envoi d'e-mails (SMTP)</h3></div><div class="cb">
         <p style="font-size:.92rem">État : ${badge(s.smtp)}</p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Renseignez <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> (et <code>MAIL_FROM</code>) dans le <code>.env</code> pour l'envoi automatique. Sinon les e-mails restent en boîte d'envoi.</p>
@@ -1002,6 +1086,20 @@
       <div class="card"><div class="ch"><h3>Applications</h3><span class="hint">configuration du mode production</span></div><div class="cb">
         ${s.apps.map((a) => `<div class="settings-app"><div style="flex:1"><b>${escapeHtml(a.name)}</b>${a.comingSoon ? ' <span class="badge st-en_attente">Bientôt</span>' : ''}<div style="font-size:.8rem;color:var(--muted);margin-top:3px">${a.vars.map((v) => `${v.name}: ${v.set ? '✔' : '—'}`).join(' · ') || 'aucune variable'}</div></div><div class="st">${a.comingSoon ? '' : badge(a.configured)}</div></div>`).join('')}
       </div></div>`;
+
+    const voir = el('acces-voir');
+    if (voir) voir.addEventListener('click', async () => {
+      const zone = el('acces-attributs');
+      voir.disabled = true;
+      zone.innerHTML = '<p style="font-size:.88rem;color:var(--muted)">Lecture des connexions…</p>';
+      try {
+        zone.innerHTML = attributsHtml(await fetchJson('/api/admin/sso/attributs'));
+      } catch (e) {
+        zone.innerHTML = `<div class="alert alert-err">${escapeHtml(e.message)}</div>`;
+      } finally {
+        voir.disabled = false;
+      }
+    });
 
     const licSave = el('lic-save');
     if (licSave) licSave.addEventListener('click', async () => {
