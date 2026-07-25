@@ -244,7 +244,9 @@ async function createAccount(data, ctx) {
             await list.locator('select').last().selectOption('200').catch(() => {});
           }
           // Attente adaptative : rend la main dès que les lignes sont chargées.
-          await waitGridSettle(list, page, { max: 4000, min: 1000, quiet: 800 });
+          // 200 lignes prennent plusieurs secondes ; si on enchaîne trop vite,
+          // le clic de tri suivant part sur la grille précédente et est perdu.
+          await waitGridSettle(list, page, { max: 8000, min: 1500, quiet: 800 });
 
           // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics, avec
           //    attente entre les deux) pour regrouper les fonctions renseignées
@@ -254,10 +256,21 @@ async function createAccount(data, ctx) {
           if (!(await header.count().catch(() => 0))) {
             header = list.getByText(/Fonctions ADEF/).first();
           }
-          await header.click().catch(() => {});
-          await waitGridSettle(list, page, { max: 2500, min: 600, quiet: 500 });
-          await header.click().catch(() => {});
-          await waitGridSettle(list, page, { max: 2500, min: 600, quiet: 500 });
+          // Le tri est un aller-retour serveur : la grille se recharge entre les
+          // deux clics. Sans attente réelle, le second clic part sur l'ancienne
+          // grille et le tri finit à l'envers — les fonctions vides restent en
+          // tête et la fonction cherchée n'est sur aucune des 200 lignes
+          // affichées. On attend donc au moins 2 s après chaque clic, davantage
+          // si la grille bouge encore.
+          const trier = async () => {
+            // Attente légitime : on ré-arme le chien de garde du worker pour ne
+            // pas être tué à tort pendant ces rechargements de grille.
+            if (ctx.keepAlive) ctx.keepAlive();
+            await header.click().catch(() => {});
+            await waitGridSettle(list, page, { max: 8000, min: 2000, quiet: 800 });
+          };
+          await trier();
+          await trier();
           ctx.log(`Recherche de la cellule « ${data.fonction} » et de son bouton dupliquer`);
 
           // 3. Repérer la CELLULE (gridcell) contenant la fonction demandée.
@@ -274,9 +287,17 @@ async function createAccount(data, ctx) {
             .getByRole('gridcell', { name: fonctionRe })
             .or(list.locator('td').filter({ hasText: data.fonction }))
             .first();
-          try {
-            await cell.waitFor({ timeout: 30000 });
-          } catch {
+          // Si la fonction n'apparaît pas, c'est le plus souvent que le tri n'a
+          // pas pris (clic avalé pendant un rechargement) : on re-trie et on
+          // regarde à nouveau, plutôt que d'échouer sur un faux « fonction
+          // inexistante ». Trois états de tri au maximum.
+          let vue = await cell.waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+          for (let essai = 2; !vue && essai <= 3; essai++) {
+            ctx.log(`Fonction pas encore visible — nouveau tri (essai ${essai}/3)`);
+            await trier();
+            vue = await cell.waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+          }
+          if (!vue) {
             throw new Error(
               `Aucun utilisateur avec la fonction « ${data.fonction} » : pas de modèle à ` +
                 `dupliquer. Vérifiez l'orthographe de la fonction, ou créez le premier compte ` +
@@ -422,10 +443,13 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant, etabLabel, base, hol
       id: 'etablissement',
       label: `Bascule sur l'établissement « ${etabLabel} »`,
       run: async () => {
-        const select = await findEtabSelect(page);
+        // `holder.page` : la page n'existe qu'au lancement du navigateur, ces
+        // étapes étant construites avant (voir le porteur passé en paramètre).
+        const select = await findEtabSelect(holder.page);
         if (!select) throw new Error(`Sélecteur d'établissement introuvable dans les frames de la page.`);
         const current = await select.inputValue().catch(() => null);
         if (current !== data.etablissement) {
+          ctx.log(`Bascule d'établissement vers « ${etabLabel} »…`);
           await select.selectOption(data.etablissement);
           await holder.page.waitForLoadState('networkidle');
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
