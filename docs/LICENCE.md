@@ -70,7 +70,16 @@ secret : elle part chez tous les clients.
 
 ### 3. Émettre une licence
 
-Le client vous donne son **identifiant d'installation** (Réglages → Licence) :
+Le client vous donne son **identifiant d'installation** (Réglages → Licence).
+
+**Voie normale — la console éditeur** : `outils-editeur/console-algonis.cmd`
+(ou `node outils-editeur/console.js`). Le navigateur s'ouvre sur le suivi de
+toutes les sociétés livrées : statut de licence, échéances, historique des
+jetons, génération et renouvellement. Le registre vit dans
+`~/.algonis/clients.json`, le serveur n'écoute que sur `127.0.0.1` et exige un
+jeton de session tiré au hasard à chaque démarrage.
+
+**Voie ligne de commande** — même code de signature, même résultat :
 
 ```bash
 node outils-editeur/scripts/licence-signer.js \

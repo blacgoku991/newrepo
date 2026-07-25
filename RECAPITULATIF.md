@@ -98,9 +98,20 @@ du serveur client) contient tout, avec son mode d'emploi.
 ```
 Une fois pour toutes  : node outils-editeur/scripts/licence-keygen.js
                         → colle la clé publique affichée dans src/licence.js
-À chaque vente        : double-clic sur generer-licence.cmd
-                        → 3 questions, la licence s'affiche
+Au quotidien          : double-clic sur console-algonis.cmd
+                        → un panneau dans le navigateur : toutes vos sociétés,
+                          leurs licences, ce qui expire, génération en 2 clics
 ```
+
+**La console éditeur** (`console-algonis.cmd`) est votre tableau de bord
+commercial : la liste des sociétés livrées avec leur identifiant
+d'installation, le statut de chaque licence (active / expire dans X jours /
+expirée), l'historique complet des jetons émis, et la génération ou le
+renouvellement en deux clics avec les dates déjà proposées. Tout tient dans
+`~/.algonis/clients.json`, sur votre poste. La console n'écoute que sur
+`127.0.0.1` avec un jeton de session tiré au hasard à chaque démarrage : elle
+n'est joignable que par vous. La ligne de commande reste disponible en secours
+et produit exactement les mêmes licences.
 
 **Ce que vit le client** :
 

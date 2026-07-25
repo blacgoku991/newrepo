@@ -33,9 +33,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const crypto = require('node:crypto');
-
-const PREFIXE = 'ALG1';
+const signature = require('../lib/signature');
 
 function arg(nom, defaut = null) {
   const i = process.argv.indexOf(`--${nom}`);
@@ -71,22 +69,8 @@ if (erreurs.length) {
   process.exit(1);
 }
 
-const charge = {
-  v: 1,
-  client,
-  debut,
-  fin,
-  grace,
-  emis: new Date().toISOString().slice(0, 10),
-};
-if (install) charge.install = install;
-if (note) charge.note = String(note).slice(0, 200);
-
-const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const chargeB64 = b64url(Buffer.from(JSON.stringify(charge), 'utf8'));
-const cle = crypto.createPrivateKey(fs.readFileSync(cheminCle));
-const signature = b64url(crypto.sign(null, Buffer.from(`${PREFIXE}.${chargeB64}`, 'utf8'), cle));
-const jeton = `${PREFIXE}.${chargeB64}.${signature}`;
+// La signature vit dans un seul module, partagé avec la console (console.js).
+const { jeton, charge } = signature.signer({ client, debut, fin, grace, install, note, cheminCle });
 
 console.log('');
 console.log(`  Client        : ${client}`);

@@ -4,18 +4,57 @@ Ce dossier ne doit **pas** rester sur le serveur d'un client. Extrayez-le sur
 votre machine (par exemple `C:\Algonis\outils-editeur` ou `~/Algonis`), et
 c'est de là que vous fabriquerez les licences.
 
-Il contient deux commandes, rien d'autre. Aucune installation : juste Node.js
-(version 20 ou plus récente — `node --version` pour vérifier).
+Aucune installation : juste Node.js (version 20 ou plus récente —
+`node --version` pour vérifier).
 
 ```
 outils-editeur/
 ├── LISEZ-MOI.md              ← ce fichier
-├── generer-licence.cmd       ← Windows : double-clic, questions/réponses
-├── generer-licence.sh        ← macOS / Linux : idem
+├── console-algonis.cmd       ← Windows : DOUBLE-CLIC → ouvre la console
+├── console-algonis.sh        ← macOS / Linux : idem
+├── console.js                ← le petit serveur local de la console
+├── console/                  ← l'interface (HTML/CSS/JS)
+├── lib/                      ← signature et registre des clients
+├── generer-licence.cmd       ← secours : questions/réponses en ligne de commande
+├── generer-licence.sh        ← idem, macOS / Linux
 └── scripts/
     ├── licence-keygen.js     ← crée votre paire de clés (UNE SEULE FOIS)
-    └── licence-signer.js     ← signe une licence client
+    └── licence-signer.js     ← signe une licence client (ligne de commande)
 ```
+
+## La console — le tableau de bord de vos clients
+
+Double-cliquez sur **`console-algonis.cmd`** (Windows) ou lancez
+`./console-algonis.sh` : votre navigateur s'ouvre sur un panneau qui rassemble
+tout ce dont vous avez besoin.
+
+- **la liste de toutes les sociétés** à qui vous avez livré le portail, avec
+  leur identifiant d'installation, leur contact et vos notes internes ;
+- **le statut de chacune** : active, expire dans X jours (orange dès 30 jours),
+  expirée, sans licence — et quatre compteurs en haut de page ;
+- **l'historique complet des licences** émises pour chaque société (dates,
+  tolérance, référence de commande), avec un bouton pour revoir et recopier
+  n'importe quelle licence déjà envoyée ;
+- **la génération et le renouvellement** en deux clics : la console propose
+  automatiquement la suite de la licence en cours (début = lendemain de
+  l'échéance, fin = un an plus tard) et la signe avec votre clé privée ;
+- **la reprise d'une licence déjà émise** (bouton « Enregistrer une licence
+  déjà émise ») : collez un jeton généré autrefois en ligne de commande, sa
+  signature est vérifiée puis il rejoint l'historique.
+
+Tout est stocké dans un seul fichier sur votre poste :
+`%USERPROFILE%\.algonis\clients.json` (ou `~/.algonis/clients.json`), en droits
+`600`. Sauvegardez-le avec votre clé privée.
+
+**Ce que la console n'est pas** : un service en ligne. Elle n'écoute que sur
+`127.0.0.1`, n'appelle rien à l'extérieur, et exige un jeton de session tiré au
+hasard à chaque démarrage — l'adresse affichée dans la fenêtre noire n'est
+valable que pour cette session. Personne d'autre que vous, sur votre machine,
+ne peut l'ouvrir.
+
+> La ligne de commande (`generer-licence.cmd`, `scripts/licence-signer.js`)
+> reste disponible et produit exactement les mêmes licences : les deux chemins
+> partagent le même code de signature. Utilisez-la si la console ne démarre pas.
 
 ---
 
@@ -52,9 +91,10 @@ que si votre clé privée a fuité.
 Le client vous donne son **identifiant d'installation** (il le lit dans
 Administration → Réglages → Licence, ça ressemble à `A1B2-C3D4-E5F6-7890`).
 
-**Le plus simple** : double-cliquez sur `generer-licence.cmd` (Windows) ou
-lancez `./generer-licence.sh` (Mac/Linux) — il vous pose les trois questions et
-affiche la licence.
+**Le plus simple** : ouvrez la console (`console-algonis.cmd`), créez la
+société si c'est une nouvelle, puis « Générer la licence » / « Renouveler la
+licence ». Le jeton s'affiche avec un bouton « Copier ». La société et sa
+licence sont enregistrées : vous saurez l'an prochain quand la relancer.
 
 **En ligne de commande**, si vous préférez :
 
@@ -88,9 +128,12 @@ Licence, clique « Installer la licence », c'est fini.
 
 ### Renouveler
 
-Exactement la même commande avec la nouvelle date de fin. Le client colle la
-nouvelle licence par-dessus l'ancienne : aucune interruption, rien à
-redémarrer, et les demandes en attente repartent seules.
+Dans la console : ouvrez la société, « Renouveler la licence », les dates sont
+déjà proposées, « Générer ». En ligne de commande : exactement la même commande
+avec la nouvelle date de fin.
+
+Le client colle la nouvelle licence par-dessus l'ancienne : aucune
+interruption, rien à redémarrer, et les demandes en attente repartent seules.
 
 ---
 
@@ -144,7 +187,8 @@ cela — seul un appel à votre serveur le ferait, ce que ses flux interdisent.
 
 Pour que ce soit visible, le panneau affiche l'**empreinte de la clé
 embarquée** (8 caractères, sous l'identifiant d'installation). Comparez-la à la
-vôtre, que vous obtenez ainsi :
+vôtre, **affichée en haut à droite de la console** (et dans la fenêtre noire au
+démarrage). En ligne de commande :
 
 ```bash
 node -e "const c=require('crypto'),f=require('fs'),o=require('os');console.log(c.createHash('sha256').update(f.readFileSync(o.homedir()+'/.algonis/licence-public.txt','utf8').trim()).digest('hex').slice(0,8).toUpperCase())"
