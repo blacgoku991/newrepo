@@ -87,6 +87,30 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
     showView(location.hash.replace('#', '') || 'overview');
+    majBandeauLicence();
+  }
+
+  /**
+   * Bandeau de licence — réservé à l'administration. Les référents n'ont pas à
+   * connaître l'état de la licence : ce n'est pas leur sujet, et le portail
+   * reste consultable de toute façon. Muet quand tout va bien.
+   */
+  async function majBandeauLicence() {
+    const host = el('licence-banner');
+    if (!host) return;
+    let l;
+    try {
+      l = (await fetchJson('/api/admin/settings')).licence;
+    } catch {
+      return; // sans état de licence, on n'affiche rien plutôt qu'une erreur
+    }
+    if (!l || l.niveau === 'ok') { host.innerHTML = ''; return; }
+    const cls = l.niveau === 'danger' ? 'lb-danger' : l.niveau === 'warn' ? 'lb-warn' : 'lb-info';
+    host.innerHTML = `<div class="licence-banner ${cls}" role="status"><div class="lb-inner">
+      <span class="lb-ic">${icon(l.robot ? 'clock' : 'lock')}</span>
+      <span><b>${escapeHtml(l.titre || '')}</b> ${escapeHtml(l.message || '')}
+        ${l.niveau !== 'info' ? ` <a href="#settings">Réglages → Licence</a>` : ''}</span>
+    </div></div>`;
   }
 
   function showView(view) {
@@ -913,18 +937,32 @@
     if (l.debut || l.fin) lignes.push(`Validité : ${escapeHtml(l.debut || '?')} → ${escapeHtml(l.fin || '?')}`);
     if (l.joursRestants !== null && l.joursRestants !== undefined) lignes.push(`Reste : <b>${l.joursRestants} jour${l.joursRestants > 1 ? 's' : ''}</b>`);
     lignes.push(`Traitements automatiques : ${l.robot ? '<span class="badge st-terminee">actifs</span>' : '<span class="badge st-echec">suspendus</span>'}`);
+    // Sans clé publique embarquée, aucune licence ne PEUT être installée : on
+    // n'affiche pas un champ dont le bouton refuserait forcément. On explique
+    // l'étape qui manque, avec la marche à suivre.
+    const saisie = l.configuree === false
+      ? `<div class="alert alert-warn" style="margin-top:14px;font-size:.86rem">
+           <b>Étape éditeur manquante — l'installation d'une licence est impossible en l'état.</b>
+           <ol style="margin:8px 0 0 18px;line-height:1.7">
+             <li>sur votre poste : <code>node outils-editeur/scripts/licence-keygen.js</code></li>
+             <li>coller la ligne <code>const CLE_PUBLIQUE = '…'</code> affichée dans <code>src/licence.js</code></li>
+             <li>redémarrer le portail, puis revenir installer la licence ici</li>
+           </ol>
+           <p style="margin-top:8px">D'ici là, le portail fonctionne sans aucune limitation.</p>
+         </div>`
+      : `<label style="display:block;margin-top:14px;font-size:.86rem">Licence fournie par l'éditeur
+           <textarea class="inp" id="lic-jeton" rows="3" spellcheck="false" placeholder="ALG1.…" style="margin-top:6px;font-family:var(--mono);font-size:.8rem"></textarea>
+         </label>
+         <button class="btn btn-primary btn-sm" id="lic-save" style="margin-top:10px">Installer la licence</button>
+         <p id="lic-erreur" style="color:var(--danger);font-size:.86rem;margin-top:8px"></p>`;
     return `
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Licence</h3>${etiquette}</div><div class="cb">
         <p style="font-size:.92rem">${escapeHtml(l.message || '')}</p>
         <div style="font-size:.86rem;color:var(--muted);margin-top:10px;line-height:1.9">${lignes.join('<br />')}</div>
         <p style="font-size:.86rem;margin-top:14px">Identifiant de cette installation, à communiquer à l'éditeur :
           <span class="ref">${escapeHtml(l.installId || '—')}</span></p>
-        <label style="display:block;margin-top:14px;font-size:.86rem">Licence fournie par l'éditeur
-          <textarea class="inp" id="lic-jeton" rows="3" spellcheck="false" placeholder="ALG1.…" style="margin-top:6px;font-family:var(--mono);font-size:.8rem"></textarea>
-        </label>
-        <button class="btn btn-primary btn-sm" id="lic-save" style="margin-top:10px">Installer la licence</button>
-        <p id="lic-erreur" style="color:var(--danger);font-size:.86rem;margin-top:8px"></p>
-        ${l.configuree === false ? `<p style="font-size:.82rem;color:var(--warn);margin-top:10px">Aucune clé publique n'est embarquée dans cette version : le portail fonctionne sans limitation. Posez votre clé publique dans <code>src/licence.js</code> avant toute mise en service chez un client.</p>` : ''}
+        ${l.empreinteCle ? `<p style="font-size:.82rem;color:var(--muted);margin-top:4px">Clé de l'éditeur : <span class="ref" style="font-size:.8rem">${escapeHtml(l.empreinteCle)}</span> — doit correspondre à celle de votre poste.</p>` : ''}
+        ${saisie}
       </div></div>`;
   }
 
@@ -979,6 +1017,7 @@
         });
         toast('Licence installée');
         loadSettings();
+        majBandeauLicence();
       } catch (e) {
         erreur.textContent = e.message;
         licSave.disabled = false;

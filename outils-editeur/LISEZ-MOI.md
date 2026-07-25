@@ -106,6 +106,55 @@ redémarrer, et les demandes en attente repartent seules.
 
 ---
 
+## « Pourquoi la clé publique peut-elle rester visible dans le code ? »
+
+C'est la question qu'on se pose toujours, et la réponse tient en une image :
+**un cachet de cire.**
+
+- Votre **clé privée** est le *tampon*. Il est chez vous, il **fabrique** le
+  cachet. Personne d'autre ne l'a.
+- La **clé publique** est l'*empreinte du tampon*. Elle est chez tous les
+  clients, et elle sert uniquement à **vérifier** qu'un cachet est authentique.
+
+Voir l'empreinte ne permet pas de graver le tampon. C'est le principe de la
+signature asymétrique (ici Ed25519) : les deux clés vont **dans un seul sens**.
+On ne remonte pas de la publique vers la privée — pas « c'est difficile » :
+mathématiquement hors de portée, même avec tous les ordinateurs de la planète.
+
+Un client qui ouvre `src/licence.js` et lit la clé publique peut :
+
+- vérifier des licences. C'est tout. C'est exactement ce que fait le portail.
+
+Il ne peut **pas** :
+
+- se fabriquer une licence (il faudrait la clé privée) ;
+- prolonger la sienne (la date est couverte par la signature) ;
+- réutiliser celle d'un autre client (elle est liée à une installation).
+
+**Oui, la clé doit être dans le code livré.** Le portail doit pouvoir vérifier
+une licence sans appeler personne — vos clients ont des flux réseau fermés. La
+clé de vérification doit donc voyager avec l'application : c'est le
+fonctionnement normal de tout système de licence hors ligne.
+
+### Le seul contournement, et comment vous le voyez
+
+Un client déterminé peut **modifier votre code** : remplacer votre clé publique
+par la sienne, et se signer des licences. Aucune vérification locale n'empêche
+cela — seul un appel à votre serveur le ferait, ce que ses flux interdisent.
+
+Pour que ce soit visible, le panneau affiche l'**empreinte de la clé
+embarquée** (8 caractères, sous l'identifiant d'installation). Comparez-la à la
+vôtre, que vous obtenez ainsi :
+
+```bash
+node -e "const c=require('crypto'),f=require('fs'),o=require('os');console.log(c.createHash('sha256').update(f.readFileSync(o.homedir()+'/.algonis/licence-public.txt','utf8').trim()).digest('hex').slice(0,8).toUpperCase())"
+```
+
+Si l'empreinte affichée chez un client diffère de la vôtre, sa copie a été
+modifiée. C'est alors un sujet contractuel, plus un sujet technique.
+
+---
+
 ## Sécurité — ce que ça bloque, ce que ça ne bloque pas
 
 **Bloqué** (chaque cas est couvert par un test automatisé) :
@@ -113,7 +162,8 @@ redémarrer, et les demandes en attente repartent seules.
 - modifier la date de fin dans le jeton → signature invalide ;
 - fabriquer une licence avec sa propre clé → signature invalide ;
 - recopier la licence d'un autre client → « émise pour une autre installation » ;
-- reculer l'horloge du serveur → détecté, traitements suspendus ;
+- reculer l'horloge pour faire « revivre » une licence échue → détecté,
+  traitements suspendus (une simple correction d'horloge, elle, ne gêne pas) ;
 - supprimer la licence de la base → « aucune licence installée » ;
 - repartir d'une base vide → nouvel identifiant d'installation, licence invalide.
 
@@ -142,6 +192,6 @@ Deux garde-fous côté commercial :
 |---|---|
 | « Licence invalide » | le jeton a été coupé au copier-coller (il doit être sur **une seule ligne**, sans espace) |
 | « émise pour une autre installation » | l'identifiant d'installation a changé (base recréée, nouveau serveur) → resignez avec le nouvel identifiant qu'il vous donne |
-| « Date du serveur incohérente » | l'horloge du serveur a été reculée → la remettre à l'heure, tout repart |
+| « Date du serveur incohérente » | l'horloge a été reculée alors que la licence était déjà échue → remettre l'horloge à l'heure **et** installer une licence à jour |
 | « Aucune licence installée » | la base a été réinitialisée → renvoyez une licence |
 | Le panneau dit « Licence non configurée » | la clé publique n'a pas été posée dans `src/licence.js` avant la livraison (étape 1) |

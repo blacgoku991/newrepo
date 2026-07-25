@@ -784,6 +784,9 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
    seule couleur (icône + intitulé explicite). */
 .licence-banner { border-bottom: 1px solid var(--line); }
 .licence-banner .lb-inner { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: flex-start; gap: 11px; font-size: .9rem; line-height: 1.55; }
+/* Dans le panel d'administration, le bandeau occupe toute la largeur du contenu. */
+#licence-banner .lb-inner { max-width: none; padding: 12px 28px; }
+.lb-info { background: var(--info-soft); border-bottom-color: var(--info-line); color: var(--ink-2); }
 .licence-banner .lb-ic { flex: none; display: grid; place-items: center; }
 .licence-banner .lb-ic svg { width: 18px; height: 18px; }
 .licence-banner b { font-weight: 650; }

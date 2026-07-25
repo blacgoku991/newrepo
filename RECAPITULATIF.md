@@ -96,7 +96,7 @@ réseau, jamais — ses flux fermés ne posent donc aucun problème.
 du serveur client) contient tout, avec son mode d'emploi.
 
 ```
-Une fois pour toutes  : node scripts/licence-keygen.js
+Une fois pour toutes  : node outils-editeur/scripts/licence-keygen.js
                         → colle la clé publique affichée dans src/licence.js
 À chaque vente        : double-clic sur generer-licence.cmd
                         → 3 questions, la licence s'affiche
@@ -123,7 +123,7 @@ Détails, limites et dépannage : `outils-editeur/LISEZ-MOI.md` et
 
 | # | Quoi | Pourquoi |
 |---|---|---|
-| 1 | `node scripts/licence-keygen.js` puis coller la clé publique dans `src/licence.js` | sinon le portail tourne **sans limitation** (le panneau le dit) |
+| 1 | `outils-editeur/scripts/licence-keygen.js` puis coller la clé publique dans `src/licence.js` | sinon le portail tourne **sans limitation** (le panneau le dit) |
 | 2 | Remplir le `.env` : URL et comptes admin BlueKanGo/NetSoins, SMTP, Microsoft 365 | le robot et les e-mails en dépendent |
 | 3 | `<APP>_PROTECTED_LOGINS` : les autres comptes techniques du client | le compte admin du robot est déjà protégé, pas les comptes d'interface/export |
 | 4 | Déclarer les référents dans le panneau | sans eux, personne ne peut déposer |
@@ -154,8 +154,7 @@ Détails, limites et dépannage : `outils-editeur/LISEZ-MOI.md` et
 npm start                       # serveur + robot (http://localhost:3000, admin : /admin)
 AUTOMATION_MODE=demo npm start  # robots sur la console de démonstration (sans toucher aux vraies applis)
 node scripts/import-netsoins.js <export.xlsx>   # importer les comptes existants
-node scripts/licence-keygen.js  # (poste éditeur) créer les clés de licence
-node scripts/licence-signer.js  # (poste éditeur) signer une licence
+# Licences : voir le dossier outils-editeur/ (à garder sur le poste de l'éditeur)
 ```
 
 ## 8. La documentation, si vous voulez creuser

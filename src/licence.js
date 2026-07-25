@@ -13,7 +13,7 @@
  * - Signature Ed25519 (`node:crypto`, aucune dépendance ajoutée) : modifier la
  *   date de fin dans la charge utile invalide la signature.
  * - La clé PRIVÉE ne quitte jamais le poste de l'éditeur (voir
- *   `scripts/licence-keygen.js` et `scripts/licence-signer.js`).
+ *   `outils-editeur/`, à garder hors du serveur client).
  * - La licence peut être liée à une INSTALLATION précise (`install`) : la
  *   recopier sur un autre serveur ne sert à rien.
  * - Une borne haute d'horloge (« high-water mark ») est mémorisée : reculer la
@@ -34,7 +34,7 @@ const db = require('./db');
 
 /**
  * Clé publique de l'éditeur (DER SPKI, base64). À REMPLACER par la vôtre avant
- * toute distribution : `node scripts/licence-keygen.js` l'affiche prête à
+ * toute distribution : `outils-editeur/scripts/licence-keygen.js` l'affiche prête à
  * coller. Tant que la valeur ci-dessous est le gabarit, le portail fonctionne
  * sans limitation (« licence non configurée ») — pratique en développement,
  * mais à ne jamais laisser chez un client.
@@ -81,6 +81,19 @@ function clePublique() {
 }
 
 /**
+ * Empreinte courte de la clé publique embarquée (8 caractères).
+ *
+ * Sert au support : si vous voyez l'empreinte affichée dans le panel d'un
+ * client, vous savez que c'est bien VOTRE clé qui vérifie ses licences. Une
+ * empreinte différente de la vôtre signifie que la clé a été remplacée dans le
+ * code livré — le seul contournement possible, et il devient ainsi visible.
+ */
+function empreinteCle() {
+  if (!configuree()) return null;
+  return crypto.createHash('sha256').update(CLE_PUBLIQUE).digest('hex').slice(0, 8).toUpperCase();
+}
+
+/**
  * Identifiant de CETTE installation : tiré au sort au premier démarrage et
  * conservé en base. Il est communiqué à l'éditeur pour émettre une licence liée
  * à ce serveur. Recréer la base change l'identifiant — donc invalide la licence
@@ -96,10 +109,21 @@ function installId() {
 }
 
 /**
- * Borne haute d'horloge : la date la plus avancée jamais observée. Reculer
- * l'horloge du serveur ne rallonge donc pas une licence. Un saut de plus d'un
- * an n'est PAS mémorisé, sinon une horloge déréglée une seule fois condamnerait
- * l'installation.
+ * Borne haute d'horloge : la date la plus avancée jamais observée.
+ *
+ * Elle sert à UNE chose : empêcher de rallonger une licence en reculant
+ * l'horloge du serveur. Un recul n'est donc considéré comme suspect que s'il
+ * CHANGE LE VERDICT — c'est-à-dire si l'on avait déjà dépassé l'échéance et
+ * qu'on prétend soudain être revenu avant.
+ *
+ * Sans cette nuance, toute correction d'horloge légitime bloquait
+ * l'installation : une date avancée par erreur (test, machine virtuelle
+ * restaurée, NTP capricieux) était mémorisée, et le retour à la bonne date
+ * passait pour une fraude — y compris quand la licence était de toute façon
+ * expirée, donc que le recul n'apportait rien à personne.
+ *
+ * Un bond de plus d'un an n'est jamais mémorisé, pour qu'une horloge partie à
+ * 2040 ne condamne pas définitivement le portail.
  */
 function bornerHorloge(maintenant) {
   const stockee = db.getSetting('licence_horloge', null);
@@ -120,7 +144,17 @@ function bornerHorloge(maintenant) {
     // Saut invraisemblable : on ne l'enregistre pas, on garde l'ancienne borne.
     return { recul: false, borne };
   }
-  return { recul: borne - maintenant > TOLERANCE_HORLOGE_MS, borne };
+  return { recul: false, borne, recule: borne - maintenant > TOLERANCE_HORLOGE_MS };
+}
+
+/**
+ * Le recul de l'horloge profite-t-il à la licence ? Vrai seulement si la borne
+ * haute était DÉJÀ au-delà de l'échéance et que la date courante repasse avant :
+ * c'est le seul cas où reculer l'horloge prolonge le service.
+ */
+function reculSuspect(borne, maintenant, fin) {
+  if (!fin) return false;
+  return borne > fin && maintenant <= fin;
 }
 
 /** Découpe et vérifie la signature du jeton. Renvoie la charge utile ou null. */
@@ -166,7 +200,12 @@ const joursEntre = (a, b) => Math.ceil((b - a) / 86400000);
 function etat() {
   const maintenant = new Date();
   const installe = installId();
-  const base = { installId: installe, configuree: configuree(), client: '', fin: null, debut: null, joursRestants: null };
+  const base = {
+    installId: installe,
+    configuree: configuree(),
+    empreinteCle: empreinteCle(),
+    client: '', fin: null, debut: null, joursRestants: null,
+  };
 
   if (!configuree()) {
     return {
@@ -224,13 +263,18 @@ function etat() {
     };
   }
 
-  const { recul } = bornerHorloge(maintenant);
-  if (recul) {
+  // Horloge : on ne bloque que si le recul ferait repasser une licence échue
+  // pour valide. Une correction d'horloge sans effet sur l'échéance est ignorée.
+  const { borne, recule } = bornerHorloge(maintenant);
+  if (recule && reculSuspect(borne, maintenant, fin)) {
     return {
       ...infos,
       ...ETATS.horloge,
       etat: 'horloge',
-      message: 'La date du serveur est antérieure à la dernière date observée. Remettez l’horloge à l’heure pour réactiver les traitements.',
+      message:
+        `La date du serveur (${maintenant.toISOString().slice(0, 10)}) est antérieure à la dernière date observée ` +
+        `(${borne.toISOString().slice(0, 10)}), et cette licence est échue depuis le ${charge.fin}. ` +
+        'Remettez l’horloge du serveur à l’heure, ou installez une licence à jour.',
     };
   }
 
@@ -308,4 +352,4 @@ function installer(jeton, par = '') {
   return { ok: true, etat: etat() };
 }
 
-module.exports = { etat, autorise, installer, installId, configuree, ETATS, PREFIXE };
+module.exports = { etat, autorise, installer, installId, configuree, empreinteCle, ETATS, PREFIXE };

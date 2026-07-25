@@ -432,21 +432,6 @@ function peutVoirDemande(req, row) {
   return cibles.some((v) => referents.allows(ref, row.app_id, String(v)));
 }
 
-// État de la licence pour le bandeau du site : ce qu'il faut pour prévenir
-// l'utilisateur, sans rien exposer d'autre (ni jeton, ni détail interne).
-app.get('/api/licence', sso.requireApi, (req, res) => {
-  const l = licence.etat();
-  res.json({
-    etat: l.etat,
-    niveau: l.niveau,
-    titre: l.titre,
-    message: l.message,
-    robot: l.robot,
-    joursRestants: l.joursRestants,
-    fin: l.fin,
-  });
-});
-
 // Suivi public d'une demande par sa référence (informations limitées).
 // Limité par IP pour empêcher l'énumération de références.
 app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1000), sso.requireApi, (req, res) => {

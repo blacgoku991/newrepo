@@ -42,7 +42,7 @@ comptes, l'historique, le journal, les exports : tout reste consultable.
 ### 1. Créer votre paire de clés (sur VOTRE poste)
 
 ```bash
-node scripts/licence-keygen.js
+node outils-editeur/scripts/licence-keygen.js
 ```
 
 - écrit la clé **privée** dans `~/.algonis/licence-private.pem` (`chmod 600`) ;
@@ -73,7 +73,7 @@ secret : elle part chez tous les clients.
 Le client vous donne son **identifiant d'installation** (Réglages → Licence) :
 
 ```bash
-node scripts/licence-signer.js \
+node outils-editeur/scripts/licence-signer.js \
   --client "ADEF Résidences" \
   --fin 2027-07-31 \
   --install A1B2-C3D4-E5F6-7890
@@ -107,7 +107,7 @@ par-dessus l'ancienne. Rien d'autre à faire, aucune interruption.
 | Fabriquer une licence avec sa propre clé | signature invalide → mode limité |
 | Annoncer une tolérance de 99 999 jours | bornée à 365 jours |
 | Recopier la licence d'un autre client | « émise pour une autre installation » |
-| Reculer l'horloge du serveur | borne haute d'horloge → mode limité |
+| Reculer l'horloge pour faire « revivre » une licence échue | détecté → mode limité |
 | Supprimer la licence en base | « aucune licence installée » → mode limité |
 | Repartir d'une base vide | nouvel identifiant d'installation → licence invalide |
 
@@ -145,9 +145,12 @@ Deux garde-fous complémentaires, côté contrat plutôt que côté code :
   dans les réglages (`licence_install_id`). Pas d'empreinte matérielle : une
   machine virtuelle qui migre ne casse rien.
 - **Borne haute d'horloge** (`licence_horloge`) : la date la plus avancée
-  jamais observée. Un recul de plus de 48 h fait basculer en mode limité ; un
-  bond de plus d'un an n'est pas mémorisé, pour qu'une horloge déréglée une
-  fois ne condamne pas l'installation.
+  jamais observée. Un recul n'est bloquant que s'il CHANGE LE VERDICT — borne
+  au-delà de l'échéance et date courante ramenée avant. Une correction
+  d'horloge sans effet sur l'échéance (date avancée par erreur puis remise à
+  l'heure, machine virtuelle restaurée, NTP capricieux) est ignorée : sinon une
+  installation parfaitement légitime se retrouvait bloquée. Un bond de plus
+  d'un an n'est jamais mémorisé.
 - **Points d'application** : le worker refuse de dépiler la file
   (`src/worker.js`) et l'API refuse les dépôts (`POST /api/apps/:id/requests`).
   Tout le reste — consultation, suivi, exports, journal — est intact.
