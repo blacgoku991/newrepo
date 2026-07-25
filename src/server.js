@@ -493,6 +493,9 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
         status: row.status,
         login: login || null,
         who: `${data.prenom || ''} ${data.nom || ''}`.trim(),
+        // Code de l'application + libellé : le code distingue deux
+        // établissements aux noms proches.
+        etablissement: String(data.etablissement || ''),
         etablissementLabel: referents.labelFor(appId, data.etablissement),
         createdAt: row.created_at,
       });

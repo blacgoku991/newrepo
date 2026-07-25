@@ -103,7 +103,7 @@ function mergeSchema(config, overrides = {}) {
 function effectiveSchema(config) {
   const overrides = db.getFormOverrides(config.id);
   const merged = mergeSchema(config, overrides);
-  return { ...merged, sections: [...merged.sections, REQUESTER_SECTION] };
+  return avecCodes({ ...merged, sections: [...merged.sections, REQUESTER_SECTION] });
 }
 
 /**
@@ -120,6 +120,30 @@ const ETAB_COMMUN = {
 };
 
 const tousLesChamps = (schema) => schema.sections.flatMap((s) => s.fields);
+
+/**
+ * Code établissement affiché dans les formulaires. La valeur d'option EST le
+ * code interne de l'application (BlueKanGo « 71 », NetSoins « 778 ») : on
+ * l'expose à part plutôt que de le coller dans le libellé, car les scénarios
+ * analysent ces libellés (repérage du profil, messages de suivi).
+ */
+const CHAMPS_ETABLISSEMENT = /^etablissement/;
+
+function avecCodes(schema) {
+  return {
+    ...schema,
+    sections: schema.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => {
+        if (!CHAMPS_ETABLISSEMENT.test(field.name) || !Array.isArray(field.options)) return field;
+        return {
+          ...field,
+          options: field.options.map((o) => (o.code ? o : { ...o, code: String(o.value) })),
+        };
+      }),
+    })),
+  };
+}
 
 /**
  * Schéma d'une démarche composée (ex. « Mettre à jour un compte ») : construit
@@ -196,14 +220,14 @@ function buildComposedSchema(config, type, automation) {
 function effectiveSchemaFor(config, type, automation) {
   if (demarches.estComposee(type)) {
     const compose = buildComposedSchema(config, type, automation);
-    return compose ? { ...compose, sections: [...compose.sections, REQUESTER_SECTION] } : null;
+    return compose ? avecCodes({ ...compose, sections: [...compose.sections, REQUESTER_SECTION] }) : null;
   }
   const d = demarches.get(type);
   if (!d) return null;
   if (d.schema === 'formSchema') return effectiveSchema(config);
   const brut = config[d.schema];
   if (!brut) return null;
-  return { ...brut, sections: [...brut.sections, REQUESTER_SECTION] };
+  return avecCodes({ ...brut, sections: [...brut.sections, REQUESTER_SECTION] });
 }
 
 /** Compat : augmente un schéma brut (sans surcharges) — utilisé par la console démo. */
@@ -255,6 +279,7 @@ module.exports = {
   effectiveSchema,
   effectiveSchemaFor,
   buildComposedSchema,
+  avecCodes,
   mergeSchema,
   validateOverrides,
   requesterLabel,

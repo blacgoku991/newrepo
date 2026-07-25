@@ -15,10 +15,23 @@
     .esp-head { margin-bottom: 26px; }
     .esp-head h1 { font-size: clamp(1.5rem, 3vw, 2.1rem); color: #fff; }
     .esp-head p { color: var(--muted); margin-top: 8px; }
-    .etab-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    /* Établissements groupés PAR APPLICATION : le même établissement n'a pas le
+       même code d'un applicatif à l'autre, il faut donc savoir de qui on parle.
+       Le code (« 71 », « 778 ») est affiché en chiffres, à côté du libellé. */
+    .etab-groupes { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+    .etab-groupe { display: flex; flex-direction: column; gap: 7px; }
+    .etab-groupe .ag { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .82rem; }
+    .etab-groupe .ag b { color: var(--text); font-size: .88rem; }
+    .etab-groupe .ag .nb { color: var(--faint); }
+    .etab-groupe .ag .logo-wrap, .etab-groupe .ag img, .etab-groupe .ag .logo { width: 22px; height: 22px; object-fit: contain; background: #fff; border-radius: 5px; padding: 2px; }
+    .etab-groupe .ag svg { width: 16px; height: 16px; }
+    .etab-chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .etab-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
                  background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); font-size: .84rem; font-weight: 600; }
     .etab-chip svg { width: 15px; height: 15px; }
+    .etab-chip code, .etab-code, .opt-code { font-family: var(--mono); font-size: .78rem; font-weight: 700;
+                 padding: 1px 6px; border-radius: 5px; background: rgba(0,0,0,.28); color: var(--gold-bright); }
+    .etab-code { color: var(--muted); background: var(--surface-3); }
     /* « Faire une demande » en deux temps : 1) l'application, 2) la démarche.
        Un seul choix par écran — le référent sait toujours où il en est. */
     .dmd-lead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; color: var(--text); font-weight: 600; }

@@ -290,6 +290,16 @@
     }
   }
 
+  /**
+   * Libellé d'une option, code établissement en tête quand il existe.
+   * Le code (« 71 », « 778 ») est celui de l'application : c'est lui qui permet
+   * de distinguer deux établissements aux noms proches, et de recouper avec les
+   * exports métier.
+   */
+  function optLabel(o) {
+    return o.code ? `${o.code} — ${o.label}` : o.label;
+  }
+
   function fieldHtml(field) {
     const req = field.required ? ' <span class="req">*</span>' : '';
     const isWide = ['textarea', 'radio', 'checkboxes'].includes(field.type);
@@ -299,7 +309,7 @@
     switch (field.type) {
       case 'select': {
         const locked = lockedFields.has(field.name) ? ' disabled title="Rempli automatiquement"' : '';
-        const optHtml = (o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`;
+        const optHtml = (o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(optLabel(o))}</option>`;
         // Si des options portent un « group », on les répartit en <optgroup> (en
         // conservant l'ordre d'apparition des groupes) ; sinon liste simple.
         let optionsHtml;
@@ -347,7 +357,7 @@
         const choice = (o) => `
           <label class="choice">
             <input type="checkbox" name="${escapeHtml(field.name)}" value="${escapeHtml(o.value)}" />
-            <span>${escapeHtml(o.label)}</span>
+            <span>${o.code ? `<code class="opt-code">${escapeHtml(o.code)}</code> ` : ''}${escapeHtml(o.label)}</span>
           </label>`;
         // Liste courte : tout est affiché. Liste longue (établissements…) : on
         // replie dans un menu déroulant avec filtre, sinon la page s'étire
@@ -494,11 +504,15 @@
     if (field.type === 'checkboxes') {
       if (value.length === 0) return '—';
       return value
-        .map((v) => field.options.find((o) => o.value === v)?.label || v)
+        .map((v) => {
+          const o = field.options.find((x) => x.value === v);
+          return o ? optLabel(o) : v;
+        })
         .join(', ');
     }
     if (field.type === 'select' || field.type === 'radio') {
-      return field.options.find((o) => o.value === value)?.label || value || '—';
+      const o = field.options.find((x) => x.value === value);
+      return (o && optLabel(o)) || value || '—';
     }
     if (field.type === 'date' && value) {
       return new Date(value + 'T00:00:00').toLocaleDateString('fr-FR');

@@ -295,6 +295,15 @@ a.app-card:hover .go svg { transform: translateX(3px); }
 /* Choix expliqué : une ligne d'aide sous l'intitulé (options aux effets
    différents — mot de passe, identité, transfert…). */
 .choices-rich .choice { padding: 13px 15px; }
+/* Code établissement de l'application (« 71 », « 778 ») : affiché partout à côté
+   du libellé — formulaires, espace du référent, panel d'administration. C'est
+   lui qui distingue deux établissements aux noms proches et qui permet le
+   recoupement avec les exports métier. */
+.opt-code, .etab-code { font-family: var(--mono); font-size: .78rem; font-weight: 700; padding: 1px 6px; margin-right: 2px;
+            border-radius: 5px; background: var(--surface-3); color: var(--muted); }
+.etab-tag { display: inline-flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: .82rem; }
+.etab-tag code { font-family: var(--mono); font-size: .74rem; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+            background: var(--surface-3); color: var(--gold-bright); }
 .choice small { display: block; margin-top: 3px; color: var(--muted); font-size: .82rem; font-weight: 400; line-height: 1.5; }
 
 .form-nav { margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

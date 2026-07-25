@@ -48,9 +48,7 @@
     const ref = data.referent;
     const prenom = ref.prenom || (data.user && data.user.name) || '';
     const chips = ref.etablissements.length
-      ? `<div class="etab-chips">${ref.etablissements
-          .map((e) => `<span class="etab-chip">${icon('building')} ${escapeHtml(e.label)}</span>`)
-          .join('')}</div>`
+      ? etabGroupesHtml(ref.etablissements, data.apps || [])
       : '<p style="color:var(--faint);margin-top:10px">Aucun établissement rattaché à votre profil pour le moment.</p>';
 
     root.innerHTML = `
@@ -73,6 +71,35 @@
 
     setupDemande(data.apps || []);
     setupViews(data);
+  }
+
+  /**
+   * Établissements du référent, REGROUPÉS PAR APPLICATION : un même
+   * établissement n'a pas le même code d'un applicatif à l'autre, et les
+   * mélanger empêchait de savoir sur quoi on est habilité. Le code de
+   * l'application est affiché avec le libellé — c'est lui qui distingue deux
+   * établissements aux noms proches et qui permet le recoupement avec les
+   * exports métier.
+   */
+  function etabGroupesHtml(etablissements, apps) {
+    const parApp = new Map();
+    for (const e of etablissements) {
+      if (!parApp.has(e.appId)) parApp.set(e.appId, []);
+      parApp.get(e.appId).push(e);
+    }
+    const nomDe = new Map(apps.map((a) => [a.appId, a]));
+    return `<div class="etab-groupes">
+      ${[...parApp.entries()].map(([appId, liste]) => {
+        const app = nomDe.get(appId);
+        return `<div class="etab-groupe">
+          <span class="ag">${app ? visualFor(app) : icon('grid')}<b>${escapeHtml(app ? app.name : appId)}</b>
+            <span class="nb">${liste.length} établissement${liste.length > 1 ? 's' : ''}</span></span>
+          <div class="etab-chips">
+            ${liste.map((e) => `<span class="etab-chip"><code>${escapeHtml(e.value)}</code>${escapeHtml(e.label)}</span>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
   }
 
   /**
@@ -287,11 +314,17 @@
     return `<tr>
       <td data-label="Bénéficiaire">${escapeHtml(who)}</td>
       <td data-label="Identifiant"><span class="ref">${escapeHtml(a.login)}</span></td>
-      <td data-label="Établissement">${escapeHtml(a.etablissementLabel || '—')}</td>
+      <td data-label="Établissement">${etabCell(a.etablissement, a.etablissementLabel)}</td>
       <td data-label="Fonction">${escapeHtml(a.fonction || '—')}</td>
       <td data-label="État">${src}${inactif}</td>
       <td class="acc-row-actions">${accActions(a)}</td>
     </tr>`;
+  }
+
+  /** Cellule « établissement » : code de l'application + libellé. */
+  function etabCell(code, label) {
+    if (!code && !label) return '—';
+    return `${code ? `<code class="etab-code">${escapeHtml(code)}</code> ` : ''}${escapeHtml(label || '—')}`;
   }
 
   function accountsTable(rows) {
@@ -309,7 +342,7 @@
         <td data-label="Type">${escapeHtml(TYPE_LABELS[r.type] || r.type)}</td>
         <td data-label="Bénéficiaire">${escapeHtml(r.who || '—')}</td>
         <td data-label="Identifiant">${r.login ? `<span class="ref">${escapeHtml(r.login)}</span>` : '—'}</td>
-        <td data-label="Établissement">${escapeHtml(r.etablissementLabel || '—')}</td>
+        <td data-label="Établissement">${etabCell(r.etablissement, r.etablissementLabel)}</td>
         <td data-label="Déposée le">${formatDate(r.createdAt)}</td>
         <td data-label="Statut">${statusBadge(r.status)}</td>
       </tr>`).join('')}</tbody>

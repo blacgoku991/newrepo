@@ -779,8 +779,12 @@
     el('referents-rows').innerHTML = referentsData.length
       ? referentsData.map((r) => {
           const name = `${r.prenom || ''} ${r.nom || ''}`.trim() || '—';
+          // Code de l'application + libellé : deux établissements peuvent avoir
+          // des noms très proches, le code les distingue sans ambiguïté.
           const etabs = r.etablissements.length
-            ? r.etablissements.map((e) => escapeHtml(e.label)).join(', ')
+            ? r.etablissements
+                .map((e) => `<span class="etab-tag"><code>${escapeHtml(e.value)}</code>${escapeHtml(e.label)}</span>`)
+                .join(' ')
             : '<span style="color:var(--faint)">Aucun</span>';
           return `<tr>
             <td><b>${escapeHtml(name)}</b></td>
@@ -807,7 +811,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;max-height:300px;overflow:auto;padding:4px 2px">
           ${app.establishments.map((e) => {
             const key = `${app.id}:${e.value}`;
-            return `<label class="etab-opt" style="display:flex;gap:8px;align-items:center;font-size:.85rem;padding:3px 0;cursor:pointer"><input type="checkbox" data-app="${escapeHtml(app.id)}" value="${escapeHtml(e.value)}" ${selected.has(key) ? 'checked' : ''} /> <span>${escapeHtml(e.label)}</span></label>`;
+            return `<label class="etab-opt" style="display:flex;gap:8px;align-items:center;font-size:.85rem;padding:3px 0;cursor:pointer"><input type="checkbox" data-app="${escapeHtml(app.id)}" value="${escapeHtml(e.value)}" ${selected.has(key) ? 'checked' : ''} /> <span><code class="etab-code">${escapeHtml(e.value)}</code> ${escapeHtml(e.label)}</span></label>`;
           }).join('')}
         </div>
       </div>`).join('');
