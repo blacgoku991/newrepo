@@ -179,6 +179,64 @@ const POPUP_SUCCES = /(vos modifications|enregistr[eé]|effectu[eé]|prise?s? en
  * L'erreur primant, un « Vos modifications n'ont pas pu être enregistrées » ne
  * peut pas être pris pour une confirmation.
  */
+/** Comparaison de libellés d'établissement : casse, accents, apostrophes, espaces. */
+function normEtab(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[’‘`]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Position (0-based) de la colonne dont l'en-tête correspond au motif.
+ * On la CHERCHE au lieu de la coder en dur : l'ordre des colonnes dépend du
+ * paramétrage de l'instance, et un décalage ferait comparer le mauvais champ —
+ * donc dupliquer le mauvais utilisateur, en silence.
+ */
+async function indexColonne(list, motif) {
+  for (const cible of [list.locator('th'), list.getByRole('columnheader')]) {
+    const n = await cible.count().catch(() => 0);
+    for (let i = 0; i < n; i++) {
+      const txt = await cible.nth(i).innerText().catch(() => '');
+      if (motif.test(normEtab(txt))) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Première ligne portant la fonction demandée ET le bon établissement.
+ *
+ * Renvoie { row, etab } si un modèle convient, sinon { row: null, vus: [...] }
+ * avec les établissements effectivement rencontrés pour cette fonction — c'est
+ * ce qui permet d'expliquer le refus au demandeur.
+ *
+ * On lit les lignes une à une plutôt que de bâtir un sélecteur : le libellé
+ * d'établissement contient tirets, accents et apostrophes que la comparaison
+ * doit absorber.
+ */
+async function trouverModele(list, { fonctionRe, colEtab, cible, boutonDupliquer }) {
+  const lignes = list.locator('tr').filter({ has: list.locator(boutonDupliquer) });
+  const n = await lignes.count().catch(() => 0);
+  const vus = new Set();
+  for (let i = 0; i < n; i++) {
+    const ligne = lignes.nth(i);
+    const texte = await ligne.innerText().catch(() => '');
+    if (!fonctionRe.test(texte)) continue;
+    if (colEtab === -1) return { row: ligne, etab: null };
+    const etab = normEtab(await ligne.locator('td').nth(colEtab).innerText().catch(() => ''));
+    if (etab) vus.add(etab);
+    // Égalité stricte d'abord ; à défaut, inclusion (un libellé de grille
+    // parfois complété d'un code ou d'un suffixe).
+    if (etab === cible || (etab && (etab.includes(cible) || cible.includes(etab)))) {
+      return { row: ligne, etab };
+    }
+  }
+  return { row: null, vus: [...vus] };
+}
+
 function classerFenetre(texte) {
   const t = String(texte || '');
   if (!t.trim()) return 'inconnu';
@@ -432,26 +490,58 @@ async function createAccount(data, ctx) {
             .getByRole('gridcell', { name: fonctionRe })
             .or(list.locator('td').filter({ hasText: data.fonction }))
             .first();
-          // Si la fonction n'apparaît pas, c'est le plus souvent que le tri n'a
-          // pas pris (clic avalé pendant un rechargement) : on re-trie et on
-          // regarde à nouveau, plutôt que d'échouer sur un faux « fonction
-          // inexistante ». Trois états de tri au maximum.
-          let vue = await cell.waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
-          for (let essai = 2; !vue && essai <= 3; essai++) {
-            ctx.log(`Fonction pas encore visible — nouveau tri (essai ${essai}/3)`);
-            await trier();
-            vue = await cell.waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+
+          // Colonne « Établissement par défaut » : le modèle à dupliquer doit
+          // avoir la MÊME fonction ET le MÊME établissement que la demande.
+          // Prendre le premier venu donnait des comptes rattachés au SIEGE —
+          // donc des droits plus larges que ceux de l'établissement demandé.
+          const colEtab = await indexColonne(list, /ETABLISSEMENT PAR D/);
+          if (colEtab === -1) {
+            ctx.log('⚠ Colonne « Établissement par défaut » introuvable : duplication sur la seule fonction');
+          } else {
+            ctx.log(`Recherche d'un modèle « ${data.fonction} » rattaché à « ${etabLabel} »`);
           }
-          if (!vue) {
+          const cible = normEtab(etabLabel);
+          const chercherModele = () => trouverModele(list, {
+            fonctionRe, colEtab, cible, boutonDupliquer: S.userList.duplicateButton,
+          });
+
+          // Si rien n'est trouvé, c'est le plus souvent que le tri n'a pas pris
+          // (clic avalé pendant un rechargement) : on re-trie et on regarde à
+          // nouveau, plutôt que d'échouer sur un faux « fonction inexistante ».
+          await cell.waitFor({ timeout: 10000 }).catch(() => {});
+          let modele = await chercherModele();
+          for (let essai = 2; !modele.row && essai <= 3; essai++) {
+            ctx.log(`Aucun modèle correspondant — nouveau tri (essai ${essai}/3)`);
+            await trier();
+            await cell.waitFor({ timeout: 10000 }).catch(() => {});
+            modele = await chercherModele();
+          }
+
+          if (!modele.row) {
+            const fonctionVue = await cell.count().catch(() => 0);
+            if (!fonctionVue) {
+              throw new Error(
+                `Aucun utilisateur avec la fonction « ${data.fonction} » : pas de modèle à ` +
+                  `dupliquer. Vérifiez l'orthographe de la fonction, ou créez le premier compte ` +
+                  `de cette fonction manuellement.`
+              );
+            }
+            // La fonction existe, mais sur d'autres établissements. On ne
+            // duplique PAS : le compte hériterait de droits qui ne sont pas
+            // ceux de l'établissement demandé.
             throw new Error(
-              `Aucun utilisateur avec la fonction « ${data.fonction} » : pas de modèle à ` +
-                `dupliquer. Vérifiez l'orthographe de la fonction, ou créez le premier compte ` +
-                `de cette fonction manuellement.`
+              `Aucun utilisateur « ${data.fonction} » rattaché à l'établissement « ${etabLabel} ». ` +
+                `Des comptes portent bien cette fonction, mais sur ${
+                  (modele.vus || []).length ? `d'autres établissements (${(modele.vus || []).slice(0, 4).join(', ')})` : 'un autre établissement'
+                } : les dupliquer donnerait des droits qui ne correspondent pas. ` +
+                `Créez manuellement le premier compte « ${data.fonction} » de cet établissement, ` +
+                `les suivants pourront s'en inspirer.`
             );
           }
-          // 4. Remonter à la ligne de cette cellule et cliquer SON bouton dupliquer.
-          const row = cell.locator('xpath=ancestor::tr[1]');
-          await row.locator(S.userList.duplicateButton).first().click();
+
+          ctx.log(`Modèle retenu : fonction « ${data.fonction} »${modele.etab ? ` — établissement « ${modele.etab} »` : ''}`);
+          await modele.row.locator(S.userList.duplicateButton).first().click();
         },
       },
       {
@@ -844,4 +934,4 @@ async function updateIdentity(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META, classerFenetre };
+module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META, classerFenetre, trouverModele, indexColonne, normEtab };
