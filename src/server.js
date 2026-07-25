@@ -20,6 +20,7 @@ const mailer = require('./mailer');
 const worker = require('./worker');
 
 const security = require('./security');
+const licence = require('./licence');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -262,6 +263,14 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const entry = registry.getAvailable(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Application inconnue ou indisponible' });
 
+  // Mode limité (licence échue) : plus de dépôt — les robots sont à l'arrêt et
+  // une demande déposée resterait en attente sans que personne le sache. Les
+  // données, elles, restent entièrement consultables.
+  const droit = licence.etat();
+  if (!droit.robot) {
+    return res.status(403).json({ error: `${droit.titre} — ${droit.message}`, licence: droit.etat });
+  }
+
   // Habilitation : quand des référents sont configurés, seuls les référents
   // actifs (compte Microsoft 365 dans la liste blanche) peuvent déposer.
   const enforce = referents.enforced();
@@ -361,6 +370,21 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     ip
   );
   res.status(201).json({ reference });
+});
+
+// État de la licence pour le bandeau du site : ce qu'il faut pour prévenir
+// l'utilisateur, sans rien exposer d'autre (ni jeton, ni détail interne).
+app.get('/api/licence', sso.requireApi, (req, res) => {
+  const l = licence.etat();
+  res.json({
+    etat: l.etat,
+    niveau: l.niveau,
+    titre: l.titre,
+    message: l.message,
+    robot: l.robot,
+    joursRestants: l.joursRestants,
+    fin: l.fin,
+  });
 });
 
 // Suivi public d'une demande par sa référence (informations limitées).
@@ -879,8 +903,17 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
       cookieSecure: process.env.ADMIN_COOKIE_SECURE === 'true',
       https: req.headers['x-forwarded-proto'] === 'https' || req.secure,
     },
+    licence: licence.etat(),
     apps,
   });
+});
+
+// Installation d'une licence (collée depuis le panel). Le jeton est vérifié
+// AVANT d'être enregistré : on ne conserve jamais une licence illisible.
+app.post('/api/admin/licence', security.rateLimit('licence', 20, 10 * 60 * 1000), auth.requireApi, (req, res) => {
+  const resultat = licence.installer((req.body || {}).jeton, req.admin.username);
+  if (!resultat.ok) return res.status(422).json({ error: resultat.erreur });
+  res.json({ ok: true, licence: resultat.etat });
 });
 
 // Affichage/masquage des onglets du menu du site public.

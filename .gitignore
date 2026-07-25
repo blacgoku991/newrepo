@@ -2,3 +2,10 @@ node_modules/
 data/
 .env
 *.log
+
+# Clés de signature des licences : la clé privée ne doit JAMAIS entrer dans le
+# dépôt (qui la possède peut fabriquer des licences). Voir docs/LICENCE.md.
+*.pem
+licence-private*
+licence-public*
+.algonis/

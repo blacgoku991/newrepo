@@ -872,6 +872,34 @@
   // ========================================================================
   // Réglages
   // ========================================================================
+
+  /**
+   * Carte « Licence » : état, échéance, identifiant d'installation à
+   * communiquer à l'éditeur, et champ pour coller la licence reçue.
+   */
+  function licenceCardHtml(l) {
+    const classes = { ok: 'st-terminee', warn: 'st-en_cours', danger: 'st-echec', info: 'st-en_attente' };
+    const etiquette = `<span class="badge ${classes[l.niveau] || 'st-en_attente'}">${escapeHtml(l.titre || '—')}</span>`;
+    const lignes = [];
+    if (l.client) lignes.push(`Client : <b>${escapeHtml(l.client)}</b>`);
+    if (l.debut || l.fin) lignes.push(`Validité : ${escapeHtml(l.debut || '?')} → ${escapeHtml(l.fin || '?')}`);
+    if (l.joursRestants !== null && l.joursRestants !== undefined) lignes.push(`Reste : <b>${l.joursRestants} jour${l.joursRestants > 1 ? 's' : ''}</b>`);
+    lignes.push(`Traitements automatiques : ${l.robot ? '<span class="badge st-terminee">actifs</span>' : '<span class="badge st-echec">suspendus</span>'}`);
+    return `
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Licence</h3>${etiquette}</div><div class="cb">
+        <p style="font-size:.92rem">${escapeHtml(l.message || '')}</p>
+        <div style="font-size:.86rem;color:var(--muted);margin-top:10px;line-height:1.9">${lignes.join('<br />')}</div>
+        <p style="font-size:.86rem;margin-top:14px">Identifiant de cette installation, à communiquer à l'éditeur :
+          <span class="ref">${escapeHtml(l.installId || '—')}</span></p>
+        <label style="display:block;margin-top:14px;font-size:.86rem">Licence fournie par l'éditeur
+          <textarea class="inp" id="lic-jeton" rows="3" spellcheck="false" placeholder="ALG1.…" style="margin-top:6px;font-family:var(--mono);font-size:.8rem"></textarea>
+        </label>
+        <button class="btn btn-primary btn-sm" id="lic-save" style="margin-top:10px">Installer la licence</button>
+        <p id="lic-erreur" style="color:var(--danger);font-size:.86rem;margin-top:8px"></p>
+        ${l.configuree === false ? `<p style="font-size:.82rem;color:var(--warn);margin-top:10px">Aucune clé publique n'est embarquée dans cette version : le portail fonctionne sans limitation. Posez votre clé publique dans <code>src/licence.js</code> avant toute mise en service chez un client.</p>` : ''}
+      </div></div>`;
+  }
+
   async function loadSettings() {
     let s;
     try { s = await fetchJson('/api/admin/settings'); } catch (e) { el('settings-body').innerHTML = `<div class="alert alert-err">${escapeHtml(e.message)}</div>`; return; }
@@ -885,6 +913,7 @@
     const nav = s.nav || {};
     el('settings-body').innerHTML = `
       ${secAlerts.length ? `<div class="alert alert-err" style="margin-bottom:18px"><b>Sécurité :</b><ul style="margin:6px 0 0 18px">${secAlerts.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>` : ''}
+      ${licenceCardHtml(s.licence || {})}
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Navigation du site public</h3><span class="hint">onglets visibles dans le menu</span></div><div class="cb">
         <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px">Décochez un onglet pour le masquer du menu du site public (l'accès direct par l'URL reste possible). « Administration » est masqué par défaut. « Mon espace » n'apparaît de toute façon que pour les référents.</p>
         <div style="display:flex;flex-direction:column;gap:10px">
@@ -907,6 +936,26 @@
       <div class="card"><div class="ch"><h3>Applications</h3><span class="hint">configuration du mode production</span></div><div class="cb">
         ${s.apps.map((a) => `<div class="settings-app"><div style="flex:1"><b>${escapeHtml(a.name)}</b>${a.comingSoon ? ' <span class="badge st-en_attente">Bientôt</span>' : ''}<div style="font-size:.8rem;color:var(--muted);margin-top:3px">${a.vars.map((v) => `${v.name}: ${v.set ? '✔' : '—'}`).join(' · ') || 'aucune variable'}</div></div><div class="st">${a.comingSoon ? '' : badge(a.configured)}</div></div>`).join('')}
       </div></div>`;
+
+    const licSave = el('lic-save');
+    if (licSave) licSave.addEventListener('click', async () => {
+      const champ = el('lic-jeton');
+      const erreur = el('lic-erreur');
+      erreur.textContent = '';
+      licSave.disabled = true;
+      try {
+        await fetchJson('/api/admin/licence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jeton: champ.value }),
+        });
+        toast('Licence installée');
+        loadSettings();
+      } catch (e) {
+        erreur.textContent = e.message;
+        licSave.disabled = false;
+      }
+    });
 
     const navSave = el('nav-save');
     if (navSave) navSave.addEventListener('click', async () => {

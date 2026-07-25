@@ -13,6 +13,7 @@ const db = require('./db');
 const registry = require('./registry');
 const demarches = require('./demarches');
 const otp = require('./otp');
+const licence = require('./licence');
 
 const POLL_INTERVAL = Number(process.env.WORKER_POLL_MS || 3000);
 const TIMEOUT_MS = Number(process.env.WORKER_TIMEOUT_MS || 180000);
@@ -164,8 +165,24 @@ async function processOne(request) {
   }
 }
 
+// Mode limité (licence échue) : les robots sont à l'arrêt. Les demandes restent
+// EN ATTENTE — elles seront traitées telles quelles au renouvellement, rien
+// n'est perdu ni mis en échec. On ne le répète en console qu'une fois par heure.
+let dernierRappelLicence = 0;
+function robotsSuspendus() {
+  const l = licence.etat();
+  if (l.robot) return false;
+  const maintenant = Date.now();
+  if (maintenant - dernierRappelLicence > 3600 * 1000) {
+    dernierRappelLicence = maintenant;
+    console.log(`[worker] Traitements suspendus — ${l.titre.toLowerCase()}. ${l.message}`);
+  }
+  return true;
+}
+
 async function tick() {
   if (busy) return;
+  if (robotsSuspendus()) return;
   const request = db.nextPending();
   if (!request) return;
   busy = true;

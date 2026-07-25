@@ -304,3 +304,36 @@ function bindPager(box, page, pages, onChange) {
     });
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Bandeau de licence : prévient avant l'échéance, et explique le mode limité
+   quand les traitements sont suspendus. Muet quand tout va bien — on ne parle
+   au client que s'il y a quelque chose à faire.
+   --------------------------------------------------------------------------- */
+async function renderLicenceBanner() {
+  const host = document.querySelector('main');
+  if (!host) return;
+  let etat;
+  try {
+    // Appel volontairement silencieux : un portail sans licence configurée, ou
+    // une session expirée, ne doit pas perturber la page.
+    const res = await fetch('/api/licence');
+    if (!res.ok) return;
+    etat = await res.json();
+  } catch {
+    return;
+  }
+  // Rien à signaler : licence active et échéance lointaine.
+  if (etat.niveau === 'ok' || etat.niveau === 'info') return;
+
+  const box = document.createElement('div');
+  box.className = `licence-banner ${etat.niveau === 'danger' ? 'lb-danger' : 'lb-warn'}`;
+  box.setAttribute('role', 'status');
+  box.innerHTML = `<div class="lb-inner">
+    <span class="lb-ic">${icon(etat.robot ? 'clock' : 'lock')}</span>
+    <span><b>${escapeHtml(etat.titre)}</b> ${escapeHtml(etat.message)}</span>
+  </div>`;
+  host.prepend(box);
+}
+
+document.addEventListener('DOMContentLoaded', renderLicenceBanner);

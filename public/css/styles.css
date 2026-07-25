@@ -777,3 +777,13 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
    demandes ») : discret mais toujours atteignable au clavier. */
 .esp-lien { margin-left: auto; font-size: .85rem; font-weight: 600; color: var(--link); display: inline-flex; align-items: center; gap: 6px; }
 .esp-lien svg { width: 15px; height: 15px; }
+
+/* Bandeau de licence : lisible sans être alarmiste, et jamais dépendant de la
+   seule couleur (icône + intitulé explicite). */
+.licence-banner { border-bottom: 1px solid var(--line); }
+.licence-banner .lb-inner { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: flex-start; gap: 11px; font-size: .9rem; line-height: 1.55; }
+.licence-banner .lb-ic { flex: none; display: grid; place-items: center; }
+.licence-banner .lb-ic svg { width: 18px; height: 18px; }
+.licence-banner b { font-weight: 650; }
+.lb-warn { background: var(--warn-soft); border-bottom-color: var(--warn-line); color: #f5d489; }
+.lb-danger { background: var(--danger-soft); border-bottom-color: var(--danger-line); color: #ffbdbd; }
