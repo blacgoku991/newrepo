@@ -46,6 +46,14 @@ async function runScenario({ reference, log, steps, successMessage, onProgress }
   const context = await browser.newContext({ viewport: { width: 1280, height: 850 } });
   context.setDefaultTimeout(STEP_TIMEOUT_MS);
   const page = await context.newPage();
+  // Fenêtres natives du navigateur (alert / confirm). Playwright les REFUSE par
+  // défaut : un « confirm » d'enregistrement serait donc annulé et la fiche ne
+  // serait pas validée. On les accepte, comme le ferait la personne devant
+  // l'écran, et on les journalise pour garder la trace de ce qui a été confirmé.
+  page.on('dialog', async (dialog) => {
+    log(`Fenêtre « ${dialog.type()} » du navigateur acceptée : ${dialog.message().split('\n')[0]}`);
+    await dialog.accept().catch(() => {});
+  });
 
   let stepIndex = 0;
   try {

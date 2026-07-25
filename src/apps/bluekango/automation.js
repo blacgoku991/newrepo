@@ -162,6 +162,110 @@ async function waitRowsChange(list, page, avant, max = 8000) {
   return false;
 }
 
+// Messages de la fenêtre de fin d'enregistrement. BlueKanGo utilise la MÊME
+// fenêtre pour annoncer « Modification effectuée » et pour signaler un refus :
+// il faut donc la lire, pas seulement cliquer sur OK. Sans ça, un échec est
+// rapporté au demandeur comme une réussite.
+// L'erreur est testée AVANT la réussite : « Vos modifications n'ont pas pu être
+// enregistrées » contient « enregistr », il ne faut donc pas la lire comme un
+// succès. La fenêtre de réussite, elle, ressemble à « Information — Vos
+// modifications ont été prises en compte ».
+const POPUP_ERREUR = /(n[e'’]\s*(?:a|ont|est|sont|avez)\s*pas|pas pu|impossible|erreur|existe d[eé]j[aà]|obligatoire|invalide|incorrect|non autoris|interdit|refus|[eé]chou|veuillez\s+(?:saisir|renseigner|corriger|compl[eé]ter))/i;
+const POPUP_SUCCES = /(vos modifications|enregistr[eé]|effectu[eé]|prise?s? en compte|cr[eé][eé]|succ[eè]s|mise? à jour)/i;
+
+/**
+ * Nature du message lu dans la fenêtre : 'erreur', 'succes' ou 'inconnu'.
+ * L'erreur primant, un « Vos modifications n'ont pas pu être enregistrées » ne
+ * peut pas être pris pour une confirmation.
+ */
+function classerFenetre(texte) {
+  const t = String(texte || '');
+  if (!t.trim()) return 'inconnu';
+  if (POPUP_ERREUR.test(t)) return 'erreur';
+  if (POPUP_SUCCES.test(t)) return 'succes';
+  return 'inconnu';
+}
+
+/** Texte de la fenêtre contenant ce bouton OK (on remonte de parent en parent). */
+async function texteFenetre(ok) {
+  for (let n = 1; n <= 4; n++) {
+    const brut = await ok.locator(`xpath=ancestor::*[${n}]`).innerText().catch(() => '');
+    const propre = String(brut || '').replace(/\s+/g, ' ').trim();
+    // On ignore les conteneurs qui ne contiennent que le bouton lui-même.
+    if (propre.replace(/\bOK\b/gi, '').trim().length >= 8) return propre;
+  }
+  return '';
+}
+
+/**
+ * Attend la fenêtre de confirmation, LIT son message et clique sur OK.
+ * Couvre les deux formes : fenêtre HTML (bouton OK dans n'importe quel cadre) et
+ * fenêtre native du navigateur (acceptée par le moteur, qui en conserve le
+ * message). Renvoie le texte lu, ou '' si aucune fenêtre n'est apparue.
+ */
+async function confirmerFenetre(page, ctx, max = 10000) {
+  const debut = Date.now();
+  while (Date.now() - debut < max) {
+    // Fenêtre native (alert/confirm) : déjà acceptée par le moteur.
+    const natifs = page.algonisDialogs || [];
+    if (natifs.length) {
+      const texte = natifs.map((d) => d.message).join(' / ').replace(/\s+/g, ' ').trim();
+      natifs.length = 0;
+      return texte;
+    }
+    // Fenêtre HTML : bouton OK, quel que soit le cadre qui la porte.
+    for (const frame of page.frames()) {
+      try {
+        const ok = frame
+          .getByRole('button', { name: /^\s*ok\s*$/i })
+          .or(frame.locator('input[type="button" i][value="OK" i], input[type="submit" i][value="OK" i]'))
+          .first();
+        if (!(await ok.isVisible().catch(() => false))) continue;
+        const texte = await texteFenetre(ok);
+        await ok.click().catch(() => {});
+        return texte;
+      } catch {
+        /* cadre en cours de navigation : on passe au suivant */
+      }
+    }
+    await page.waitForTimeout(300).catch(() => {});
+  }
+  return '';
+}
+
+/**
+ * Valide la fiche, confirme la fenêtre et VÉRIFIE que l'enregistrement a été
+ * accepté. Une fenêtre d'erreur, ou une fiche qui reste ouverte sans aucune
+ * confirmation, fait échouer la demande — mieux vaut un échec explicite qu'un
+ * compte annoncé créé et absent de l'application.
+ */
+async function finaliserEnregistrement({ page, main, S, ctx }) {
+  await main().getByRole('button', { name: S.form.validerLabel }).click();
+  const texte = await confirmerFenetre(page, ctx);
+  if (texte) ctx.log(`Fenêtre de BlueKanGo : « ${texte} »`);
+  else ctx.log('Aucune fenêtre de confirmation affichée.');
+
+  const nature = classerFenetre(texte);
+  if (nature === 'erreur') {
+    throw new Error(`BlueKanGo a refusé l'enregistrement : « ${texte} »`);
+  }
+
+  // Preuve d'acceptation : la fenêtre de la fiche se referme.
+  const fermee = await main()
+    .locator(S.frames.fancybox)
+    .waitFor({ state: 'detached', timeout: 20000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!fermee && nature !== 'succes') {
+    throw new Error(
+      "L'enregistrement n'a pas été confirmé : la fiche est restée ouverte" +
+        (texte ? ` (fenêtre : « ${texte} »)` : ' et aucune fenêtre de confirmation n’est apparue')
+    );
+  }
+  ctx.log(fermee ? 'Fiche enregistrée et refermée.' : 'Fiche enregistrée (confirmation lue).');
+}
+
 async function createAccount(data, ctx) {
   // Identifiant unique : 1re lettre du prénom + nom, en ajoutant des lettres du
   // prénom si l'identifiant est déjà pris (voir identifiants.js).
@@ -409,12 +513,7 @@ async function createAccount(data, ctx) {
         critical: true,
         label: 'Enregistrement de la fiche',
         run: async () => {
-          await main().getByRole('button', { name: S.form.validerLabel }).click();
-          // La fenêtre de la fiche se ferme quand l'enregistrement est accepté.
-          await main()
-            .locator(S.frames.fancybox)
-            .waitFor({ state: 'detached', timeout: 20000 })
-            .catch(() => {});
+          await finaliserEnregistrement({ page, main, S, ctx });
         },
       },
   ];
@@ -585,15 +684,7 @@ async function resetPassword(data, ctx) {
       id: 'enregistrement',
       label: 'Enregistrement de la fiche',
       run: async () => {
-        await main().getByRole('button', { name: S.form.validerLabel }).click();
-        // BlueKanGo affiche une fenêtre « Information » (bouton OK) après la
-        // modification : on la confirme si elle apparaît.
-        await holder.page.waitForTimeout(1500).catch(() => {});
-        for (const scope of [fancy(), main(), holder.page]) {
-          const ok = scope.getByRole('button', { name: /^OK$/i }).first();
-          if (await ok.isVisible().catch(() => false)) { await ok.click().catch(() => {}); break; }
-        }
-        await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+        await finaliserEnregistrement({ page: holder.page, main, S, ctx });
       },
     },
   ];
@@ -715,14 +806,7 @@ async function updateIdentity(data, ctx) {
       id: 'enregistrement',
       label: 'Enregistrement de la fiche',
       run: async () => {
-        await main().getByRole('button', { name: S.form.validerLabel }).click();
-        // BlueKanGo confirme par une fenêtre « Information » (bouton OK).
-        await holder.page.waitForTimeout(1500).catch(() => {});
-        for (const scope of [fancy(), main(), holder.page]) {
-          const ok = scope.getByRole('button', { name: /^OK$/i }).first();
-          if (await ok.isVisible().catch(() => false)) { await ok.click().catch(() => {}); break; }
-        }
-        await main().locator(S.frames.fancybox).waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+        await finaliserEnregistrement({ page: holder.page, main, S, ctx });
       },
     },
   ];
@@ -749,4 +833,4 @@ async function updateIdentity(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META };
+module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META, classerFenetre };

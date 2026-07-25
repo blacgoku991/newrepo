@@ -247,7 +247,13 @@ app.get('/api/apps/:id/schema', sso.requireApi, (req, res) => {
     logo: logo || null,
     schema,
     type: demarches.alias(type) || type,
-    demarche: { ...demarches.carte(type), aside: def.aside || '' },
+    demarche: {
+      ...demarches.carte(type),
+      aside: def.aside || '',
+      // Textes de confirmation/suivi de la démarche (déjà personnalisés avec le
+      // nom de l'application).
+      suivi: demarches.suivi(type, name),
+    },
   });
 });
 
@@ -365,13 +371,21 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
   const appEntry = registry.get(row.app_id);
   const total = row.progress_total || 0;
   const done = row.progress_done || 0;
+  const appName = appEntry ? appEntry.config.name : row.app_id;
+  const type = demarches.normalise(row.request_type);
   res.json({
     reference: row.reference,
-    app: appEntry ? appEntry.config.name : row.app_id,
+    app: appName,
     status: row.status,
     message: row.result_message,
     createdAt: row.created_at,
     finishedAt: row.finished_at,
+    // La démarche pilote les intitulés du suivi : une réinitialisation ne
+    // s'annonce pas comme une création de compte.
+    demarche: { type, label: demarches.libelle(type), court: demarches.court(type), suivi: demarches.suivi(type, appName) },
+    // Identifiants à récupérer : seulement si un mot de passe a été remis
+    // (création, réinitialisation). Une correction d'identité n'en produit pas.
+    credentials: Boolean(row.status === 'terminee' && row.generated_login && db.credentialLinkForRequest(row.id)),
     progress: {
       done,
       total,
@@ -389,6 +403,15 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
   if (!row) return res.status(404).json({ error: 'Référence inconnue' });
   if (row.status !== 'terminee' || !row.generated_login) {
     return res.status(409).json({ error: 'Le compte n\'est pas encore créé' });
+  }
+  // Un lien n'existe que si un mot de passe a réellement été posé par le robot
+  // (création, réinitialisation). Sans ce contrôle, une correction d'identité
+  // régénérerait un lien avec le mot de passe INITIAL de l'application — donc
+  // un mot de passe qui n'est pas celui du compte.
+  if (!db.credentialLinkForRequest(row.id)) {
+    return res.status(409).json({
+      error: 'Cette démarche n\'a pas modifié le mot de passe : il n\'y a pas d\'identifiants à remettre.',
+    });
   }
   const ssoUser = sso.currentUser(req);
   if (sso.required()) {

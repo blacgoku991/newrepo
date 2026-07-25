@@ -25,6 +25,20 @@ const DEMARCHES = {
     succes: 'Compte créé avec succès',
     audit: 'creation_compte',
     aside: 'Algonis saisit ces informations dans {app}. Une référence de suivi vous est remise à l’envoi.',
+    // Textes de la page de suivi. `{app}` est remplacé par le nom de
+    // l'application : une réinitialisation ne doit pas annoncer « création du
+    // compte en cours ».
+    suivi: {
+      depot: 'Votre demande de compte {app} est dans la file de traitement.',
+      encours: 'Création du compte en cours…',
+      encoursDetail: 'Connexion à {app} et saisie de la fiche en cours.',
+      traite: 'Le compte a été renseigné dans {app}.',
+      attente: 'Vous verrez ici la confirmation de la création du compte.',
+      termine: 'Compte créé',
+      reussi: 'Le compte a été créé avec succès.',
+      echoue: 'Échec de la création',
+      echecDetail: 'Le compte n’a pas pu être créé.',
+    },
   },
   reset_mdp: {
     label: 'Réinitialisation de mot de passe',
@@ -35,6 +49,17 @@ const DEMARCHES = {
     succes: 'Mot de passe réinitialisé',
     audit: 'reinit_mdp',
     aside: "Algonis vérifie l'identifiant sur la fiche puis remplace le mot de passe par un provisoire, remis par lien sécurisé.",
+    suivi: {
+      depot: 'Votre demande de réinitialisation de mot de passe {app} est dans la file de traitement.',
+      encours: 'Réinitialisation du mot de passe en cours…',
+      encoursDetail: 'Connexion à {app}, vérification du compte et saisie du mot de passe provisoire.',
+      traite: 'Le mot de passe a été remplacé dans {app}.',
+      attente: 'Vous verrez ici la confirmation de la réinitialisation.',
+      termine: 'Mot de passe réinitialisé',
+      reussi: 'Le mot de passe provisoire est prêt à être récupéré.',
+      echoue: 'Échec de la réinitialisation',
+      echecDetail: 'Le mot de passe n’a pas pu être réinitialisé.',
+    },
   },
   ajout_etab: {
     label: "Ajout d'établissement",
@@ -45,6 +70,17 @@ const DEMARCHES = {
     succes: 'Établissement ajouté',
     audit: 'ajout_etab',
     aside: "Algonis rattache l'établissement supplémentaire au compte existant : les rattachements actuels sont conservés.",
+    suivi: {
+      depot: 'Votre demande d’ajout d’établissement sur {app} est dans la file de traitement.',
+      encours: 'Ajout de l’établissement en cours…',
+      encoursDetail: 'Connexion à {app}, ouverture de la fiche et rattachement du nouvel établissement.',
+      traite: 'La fiche a été mise à jour dans {app}.',
+      attente: 'Vous verrez ici la confirmation de l’ajout d’établissement.',
+      termine: 'Établissement ajouté',
+      reussi: 'L’établissement a été rattaché au compte.',
+      echoue: 'Échec de l’ajout d’établissement',
+      echecDetail: 'L’établissement n’a pas pu être rattaché.',
+    },
   },
   maj_identite: {
     label: "Correction de l'identité",
@@ -55,6 +91,17 @@ const DEMARCHES = {
     succes: 'Identité corrigée',
     audit: 'maj_identite',
     aside: "Algonis corrige le nom et le prénom sur la fiche. Sur BlueKanGo, l'identifiant de connexion est réaligné sur le nouveau nom : il est indiqué dans le suivi de la demande. Le mot de passe n'est pas touché.",
+    suivi: {
+      depot: 'Votre demande de correction d’identité sur {app} est dans la file de traitement.',
+      encours: 'Correction de l’identité en cours…',
+      encoursDetail: 'Connexion à {app}, ouverture de la fiche et correction du nom et du prénom.',
+      traite: 'La fiche a été mise à jour dans {app}.',
+      attente: 'Vous verrez ici la confirmation de la correction.',
+      termine: 'Identité corrigée',
+      reussi: 'Le nom et le prénom ont été corrigés sur la fiche.',
+      echoue: 'Échec de la correction d’identité',
+      echecDetail: 'L’identité n’a pas pu être corrigée.',
+    },
   },
   transfert_etab: {
     label: "Transfert vers un autre établissement",
@@ -65,6 +112,17 @@ const DEMARCHES = {
     succes: 'Compte transféré',
     audit: 'transfert_etab',
     aside: "Algonis rattache le nouvel établissement puis retire l'ancien : l'accès à l'établissement précédent est perdu.",
+    suivi: {
+      depot: 'Votre demande de transfert d’établissement sur {app} est dans la file de traitement.',
+      encours: 'Transfert d’établissement en cours…',
+      encoursDetail: 'Connexion à {app}, rattachement du nouvel établissement puis retrait de l’ancien.',
+      traite: 'Les rattachements ont été mis à jour dans {app}.',
+      attente: 'Vous verrez ici la confirmation du transfert.',
+      termine: 'Compte transféré',
+      reussi: 'Le compte est désormais rattaché au nouvel établissement.',
+      echoue: 'Échec du transfert',
+      echecDetail: 'Le compte n’a pas pu être transféré.',
+    },
   },
 };
 
@@ -94,6 +152,9 @@ const COMPOSEES = {
       'Une seule démarche pour tout ce qui concerne un compte déjà existant : mot de passe oublié, nom ou prénom à corriger, changement d’établissement.',
     aside:
       'Algonis retrouve le compte sur {app} à partir de son identifiant, puis applique la mise à jour demandée.',
+    // Le choix de l'opération n'est connu qu'au dépôt : la confirmation reste
+    // donc volontairement générique.
+    suivi: { depot: 'Votre demande de mise à jour de compte {app} est dans la file de traitement.' },
     options: [
       {
         value: 'mot_de_passe',
@@ -190,6 +251,23 @@ function libelle(type) {
   return d ? d.label : String(type || '');
 }
 
+/**
+ * Textes de suivi d'une démarche, `{app}` remplacé par le nom de l'application.
+ * Sert à la page de suivi et à la confirmation de dépôt : les intitulés parlent
+ * de la démarche réellement demandée, jamais de « création de compte » par
+ * défaut. Repli sur la création si une démarche n'a pas ses propres textes.
+ */
+function suivi(type, appName) {
+  // Une démarche composée n'a pas encore de branche choisie au moment de la
+  // confirmation de dépôt : ses propres textes complètent ceux de la création.
+  const d = get(type) || composee(type) || get(DEFAUT);
+  const base = { ...get(DEFAUT).suivi, ...(d.suivi || {}) };
+  const nom = String(appName || '');
+  const out = {};
+  for (const [cle, texte] of Object.entries(base)) out[cle] = String(texte).split('{app}').join(nom);
+  return out;
+}
+
 /** Carte affichable (libellés + lien) d'un type, composée ou non. */
 function carte(type) {
   const d = get(type) || composee(type);
@@ -264,6 +342,7 @@ module.exports = {
   prefixe,
   court,
   libelle,
+  suivi,
   carte,
   estDisponible,
   actions,

@@ -45,6 +45,10 @@
     const waiting = req.status === 'en_attente';
     const done = req.status === 'terminee';
     const failed = req.status === 'echec';
+    // Intitulés propres à la démarche (création, réinitialisation, transfert…),
+    // fournis par le serveur : le suivi d'une mise à jour ne doit pas annoncer
+    // la création d'un compte.
+    const T = (req.demarche && req.demarche.suivi) || {};
 
     const items = [
       {
@@ -56,22 +60,22 @@
       {
         state: processing ? 'current' : waiting ? '' : done || failed ? 'done' : '',
         icon: 'bot',
-        title: processing ? 'Création du compte en cours…' : waiting ? 'En file d’attente' : 'Traitement en cours',
+        title: processing ? T.encours || 'Traitement en cours…' : waiting ? 'En file d’attente' : 'Traitement en cours',
         text: processing
-          ? `Connexion à ${req.app} et saisie de la fiche en cours.`
+          ? T.encoursDetail || `Connexion à ${req.app} en cours.`
           : waiting
             ? 'Votre demande sera prise en charge dans quelques instants.'
-            : `Le compte a été renseigné dans ${req.app}.`,
+            : T.traite || `La fiche a été mise à jour dans ${req.app}.`,
       },
       {
         state: done ? 'done' : failed ? 'failed' : '',
         icon: done ? 'check' : failed ? 'x' : 'flag',
-        title: done ? 'Compte créé' : failed ? 'Échec de la création' : 'Confirmation',
+        title: done ? T.termine || 'Demande traitée' : failed ? T.echoue || 'Échec du traitement' : 'Confirmation',
         text: done
-          ? `${req.message || 'Le compte a été créé avec succès.'} (${formatDate(req.finishedAt)})`
+          ? `${req.message || T.reussi || ''} (${formatDate(req.finishedAt)})`.trim()
           : failed
-            ? `${req.message || 'Le compte n’a pas pu être créé.'} — l'équipe support peut relancer la demande.`
-            : 'Vous verrez ici la confirmation de création du compte.',
+            ? `${req.message || T.echecDetail || ''} — l'équipe support peut relancer la demande.`.trim()
+            : T.attente || 'Vous verrez ici la confirmation du traitement.',
       },
     ];
 
@@ -122,7 +126,10 @@
       ${progressBarHtml(req)}
       ${timelineHtml(req)}
       ${
-        req.status === 'terminee'
+        // Le bouton n'a de sens que si un mot de passe a été remis (création,
+        // réinitialisation). Une correction d'identité ou un transfert ne
+        // produit aucun identifiant à récupérer.
+        req.status === 'terminee' && req.credentials
           ? `<div style="margin-top:6px;padding-top:18px;border-top:1px solid var(--line)">
                <button class="btn btn-primary" id="get-creds">${icon('check')} Récupérer les identifiants</button>
                <p style="color:var(--muted);font-size:0.83rem;margin-top:10px">Affichage sécurisé, une seule fois — réservé au demandeur ou au bénéficiaire.</p>

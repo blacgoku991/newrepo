@@ -590,6 +590,12 @@
     showConfirmation(references);
   }
 
+  /** Phrase de confirmation propre à la démarche (fournie par le registre). */
+  function depotTexte() {
+    const t = (demarche.suivi && demarche.suivi.depot) || '';
+    return t || `Votre demande ${app.name} est dans la file de traitement.`;
+  }
+
   function showConfirmation(references) {
     document.title = 'Demande envoyée — Algonis';
     const many = references.length > 1;
@@ -597,8 +603,10 @@
       <div class="panel result">
         <div class="big">${icon('check')}</div>
         <h2>${many ? `${references.length} demandes enregistrées` : 'Demande enregistrée'}&nbsp;!</h2>
-        <p>${many ? 'Vos demandes de comptes' : 'Votre demande de compte'} <strong>${escapeHtml(app.name)}</strong> ${many ? 'sont' : 'est'} dans la file de traitement.<br/>
-        Elles vont être prises en charge dans quelques instants.</p>
+        <p>${many
+          ? `Vos demandes <strong>${escapeHtml(app.name)}</strong> sont dans la file de traitement.`
+          : escapeHtml(depotTexte())}<br/>
+        ${many ? 'Elles vont' : 'Elle va'} être ${many ? 'prises' : 'prise'} en charge dans quelques instants.</p>
         ${references
           .map(
             (r) => `
