@@ -19,6 +19,7 @@
  */
 
 const db = require('./db');
+const demarches = require('./demarches');
 
 const REQUESTER_SECTION = {
   title: 'Vos coordonnées (demandeur)',
@@ -105,17 +106,24 @@ function effectiveSchema(config) {
   return { ...merged, sections: [...merged.sections, REQUESTER_SECTION] };
 }
 
-/** Schéma de réinitialisation de mot de passe : resetSchema + section demandeur. */
-function effectiveResetSchema(config) {
-  if (!config.resetSchema) return null;
-  return { ...config.resetSchema, sections: [...config.resetSchema.sections, REQUESTER_SECTION] };
+/**
+ * Schéma servi pour une démarche donnée, section demandeur incluse.
+ * La création passe par les surcharges de l'éditeur d'admin ; les autres
+ * démarches s'appuient sur le schéma déclaré dans la configuration.
+ * Renvoie null si l'application ne propose pas cette démarche.
+ */
+function effectiveSchemaFor(config, type) {
+  const d = demarches.get(type);
+  if (!d) return null;
+  if (d.schema === 'formSchema') return effectiveSchema(config);
+  const brut = config[d.schema];
+  if (!brut) return null;
+  return { ...brut, sections: [...brut.sections, REQUESTER_SECTION] };
 }
 
-/** Schéma d'ajout d'établissement : extensionSchema + section demandeur. */
-function effectiveExtensionSchema(config) {
-  if (!config.extensionSchema) return null;
-  return { ...config.extensionSchema, sections: [...config.extensionSchema.sections, REQUESTER_SECTION] };
-}
+/** Raccourcis conservés pour la lisibilité des appels existants. */
+const effectiveResetSchema = (config) => effectiveSchemaFor(config, 'reset_mdp');
+const effectiveExtensionSchema = (config) => effectiveSchemaFor(config, 'ajout_etab');
 
 /** Compat : augmente un schéma brut (sans surcharges) — utilisé par la console démo. */
 function augmentSchema(formSchema) {
@@ -164,6 +172,7 @@ function validateOverrides(config, overrides) {
 module.exports = {
   augmentSchema,
   effectiveSchema,
+  effectiveSchemaFor,
   effectiveResetSchema,
   effectiveExtensionSchema,
   mergeSchema,
