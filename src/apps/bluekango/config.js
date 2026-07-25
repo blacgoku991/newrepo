@@ -231,12 +231,15 @@ module.exports.resetSchema = {
   ],
 };
 
+// Ajout d'établissement : les rattachements existants sont CONSERVÉS (à la
+// différence du transfert). `etablissement` est celui où le compte se trouve
+// déjà — il sert à retrouver la fiche — et `etablissement_cible` celui à ajouter.
 module.exports.extensionSchema = {
   intro:
-    'Le robot recherche le compte par son identifiant, puis lui ajoute l’établissement demandé (les autres rattachements sont conservés).',
+    'Le robot retrouve le compte par son identifiant, puis lui ajoute le nouvel établissement (les autres rattachements sont conservés).',
   sections: [
     {
-      title: 'Compte et établissement à ajouter',
+      title: 'Compte concerné',
       fields: [
         {
           name: 'identifiant',
@@ -247,7 +250,18 @@ module.exports.extensionSchema = {
           pattern: '^[a-zA-Z0-9._-]{2,60}$',
           patternMessage: 'Identifiant invalide (lettres/chiffres/._-)',
         },
-        { ...etabField, label: 'Établissement à ajouter', help: 'Établissement à rattacher au compte.' },
+        {
+          ...etabField,
+          name: 'etablissement',
+          label: 'Établissement actuel',
+          help: 'Établissement auquel le compte est déjà rattaché.',
+        },
+        {
+          ...etabField,
+          name: 'etablissement_cible',
+          label: 'Établissement à ajouter',
+          help: 'Établissement supplémentaire à rattacher au compte.',
+        },
       ],
     },
   ],

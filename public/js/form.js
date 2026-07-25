@@ -12,10 +12,11 @@
   const content = document.getElementById('content');
   const params = new URLSearchParams(location.search);
   const appId = params.get('app');
-  // Modes : création (défaut), réinitialisation de mot de passe, ajout d'établissement.
-  const resetMode = params.get('type') === 'reset';
-  const extensionMode = params.get('type') === 'extension';
-  const typeQS = resetMode ? '?type=reset' : extensionMode ? '?type=extension' : '';
+  // La démarche vient de l'URL (?type=reset, extension, maj…) et c'est le
+  // backend qui dit ce qu'elle est : libellé, schéma, disponibilité. Aucun
+  // catalogue de démarches dupliqué ici.
+  const typeParam = params.get('type') || '';
+  const typeQS = typeParam ? `?type=${encodeURIComponent(typeParam)}` : '';
 
   if (!appId) {
     content.innerHTML = `<div class="alert alert-error">Aucune application sélectionnée. <a href="/">Retour à l'accueil</a></div>`;
@@ -32,7 +33,10 @@
 
   // Le schéma vient de l'API (source unique de vérité : le backend inclut
   // déjà la section « demandeur »). Aucun schéma local dupliqué.
-  document.title = `${app.name} — ${resetMode ? 'Réinitialisation de mot de passe' : extensionMode ? 'Ajout d’établissement' : 'Demande de compte'}`;
+  const demarche = app.demarche || { type: 'creation', label: 'Demande de compte', aside: '' };
+  const isCreation = demarche.type === 'creation';
+  const asideNote = (demarche.aside || '').replace('{app}', app.name);
+  document.title = `${app.name} — ${demarche.label}`;
 
   const sections = app.schema.sections;
   const stepCount = sections.length + 1; // + récapitulatif
@@ -56,16 +60,16 @@
     /* SSO non configuré : champs demandeur libres */
   }
 
-  // Pré-remplissage depuis l'espace référent : l'identifiant du compte est déjà
-  // connu (bouton « Réinitialiser » / « Ajouter un établissement »). On le
-  // verrouille pour éviter toute faute de frappe. En réinitialisation,
-  // l'établissement d'origine est aussi connu et figé ; en ajout d'établissement
-  // au contraire, l'établissement saisi est le NOUVEAU, donc laissé libre.
+  // Pré-remplissage depuis l'espace référent : l'identifiant du compte et son
+  // établissement de rattachement sont déjà connus (boutons des lignes de
+  // comptes). On les verrouille pour éviter toute faute de frappe. Hors
+  // création, `etablissement` désigne toujours l'établissement ACTUEL du compte
+  // — le nouveau, quand il y en a un, s'appelle `etablissement_cible`.
   for (const key of ['identifiant', 'etablissement']) {
     const v = params.get(key);
     if (v && key in values) {
       values[key] = v;
-      if (key === 'identifiant' || (key === 'etablissement' && resetMode)) lockedFields.add(key);
+      if (!isCreation) lockedFields.add(key);
     }
   }
 
@@ -110,15 +114,11 @@
             ${appVisual(app)}
             <div>
               <h2>${escapeHtml(app.name)}</h2>
-              <div class="cat">${resetMode ? 'Réinitialisation de mot de passe' : extensionMode ? 'Ajout d’établissement' : escapeHtml(app.category)}</div>
+              <div class="cat">${escapeHtml(isCreation ? app.category : demarche.label)}</div>
             </div>
           </div>
           ${stepperHtml()}
-          <div class="aside-note">${resetMode
-            ? `Algonis vérifie l'identifiant sur la fiche ${escapeHtml(app.name)} puis remplace le mot de passe par un provisoire, remis par lien sécurisé.`
-            : extensionMode
-              ? `Algonis rattache l'établissement supplémentaire au compte existant (identifiant vérifié), avec les droits de la fonction indiquée.`
-              : `Algonis saisit ces informations dans ${escapeHtml(app.name)}. Une référence de suivi vous est remise à l'envoi.`}</div>
+          <div class="aside-note">${escapeHtml(asideNote)}</div>
         </aside>
         <div class="panel form-main">
         ${current === 0 && app.schema.intro ? `<div class="intro">${escapeHtml(app.schema.intro)}</div>` : ''}
@@ -133,7 +133,7 @@
             <div>
               ${
                 isRecap
-                  ? `<button type="button" class="btn btn-ghost" id="add-account-btn">+ Ajouter un compte à créer</button>
+                  ? `${isCreation ? '<button type="button" class="btn btn-ghost" id="add-account-btn">+ Ajouter un compte à créer</button>' : ''}
                      <button type="submit" class="btn btn-primary" id="submit-btn">Envoyer la demande${batch.length ? ` (${batch.length + 1} comptes)` : ''}</button>`
                   : `<button type="submit" class="btn btn-primary">Continuer ${icon('arrow')}</button>`
               }
@@ -181,7 +181,8 @@
       // « + Ajouter un compte à créer » : le compte courant (déjà validé étape
       // par étape) est mis de côté, et on ressaisit l'identité du suivant.
       // Établissement, fonction, dates et demandeur sont conservés.
-      document.getElementById('add-account-btn').addEventListener('click', () => {
+      const addBtn = document.getElementById('add-account-btn');
+      if (addBtn) addBtn.addEventListener('click', () => {
         batch.push(JSON.parse(JSON.stringify(values)));
         for (const name of PERSON_FIELDS) {
           if (name in values) values[name] = Array.isArray(values[name]) ? [] : '';
@@ -277,7 +278,10 @@
     for (const field of section.fields) {
       if (!field.showIf) continue;
       const ctrl = form.elements[field.showIf.field];
-      const v = ctrl ? ctrl.value : ''; // une RadioNodeList renvoie la valeur cochée
+      // Le champ de contrôle peut être dans une section précédente (ex. le choix
+      // de l'opération, saisi à l'étape 1, conditionne les champs de l'étape 3) :
+      // on retombe alors sur la valeur déjà enregistrée.
+      const v = ctrl ? ctrl.value : values[field.showIf.field] || ''; // une RadioNodeList renvoie la valeur cochée
       const visible = Array.isArray(field.showIf.in)
         ? field.showIf.in.includes(v)
         : field.showIf.equals === undefined ? true : v === field.showIf.equals;
@@ -323,14 +327,17 @@
         break;
       }
       case 'radio':
+        // `o.help` : une ligne d'explication sous l'intitulé du choix, utile
+        // quand les options engagent des traitements différents (mot de passe,
+        // identité, transfert…).
         control = `
-          <div class="choices">
+          <div class="choices${field.options.some((o) => o.help) ? ' choices-rich' : ''}">
             ${field.options
               .map(
                 (o) => `
               <label class="choice">
                 <input type="radio" name="${escapeHtml(field.name)}" value="${escapeHtml(o.value)}" />
-                <span>${escapeHtml(o.label)}</span>
+                <span>${escapeHtml(o.label)}${o.help ? `<small>${escapeHtml(o.help)}</small>` : ''}</span>
               </label>`
               )
               .join('')}

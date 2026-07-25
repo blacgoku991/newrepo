@@ -14,6 +14,8 @@
     creation: 'Création',
     reset_mdp: 'Réinit. mot de passe',
     ajout_etab: 'Ajout établissement',
+    maj_identite: 'Correction identité',
+    transfert_etab: 'Transfert établissement',
   };
 
   boot();
@@ -59,8 +61,7 @@
       </div>
 
       <div class="esp-section-head"><h2>Faire une demande</h2></div>
-      <div id="dmd-apps"></div>
-      <div class="esp-actions" id="dmd-actions"></div>
+      <div id="dmd-box"></div>
 
       <div class="esp-section-head">
         <h2>Comptes &amp; activité</h2>
@@ -101,55 +102,104 @@
     return app ? appVisual(app) : icon('clock');
   }
 
-  // « Faire une demande » : les actions (créer / ajout étab. / reset) pointent
-  // vers l'application choisie (BlueKanGo, NetSoins…). Sélecteur si plusieurs.
+  // « Faire une demande » en deux temps : d'abord l'application, ensuite la
+  // démarche. Deux écrans courts valent mieux qu'une grille où les démarches
+  // BlueKanGo et NetSoins se mélangent — le référent voit d'abord OÙ il agit.
   const DMD = { apps: [], app: '' };
 
+  // Habillage des cartes de démarche. Les démarches proposées, elles, viennent
+  // du serveur (`app.demarches`) : rien n'est affiché qui n'ait un robot.
+  const DMD_CARTES = {
+    creation: {
+      icon: 'users',
+      desc: (n) => `Nouveau compte ${n} pour un agent qui arrive.`,
+    },
+    ajout_etab: {
+      icon: 'building',
+      desc: () => 'Rattacher un établissement de plus à un compte existant, sans rien retirer.',
+    },
+    maj_compte: {
+      icon: 'edit',
+      desc: () => 'Mot de passe oublié, nom ou prénom à corriger, transfert vers un autre établissement.',
+    },
+    reset_mdp: { icon: 'lock', desc: () => 'Réinitialiser le mot de passe d’un compte existant.' },
+    maj_identite: { icon: 'edit', desc: () => 'Corriger le nom ou le prénom sur la fiche.' },
+    transfert_etab: { icon: 'building', desc: () => 'Retirer l’établissement actuel et rattacher le nouveau.' },
+  };
+
   function setupDemande(apps) {
-    DMD.apps = apps;
-    const actionsBox = document.getElementById('dmd-actions');
-    if (!apps.length) { document.getElementById('dmd-apps').innerHTML = ''; actionsBox.innerHTML = ''; return; }
-    DMD.app = apps[0].appId;
+    // Une application sans aucune démarche exécutable n'a rien à proposer.
+    DMD.apps = (apps || []).filter((a) => (a.demarches || []).length);
+    // Une seule application : le choix n'a pas lieu d'être, on va droit aux démarches.
+    DMD.app = DMD.apps.length === 1 ? DMD.apps[0].appId : '';
     drawDemande();
   }
 
+  function demandeUrl(appId, alias) {
+    return `/demande.html?app=${encodeURIComponent(appId)}${alias ? `&type=${encodeURIComponent(alias)}` : ''}`;
+  }
+
+  /** Étape 1 — sur quelle application ? */
+  function appStepHtml() {
+    return `
+      <div class="dmd-step">
+        <div class="dmd-lead"><span class="n">1</span><span class="tt">Sur quelle application ?</span></div>
+        <div class="dmd-apps">
+          ${DMD.apps.map((a) => {
+            const nb = a.demarches.length;
+            return `<button type="button" class="dmd-app" data-app="${escapeHtml(a.appId)}">
+              <span class="lg">${visualFor(a)}</span>
+              <span class="tx"><b>${escapeHtml(a.name)}</b><span>${nb} démarche${nb > 1 ? 's' : ''} disponible${nb > 1 ? 's' : ''}</span></span>
+              <span class="go" aria-hidden="true">${icon('arrow')}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  /** Étape 2 — quelle démarche sur l'application choisie ? */
+  function demarcheStepHtml(app) {
+    const retour = DMD.apps.length > 1
+      ? `<button type="button" class="dmd-back">← Changer d’application</button>`
+      : '';
+    return `
+      <div class="dmd-step">
+        <div class="dmd-lead">
+          <span class="n">2</span><span class="tt">Quelle démarche sur <b>${escapeHtml(app.name)}</b> ?</span>${retour}
+        </div>
+        <div class="dmd-cards">
+          ${app.demarches.map((d) => {
+            const habillage = DMD_CARTES[d.type] || { icon: 'folder', desc: () => '' };
+            return `<a class="dmd-card" href="${demandeUrl(app.appId, d.alias)}">
+              <span class="ic">${icon(habillage.icon)}</span>
+              <b>${escapeHtml(d.label)}</b>
+              <span>${escapeHtml(habillage.desc(app.name))}</span>
+            </a>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
   function drawDemande() {
-    const app = DMD.apps.find((a) => a.appId === DMD.app) || DMD.apps[0];
-    const box = document.getElementById('dmd-apps');
-    // Un seul applicatif : pas de choix à faire, on n'affiche pas de sélecteur.
-    if (DMD.apps.length > 1) {
-      box.innerHTML = appSwitchHtml(
-        DMD.apps.map((a) => ({ key: a.appId, label: a.name, visual: visualFor(a) })),
-        DMD.app,
-        'Sur quelle application ?'
-      );
-      box.querySelectorAll('.app-opt').forEach((b) => {
-        b.addEventListener('click', () => { DMD.app = b.dataset.key; drawDemande(); });
-      });
-    } else {
-      box.innerHTML = '';
+    const box = document.getElementById('dmd-box');
+    if (!DMD.apps.length) {
+      box.innerHTML = '<div class="empty-box">Aucune démarche disponible sur vos établissements pour le moment.</div>';
+      return;
     }
-    const a = encodeURIComponent(app.appId);
-    const name = escapeHtml(app.name);
-    document.getElementById('dmd-actions').innerHTML = `
-      <a class="esp-act" href="/demande.html?app=${a}">
-        <span class="ic">${icon('users')}</span>
-        <span><b>Créer un compte</b><span>Nouveau compte ${name} pour un agent</span></span>
-      </a>
-      <a class="esp-act" href="/demande.html?app=${a}&type=extension">
-        <span class="ic">${icon('building')}</span>
-        <span><b>Ajouter un établissement</b><span>Rattacher un établissement à un compte ${name}</span></span>
-      </a>
-      <a class="esp-act" href="/demande.html?app=${a}&type=reset">
-        <span class="ic">${icon('lock')}</span>
-        <span><b>Mot de passe oublié</b><span>Réinitialiser le mot de passe d'un compte ${name}</span></span>
-      </a>`;
+    const app = DMD.apps.find((a) => a.appId === DMD.app);
+    box.innerHTML = app ? demarcheStepHtml(app) : appStepHtml();
+
+    box.querySelectorAll('.dmd-app').forEach((b) => {
+      b.addEventListener('click', () => { DMD.app = b.dataset.app; drawDemande(); });
+    });
+    const back = box.querySelector('.dmd-back');
+    if (back) back.addEventListener('click', () => { DMD.app = ''; drawDemande(); });
   }
 
   // Un seul espace paginé, organisé en onglets : une application par onglet
   // (BlueKanGo, NetSoins…) plus « Activité ». Évite de scroller une longue page.
   const PAGE_SIZE = 15;
-  const V = { accounts: [], activity: [], tabs: [], view: '', query: '', page: 1 };
+  const V = { accounts: [], activity: [], tabs: [], view: '', query: '', page: 1, apps: new Map() };
 
   function appsOf(accounts) {
     const seen = new Map();
@@ -162,6 +212,7 @@
     V.activity = data.activity || [];
     // Un onglet par application (avec le logo de l'éditeur) + l'activité.
     const byId = new Map((data.apps || []).map((a) => [a.appId, a]));
+    V.apps = byId;
     V.tabs = appsOf(V.accounts).map((a) => ({
       key: a.appId,
       label: a.app,
@@ -201,10 +252,32 @@
     });
   }
 
+  /**
+   * Raccourcis d'une ligne de compte : identifiant et établissement actuel sont
+   * déjà connus, on les passe au formulaire. Seules les démarches réellement
+   * exécutables sur l'application sont proposées.
+   */
+  function accActions(a) {
+    const app = V.apps.get(a.appId) || {};
+    const dispo = new Set(app.actions || []);
+    const cartes = new Set((app.demarches || []).map((d) => d.type));
+    const lien = (alias) =>
+      `/demande.html?app=${encodeURIComponent(a.appId)}&type=${alias}` +
+      `&identifiant=${encodeURIComponent(a.login)}&etablissement=${encodeURIComponent(a.etablissement || '')}`;
+    const boutons = [];
+    if (dispo.has('reset_mdp')) boutons.push([lien('reset'), 'lock', 'Réinit.', 'Réinitialiser le mot de passe']);
+    if (dispo.has('ajout_etab')) boutons.push([lien('extension'), 'building', 'Étab.', 'Ajouter un établissement']);
+    if (cartes.has('maj_compte')) boutons.push([lien('maj'), 'edit', 'Mettre à jour', 'Mot de passe, identité ou établissement']);
+    // `aria-label` : sous 760 px l'intitulé est masqué, le bouton ne garde que
+    // son icône — il doit rester nommé pour les lecteurs d'écran.
+    return boutons
+      .map(([href, ic, label, titre]) =>
+        `<a class="btn btn-ghost btn-sm" href="${href}" title="${escapeHtml(titre)}" aria-label="${escapeHtml(`${label} — ${a.login}`)}">${icon(ic)}<span>${escapeHtml(label)}</span></a>`)
+      .join('');
+  }
+
   function accRow(a) {
     const who = `${a.prenom} ${a.nom}`.trim() || '—';
-    const resetUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=reset&identifiant=${encodeURIComponent(a.login)}&etablissement=${encodeURIComponent(a.etablissement)}`;
-    const extUrl = `/demande.html?app=${encodeURIComponent(a.appId)}&type=extension&identifiant=${encodeURIComponent(a.login)}`;
     const src = a.source === 'portail'
       ? '<span class="badge st-terminee acc-src">Créé ici</span>'
       : '<span class="badge st-en_attente acc-src">Existant</span>';
@@ -217,10 +290,7 @@
       <td data-label="Établissement">${escapeHtml(a.etablissementLabel || '—')}</td>
       <td data-label="Fonction">${escapeHtml(a.fonction || '—')}</td>
       <td data-label="État">${src}${inactif}</td>
-      <td class="acc-row-actions">
-        <a class="btn btn-ghost btn-sm" href="${resetUrl}" title="Réinitialiser le mot de passe">${icon('lock')}<span>Réinit.</span></a>
-        <a class="btn btn-ghost btn-sm" href="${extUrl}" title="Ajouter un établissement">${icon('building')}<span>Étab.</span></a>
-      </td>
+      <td class="acc-row-actions">${accActions(a)}</td>
     </tr>`;
   }
 

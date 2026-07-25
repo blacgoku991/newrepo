@@ -207,22 +207,32 @@ module.exports.transfertSchema = {
   ],
 };
 
-// Ajout d'établissement : on rattache un établissement à un compte existant.
+// Ajout d'établissement : on CUMULE les rattachements (l'établissement d'origine
+// est conservé). À distinguer du transfert, qui retire l'ancien.
+//
+// `etablissement` sert à retrouver la fiche : la liste des intervenants NetSoins
+// est filtrée par établissement, il faut donc partir de celui où le compte
+// existe déjà. `etablissement_cible` est celui à ajouter.
 module.exports.extensionSchema = {
   intro:
-    'Le robot recherche l’intervenant par son identifiant, puis lui ajoute l’établissement demandé.',
+    'Le robot retrouve l’intervenant dans son établissement actuel, puis lui ajoute le nouvel établissement. Les rattachements existants sont conservés.',
   sections: [
     {
-      title: 'Compte et établissement à ajouter',
+      title: 'Compte concerné',
       fields: [
+        identifiantField,
         {
-          name: 'identifiant',
-          label: 'Identifiant NetSoins (NOM PRÉNOM)',
-          type: 'text',
-          required: true,
-          placeholder: 'MARTIN PAUL',
+          ...etabField,
+          name: 'etablissement',
+          label: 'Établissement actuel',
+          help: 'Établissement où l’intervenant est déjà rattaché — c’est là que le robot va chercher sa fiche.',
         },
-        { ...etabField, label: 'Établissement à ajouter', help: 'Établissement à rattacher au compte.' },
+        {
+          ...etabField,
+          name: 'etablissement_cible',
+          label: 'Établissement à ajouter',
+          help: 'Établissement supplémentaire à rattacher au compte.',
+        },
       ],
     },
   ],

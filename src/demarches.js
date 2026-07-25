@@ -24,6 +24,7 @@ const DEMARCHES = {
     action: 'createAccount',
     succes: 'Compte créé avec succès',
     audit: 'creation_compte',
+    aside: 'Algonis saisit ces informations dans {app}. Une référence de suivi vous est remise à l’envoi.',
   },
   reset_mdp: {
     label: 'Réinitialisation de mot de passe',
@@ -33,6 +34,7 @@ const DEMARCHES = {
     action: 'resetPassword',
     succes: 'Mot de passe réinitialisé',
     audit: 'reinit_mdp',
+    aside: "Algonis vérifie l'identifiant sur la fiche puis remplace le mot de passe par un provisoire, remis par lien sécurisé.",
   },
   ajout_etab: {
     label: "Ajout d'établissement",
@@ -42,6 +44,7 @@ const DEMARCHES = {
     action: 'addEstablishment',
     succes: 'Établissement ajouté',
     audit: 'ajout_etab',
+    aside: "Algonis rattache l'établissement supplémentaire au compte existant : les rattachements actuels sont conservés.",
   },
   maj_identite: {
     label: "Correction de l'identité",
@@ -51,6 +54,7 @@ const DEMARCHES = {
     action: 'updateIdentity',
     succes: 'Identité corrigée',
     audit: 'maj_identite',
+    aside: "Algonis corrige le nom et le prénom sur la fiche. L'identifiant de connexion, déjà diffusé au titulaire, n'est pas touché.",
   },
   transfert_etab: {
     label: "Transfert vers un autre établissement",
@@ -60,11 +64,58 @@ const DEMARCHES = {
     action: 'transferEstablishment',
     succes: 'Compte transféré',
     audit: 'transfert_etab',
+    aside: "Algonis rattache le nouvel établissement puis retire l'ancien : l'accès à l'établissement précédent est perdu.",
   },
 };
 
 /** Démarche par défaut quand aucun type n'est précisé. */
 const DEFAUT = 'creation';
+
+/**
+ * Démarches composées : UNE carte pour le référent, plusieurs démarches réelles
+ * derrière. Le formulaire commence par le choix `champ` ; la valeur retenue
+ * détermine la démarche effectivement déposée (`options[].type`), qui est seule
+ * enregistrée en base. Aucun nouveau `request_type` n'est créé.
+ *
+ * Objectif métier : « Mettre à jour un compte » regroupe tout ce qui touche un
+ * compte existant (mot de passe, identité, établissement) au lieu d'aligner
+ * autant de cartes que de cas.
+ */
+const COMPOSEES = {
+  maj_compte: {
+    label: 'Mettre à jour un compte',
+    court: 'Mise à jour',
+    champ: 'operation',
+    // `titre` = la question posée (libellé du champ) ; `section` = l'intitulé
+    // de l'étape, repris dans le fil des étapes, donc court.
+    titre: 'Que voulez-vous mettre à jour ?',
+    section: 'Type de mise à jour',
+    intro:
+      'Une seule démarche pour tout ce qui concerne un compte déjà existant : mot de passe oublié, nom ou prénom à corriger, changement d’établissement.',
+    aside:
+      'Algonis retrouve le compte sur {app} à partir de son identifiant, puis applique la mise à jour demandée.',
+    options: [
+      {
+        value: 'mot_de_passe',
+        type: 'reset_mdp',
+        label: 'Mot de passe oublié',
+        help: 'Un mot de passe provisoire est généré et remis par lien sécurisé.',
+      },
+      {
+        value: 'identite',
+        type: 'maj_identite',
+        label: 'Corriger le nom ou le prénom',
+        help: 'L’identifiant de connexion, lui, reste inchangé.',
+      },
+      {
+        value: 'transfert',
+        type: 'transfert_etab',
+        label: 'Transférer vers un autre établissement',
+        help: 'L’établissement actuel est retiré, le nouveau est attribué.',
+      },
+    ],
+  },
+};
 
 /**
  * Correspondance entre le paramètre `?type=` des URL et le type stocké en base.
@@ -76,14 +127,38 @@ const ALIAS = {
   extension: 'ajout_etab',
   identite: 'maj_identite',
   transfert: 'transfert_etab',
+  maj: 'maj_compte',
 };
+
+/** Vrai si `type` est une démarche composée (plusieurs démarches derrière). */
+function estComposee(type) {
+  return Object.prototype.hasOwnProperty.call(COMPOSEES, String(type || ''));
+}
+
+/** Définition d'une démarche composée, ou null. */
+function composee(type) {
+  const cle = String(type || '');
+  return estComposee(cle) ? { type: cle, ...COMPOSEES[cle] } : null;
+}
+
+/** Vrai si ce type existe, composée ou non. */
+function existe(type) {
+  const cle = String(type || '');
+  return Object.prototype.hasOwnProperty.call(DEMARCHES, cle) || estComposee(cle);
+}
 
 /** Type de démarche correspondant à un `?type=` d'URL (défaut : création). */
 function fromQuery(valeur) {
   const v = String(valeur || '');
   if (!v) return DEFAUT;
   if (Object.prototype.hasOwnProperty.call(ALIAS, v)) return ALIAS[v];
-  return Object.prototype.hasOwnProperty.call(DEMARCHES, v) ? v : DEFAUT;
+  return existe(v) ? v : DEFAUT;
+}
+
+/** Alias d'URL (`?type=…`) d'un type de démarche, '' si le type est le défaut. */
+function alias(type) {
+  const trouve = Object.entries(ALIAS).find(([, cible]) => cible === type);
+  return trouve ? trouve[0] : '';
 }
 
 /** Définition d'une démarche, ou null si le type est inconnu. */
@@ -105,16 +180,94 @@ function prefixe(type, config) {
 
 /** Libellé court, pour les tableaux et les étiquettes. */
 function court(type) {
-  const d = get(type);
+  const d = get(type) || composee(type);
   return d ? d.court : String(type || '');
 }
 
-/** Démarches réellement disponibles pour une application (schéma + robot présents). */
-function disponibles(config, automation) {
-  return Object.keys(DEMARCHES).filter((type) => {
-    const d = DEMARCHES[type];
-    return Boolean(config && config[d.schema]) && typeof (automation || {})[d.action] === 'function';
-  });
+/** Libellé complet, composées incluses. */
+function libelle(type) {
+  const d = get(type) || composee(type);
+  return d ? d.label : String(type || '');
 }
 
-module.exports = { DEMARCHES, DEFAUT, ALIAS, get, normalise, fromQuery, prefixe, court, disponibles };
+/** Carte affichable (libellés + lien) d'un type, composée ou non. */
+function carte(type) {
+  const d = get(type) || composee(type);
+  if (!d) return null;
+  return { type: d.type, alias: alias(d.type), label: d.label, court: d.court, composee: estComposee(d.type) };
+}
+
+/** Une démarche simple est disponible si son schéma ET son robot existent. */
+function estDisponible(type, config, automation) {
+  const d = DEMARCHES[String(type || '')];
+  if (!d) return false;
+  return Boolean(config && config[d.schema]) && typeof (automation || {})[d.action] === 'function';
+}
+
+/** Démarches simples réellement exécutables sur une application. */
+function actions(config, automation) {
+  return Object.keys(DEMARCHES).filter((type) => estDisponible(type, config, automation));
+}
+
+/** Branches réellement disponibles d'une démarche composée. */
+function branches(type, config, automation) {
+  const c = composee(type);
+  if (!c) return [];
+  return c.options.filter((o) => estDisponible(o.type, config, automation));
+}
+
+/**
+ * Cartes de démarches à proposer pour une application : les démarches simples
+ * non absorbées par une composée, puis les composées ayant au moins une branche
+ * disponible. Une démarche sans robot n'est jamais proposée — mieux vaut ne pas
+ * l'afficher que promettre un traitement qui échouera.
+ */
+function disponibles(config, automation) {
+  const absorbees = new Set(
+    Object.values(COMPOSEES).flatMap((c) => c.options.map((o) => o.type))
+  );
+  const cartes = Object.keys(DEMARCHES).filter(
+    (type) => !absorbees.has(type) && estDisponible(type, config, automation)
+  );
+  for (const type of Object.keys(COMPOSEES)) {
+    if (branches(type, config, automation).length) cartes.push(type);
+  }
+  return cartes;
+}
+
+/**
+ * Démarche réellement déposée pour un type et un jeu de données validées.
+ * Pour une composée, c'est la branche désignée par le champ de choix ; pour une
+ * démarche simple, elle-même. Renvoie null si le choix est absent ou inconnu —
+ * l'appelant doit alors refuser le dépôt.
+ */
+function resoudre(type, data) {
+  const c = composee(type);
+  if (!c) return get(type) ? normalise(type) : null;
+  const choix = String((data || {})[c.champ] || '');
+  const option = c.options.find((o) => o.value === choix);
+  return option ? option.type : null;
+}
+
+module.exports = {
+  DEMARCHES,
+  COMPOSEES,
+  DEFAUT,
+  ALIAS,
+  get,
+  composee,
+  estComposee,
+  existe,
+  normalise,
+  fromQuery,
+  alias,
+  prefixe,
+  court,
+  libelle,
+  carte,
+  estDisponible,
+  actions,
+  branches,
+  disponibles,
+  resoudre,
+};

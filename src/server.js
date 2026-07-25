@@ -13,7 +13,7 @@ const sso = require('./sso');
 const referents = require('./referents');
 const stats = require('./stats');
 const { validate } = require('./validate');
-const { augmentSchema, effectiveSchema, effectiveSchemaFor, effectiveResetSchema, effectiveExtensionSchema, validateOverrides, requesterLabel } = require('./schema');
+const { augmentSchema, effectiveSchema, effectiveSchemaFor, validateOverrides, requesterLabel } = require('./schema');
 const demarches = require('./demarches');
 const { validateScenarioOverrides } = require('./automation/scenarioRuntime');
 const mailer = require('./mailer');
@@ -31,6 +31,7 @@ const NAV_KEYS = ['apps', 'demarches', 'espace', 'suivi', 'admin'];
 // Par défaut : « Applications » et « Démarches » masqués (les démarches passent
 // par l'espace référent), « Administration » masquée (accès par /admin.html).
 const NAV_DEFAULT = { apps: false, demarches: false, espace: true, suivi: true, admin: false };
+
 function siteNav() {
   const saved = db.getSetting('site_nav', {}) || {};
   const out = {};
@@ -230,13 +231,24 @@ app.get('/api/apps/:id/schema', sso.requireApi, (req, res) => {
     return res.status(409).json({ error: 'Application bientôt disponible' });
   }
   const { id, name, category, description, icon, color, logo } = entry.config;
-  // ?type=reset|extension → formulaires « mot de passe oublié » / « ajout d'établissement ».
-  if (req.query.type === 'reset' || req.query.type === 'extension') {
-    const schema = req.query.type === 'reset' ? effectiveResetSchema(entry.config) : effectiveExtensionSchema(entry.config);
-    if (!schema) return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
-    return res.json({ id, name, category, description, icon, color, logo: logo || null, schema, type: req.query.type });
-  }
-  res.json({ id, name, category, description, icon, color, logo: logo || null, schema: effectiveSchema(entry.config) });
+  // ?type=… → démarche demandée (création par défaut). Le registre des démarches
+  // dit quel schéma servir ; une démarche composée est assemblée à la volée.
+  const type = demarches.fromQuery(req.query.type);
+  const schema = effectiveSchemaFor(entry.config, type, entry.automation);
+  if (!schema) return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
+  const def = demarches.get(type) || demarches.composee(type);
+  res.json({
+    id,
+    name,
+    category,
+    description,
+    icon,
+    color,
+    logo: logo || null,
+    schema,
+    type: demarches.alias(type) || type,
+    demarche: { ...demarches.carte(type), aside: def.aside || '' },
+  });
 });
 
 // 60 dépôts par IP et par 10 minutes : large pour les lots, bloque le spam.
@@ -256,8 +268,8 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     });
   }
 
-  const type = demarches.fromQuery(req.query.type);
-  const schema = effectiveSchemaFor(entry.config, type);
+  const demande = demarches.fromQuery(req.query.type);
+  const schema = effectiveSchemaFor(entry.config, demande, entry.automation);
   if (!schema) return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
 
   // Connexion SSO : l'identité du demandeur (nom + e-mail) vient du compte
@@ -272,6 +284,23 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const { data, errors } = validate(schema, body);
   if (Object.keys(errors).length > 0) {
     return res.status(422).json({ error: 'Formulaire invalide', fields: errors });
+  }
+
+  // Démarche composée (« Mettre à jour un compte ») : le choix fait par le
+  // référent désigne la démarche réellement déposée. C'est ce type-là — jamais
+  // le type composé — qui est enregistré et exécuté par le robot.
+  const type = demarches.resoudre(demande, data);
+  if (!type) {
+    const champ = (demarches.composee(demande) || {}).champ || 'type';
+    return res.status(422).json({
+      error: 'Formulaire invalide',
+      fields: { [champ]: 'Choisissez ce que vous voulez mettre à jour' },
+    });
+  }
+  // La démarche retenue doit exister sur cette application (robot présent) :
+  // sans ce contrôle, une valeur forgée ferait déposer une demande inexécutable.
+  if (!demarches.estDisponible(type, entry.config, entry.automation)) {
+    return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
   }
 
   // Cloisonnement par établissement : le référent ne peut agir QUE sur ses
@@ -316,9 +345,11 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     ip,
     type
   );
+  // Clé de journal alignée sur celle du robot (`demarche.audit`) : le dépôt et
+  // le traitement d'une même démarche se lisent côte à côte dans le journal.
   db.audit(
     demandeur,
-    `depot_${type}`,
+    `depot_${demarches.get(type).audit}`,
     reference,
     `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim() || `${entry.config.name} — ${data.identifiant || ''}`,
     ip
@@ -467,7 +498,11 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
   // Applications sur lesquelles le référent peut agir (celles où il a des
   // établissements), pour proposer « Faire une demande » sur chacune.
   const apps = [...byApp.keys()].map((appId) => {
-    const c = (registry.get(appId) || {}).config || {};
+    const entry = registry.get(appId) || {};
+    const c = entry.config || {};
+    // Démarches RÉELLEMENT disponibles : schéma de formulaire ET robot présents.
+    // Sans ce filtre, l'interface proposerait des actions vouées à l'échec.
+    const dispo = demarches.disponibles(c, entry.automation);
     return {
       appId,
       id: appId, // attendu par appVisual() côté client
@@ -475,12 +510,26 @@ app.get('/api/espace/me', sso.requireApi, (req, res) => {
       logo: c.logo || null,
       logoFallback: c.logoFallback || null,
       color: c.color || null,
+      demarches: dispo.map((type) => demarches.carte(type)),
+      // Démarches simples exécutables : sert aux raccourcis des lignes de
+      // comptes, qui pointent directement sur la bonne démarche.
+      actions: demarches.actions(c, entry.automation),
     };
   });
 
   res.json({
     user,
-    referent: { email: ref.email, nom: ref.nom, prenom: ref.prenom, etablissements: ref.etablissements },
+    referent: {
+      email: ref.email,
+      nom: ref.nom,
+      prenom: ref.prenom,
+      // Libellé de repli : un rattachement enregistré sans libellé afficherait
+      // une pastille vide.
+      etablissements: ref.etablissements.map((e) => ({
+        ...e,
+        label: e.label || referents.labelFor(e.appId, e.value),
+      })),
+    },
     apps,
     accounts: [...accountsMap.values()],
     activity: activity.slice(0, 200),

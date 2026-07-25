@@ -7,6 +7,10 @@
 
 const db = require('./db');
 const registry = require('./registry');
+const demarches = require('./demarches');
+
+/** Compteurs à zéro pour chaque démarche du registre (creation, reset_mdp…). */
+const zeroParType = () => Object.fromEntries(Object.keys(demarches.DEMARCHES).map((t) => [t, 0]));
 
 function appName(appId) {
   const entry = registry.get(appId);
@@ -48,8 +52,8 @@ function compute() {
   const byEtab = new Map(); // label -> count (comptes créés)
   const byFonction = new Map();
   const byDemandeur = new Map();
-  const byMsAccount = new Map(); // compte -> { total, creation, reset_mdp, ajout_etab, crees }
-  const byType = { creation: 0, reset_mdp: 0, ajout_etab: 0 };
+  const byMsAccount = new Map(); // compte -> { total, <une clé par démarche>, crees }
+  const byType = zeroParType();
   const createdByDay = new Map(); // day -> count (comptes créés)
   const requestsByDay = new Map(); // day -> count (demandes déposées)
 
@@ -71,7 +75,7 @@ function compute() {
     const type = r.request_type || 'creation';
     if (type in byType) byType[type]++;
     const account = (r.sso_email || '').trim() || (r.demandeur || '').trim() || 'Sans SSO';
-    const acc = byMsAccount.get(account) || { total: 0, creation: 0, reset_mdp: 0, ajout_etab: 0, crees: 0 };
+    const acc = byMsAccount.get(account) || { total: 0, ...zeroParType(), crees: 0 };
     acc.total++;
     acc[type] = (acc[type] || 0) + 1;
     if (r.status === 'terminee') acc.crees++;

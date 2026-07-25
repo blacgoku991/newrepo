@@ -912,6 +912,87 @@ async function updateIdentity(data, ctx) {
 }
 
 /**
+ * Ajout d'un établissement à un intervenant existant : on CUMULE les
+ * rattachements (l'établissement d'origine est conservé). C'est la différence
+ * avec le transfert, qui retire l'ancien.
+ *
+ * La liste des intervenants étant filtrée par établissement, on part de
+ * l'établissement actuel (`etablissement`) pour retrouver la fiche, puis on
+ * coche le nouveau (`etablissement_cible`).
+ */
+async function addEstablishment(data, ctx) {
+  const identifiant = String(data.identifiant || '').trim();
+  const actuel = String(data.etablissement || '');
+  const cible = String(data.etablissement_cible || '');
+
+  if (actuel === cible) {
+    return {
+      success: false,
+      message: `L'intervenant est déjà rattaché à ${etabLabel(cible)} : il n'y a rien à ajouter.`,
+      artifacts: [],
+    };
+  }
+
+  if (getMode(ENV) === 'demo') {
+    ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
+    const etapes = [
+      'Connexion au compte administrateur',
+      'Double authentification',
+      `Bascule sur l'établissement ${etabLabel(actuel)}`,
+      `Recherche de l'intervenant « ${identifiant} »`,
+      `Rattachement à ${etabLabel(cible)}`,
+      'Fiche enregistrée',
+    ];
+    etapes.forEach((label, i) => {
+      ctx.log(`Étape ${i + 1}/${etapes.length} — ${label}`);
+      if (ctx.progress) ctx.progress(i + 1, etapes.length, label);
+    });
+    return {
+      success: true,
+      message: `${etabLabel(cible)} ajouté à « ${identifiant} » (environnement de démonstration)`,
+      artifacts: [],
+    };
+  }
+
+  const S = applySelectorPatches(BASE_SELECTORS, config.id);
+  const base = process.env.NETSOINS_URL.replace(/\/$/, '');
+  const steps = buildLoginSteps({ S, ctx, base });
+
+  steps.push(
+    ...buildOuvrirFicheSteps({ S, ctx, data, identifiant }),
+    {
+      id: 'ajout',
+      critical: true,
+      label: `Rattachement à ${etabLabel(cible)}`,
+      run: async (page) => {
+        await L(page, S.compte.etabOpen).first().click();
+        // Rien à décocher : les rattachements en place restent tels quels.
+        await cocherEtablissement(page, S, ctx, cible);
+      },
+    },
+    {
+      id: 'enregistrement',
+      critical: true,
+      label: 'Enregistrement de la fiche',
+      run: async (page) => {
+        const save = await findSave(page, S, ctx);
+        await save.click();
+        await page.waitForTimeout(2500);
+        ctx.log('Fiche enregistrée.');
+      },
+    }
+  );
+
+  return runScenario({
+    reference: ctx.reference,
+    log: ctx.log,
+    onProgress: ctx.progress,
+    successMessage: `${etabLabel(cible)} ajouté à « ${identifiant} »`,
+    steps: composeSteps(config.id, steps, data, ctx.log),
+  });
+}
+
+/**
  * Transfert d'un intervenant vers un autre établissement : on RETIRE le
  * rattachement d'origine, puis on attribue le nouveau. À la différence de
  * l'ajout d'établissement, l'intervenant perd l'accès à son établissement
@@ -994,4 +1075,13 @@ async function transferEstablishment(data, ctx) {
 }
 
 
-module.exports = { createAccount, resetPassword, updateIdentity, transferEstablishment, STEPS_META, RESET_STEPS_META, chooseStrategy };
+module.exports = {
+  createAccount,
+  resetPassword,
+  updateIdentity,
+  addEstablishment,
+  transferEstablishment,
+  STEPS_META,
+  RESET_STEPS_META,
+  chooseStrategy,
+};

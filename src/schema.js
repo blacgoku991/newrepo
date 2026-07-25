@@ -107,12 +107,97 @@ function effectiveSchema(config) {
 }
 
 /**
+ * Champs communs à toutes les démarches portant sur un compte existant : ils
+ * sont demandés une seule fois dans le formulaire composé, pas une fois par
+ * branche.
+ */
+const CHAMPS_COMMUNS = ['identifiant', 'etablissement'];
+
+/** Libellés du champ commun « établissement » dans un formulaire composé. */
+const ETAB_COMMUN = {
+  label: 'Établissement du compte',
+  help: 'Établissement auquel le compte est rattaché aujourd’hui — c’est là que le robot va chercher la fiche.',
+};
+
+const tousLesChamps = (schema) => schema.sections.flatMap((s) => s.fields);
+
+/**
+ * Schéma d'une démarche composée (ex. « Mettre à jour un compte ») : construit
+ * à partir des schémas des branches réellement disponibles, sans les dupliquer.
+ *
+ *   1. le choix de l'opération (radio) ;
+ *   2. le compte concerné (identifiant + établissement, demandés une fois) ;
+ *   3. les champs propres à chaque branche, conditionnés par `showIf`.
+ *
+ * Deux branches déclarant le même champ le partagent (la condition devient un
+ * `in` sur les deux valeurs) : dans une même application, un même nom de champ
+ * désigne la même chose.
+ */
+function buildComposedSchema(config, type, automation) {
+  const c = demarches.composee(type);
+  const branches = demarches.branches(type, config, automation);
+  if (!c || branches.length === 0) return null;
+
+  const schemaDe = (branche) => config[demarches.get(branche.type).schema];
+
+  // Champs communs : pris sur la première branche disponible qui les déclare.
+  const communs = [];
+  for (const name of CHAMPS_COMMUNS) {
+    for (const branche of branches) {
+      const champ = tousLesChamps(schemaDe(branche)).find((f) => f.name === name);
+      if (champ) {
+        communs.push(name === 'etablissement' ? { ...champ, ...ETAB_COMMUN } : { ...champ });
+        break;
+      }
+    }
+  }
+
+  // Champs propres aux branches, masqués tant que l'opération n'est pas choisie.
+  const specifiques = [];
+  for (const branche of branches) {
+    for (const champ of tousLesChamps(schemaDe(branche))) {
+      if (CHAMPS_COMMUNS.includes(champ.name)) continue;
+      const deja = specifiques.find((f) => f.name === champ.name);
+      if (deja) {
+        deja.showIf.in.push(branche.value);
+        continue;
+      }
+      specifiques.push({ ...champ, showIf: { field: c.champ, in: [branche.value] } });
+    }
+  }
+
+  const sections = [
+    {
+      title: c.section || c.titre,
+      fields: [
+        {
+          name: c.champ,
+          label: c.titre,
+          type: 'radio',
+          required: true,
+          options: branches.map((b) => ({ value: b.value, label: b.label, help: b.help })),
+        },
+      ],
+    },
+    { title: 'Compte concerné', fields: communs },
+  ];
+  if (specifiques.length) sections.push({ title: 'Détail de la mise à jour', fields: specifiques });
+
+  return { intro: c.intro, sections };
+}
+
+/**
  * Schéma servi pour une démarche donnée, section demandeur incluse.
  * La création passe par les surcharges de l'éditeur d'admin ; les autres
- * démarches s'appuient sur le schéma déclaré dans la configuration.
+ * démarches s'appuient sur le schéma déclaré dans la configuration, et les
+ * démarches composées sont assemblées à partir de leurs branches.
  * Renvoie null si l'application ne propose pas cette démarche.
  */
-function effectiveSchemaFor(config, type) {
+function effectiveSchemaFor(config, type, automation) {
+  if (demarches.estComposee(type)) {
+    const compose = buildComposedSchema(config, type, automation);
+    return compose ? { ...compose, sections: [...compose.sections, REQUESTER_SECTION] } : null;
+  }
   const d = demarches.get(type);
   if (!d) return null;
   if (d.schema === 'formSchema') return effectiveSchema(config);
@@ -120,10 +205,6 @@ function effectiveSchemaFor(config, type) {
   if (!brut) return null;
   return { ...brut, sections: [...brut.sections, REQUESTER_SECTION] };
 }
-
-/** Raccourcis conservés pour la lisibilité des appels existants. */
-const effectiveResetSchema = (config) => effectiveSchemaFor(config, 'reset_mdp');
-const effectiveExtensionSchema = (config) => effectiveSchemaFor(config, 'ajout_etab');
 
 /** Compat : augmente un schéma brut (sans surcharges) — utilisé par la console démo. */
 function augmentSchema(formSchema) {
@@ -173,8 +254,7 @@ module.exports = {
   augmentSchema,
   effectiveSchema,
   effectiveSchemaFor,
-  effectiveResetSchema,
-  effectiveExtensionSchema,
+  buildComposedSchema,
   mergeSchema,
   validateOverrides,
   requesterLabel,

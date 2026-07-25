@@ -18,6 +18,23 @@
   const filters = { text: '', app: '', status: '' };
   let refreshTimer = null;
 
+  // Types de demande : étiquette courte (tableaux) et titre complet (détail).
+  // Les libellés suivent le registre des démarches côté serveur (src/demarches.js).
+  const TYPE_BADGES = {
+    creation: ['Création', 'st-terminee'],
+    reset_mdp: ['Réinit. mdp', 'st-en_cours'],
+    ajout_etab: ['Ajout étab.', 'st-en_attente'],
+    maj_identite: ['Identité', 'st-en_cours'],
+    transfert_etab: ['Transfert', 'st-en_attente'],
+  };
+  const TYPE_TITRES = {
+    creation: 'Demande de création de compte',
+    reset_mdp: 'Réinitialisation de mot de passe',
+    ajout_etab: "Ajout d'établissement",
+    maj_identite: "Correction de l'identité",
+    transfert_etab: 'Transfert vers un autre établissement',
+  };
+
   // --- Démarrage / auth -----------------------------------------------------
   boot();
   async function boot() {
@@ -129,10 +146,19 @@
     identifiants_consultes: 'Identifiants consultés',
     lien_identifiants_regenere: 'Lien d’identifiants régénéré',
     acces_identifiants_refuse: 'Accès aux identifiants refusé',
+    depot_creation_compte: 'Création de compte déposée',
     depot_reinit_mdp: 'Réinitialisation de mdp déposée',
+    // Clés antérieures au registre des démarches, conservées pour relire
+    // l'historique déjà journalisé.
+    depot_creation: 'Création de compte déposée',
+    depot_reset_mdp: 'Réinitialisation de mdp déposée',
     reinit_mdp: 'Mot de passe réinitialisé',
     depot_ajout_etab: 'Ajout d’établissement déposé',
     ajout_etab: 'Établissement ajouté',
+    depot_maj_identite: 'Correction d’identité déposée',
+    maj_identite: 'Identité corrigée',
+    depot_transfert_etab: 'Transfert d’établissement déposé',
+    transfert_etab: 'Compte transféré',
     admin_consultation_identifiants: 'Identifiants consultés (admin)',
   };
   let journalEntries = [];
@@ -198,17 +224,18 @@
   // « Qui a fait quoi » : par compte Microsoft, avec le détail par type de démarche.
   function msAccountsTable(rows) {
     if (!rows.length) return '<div class="empty">Aucune demande enregistrée.</div>';
+    // Une colonne par démarche : la liste suit le registre côté serveur, donc
+    // une nouvelle démarche apparaît ici sans retoucher ce tableau.
+    const types = Object.keys(TYPE_BADGES);
     return `<div style="overflow-x:auto"><table class="data" style="margin:0"><thead><tr>
         <th>Compte Microsoft</th><th style="text-align:center">Total</th>
-        <th style="text-align:center">Créations</th><th style="text-align:center">Réinit. mdp</th>
-        <th style="text-align:center">Ajouts étab.</th><th style="text-align:center">Comptes créés</th>
+        ${types.map((t) => `<th style="text-align:center">${escapeHtml(TYPE_BADGES[t][0])}</th>`).join('')}
+        <th style="text-align:center">Comptes créés</th>
       </tr></thead><tbody>
         ${rows.map((r) => `<tr>
           <td><b>${escapeHtml(r.account)}</b></td>
           <td style="text-align:center">${r.total}</td>
-          <td style="text-align:center">${r.creation || 0}</td>
-          <td style="text-align:center">${r.reset_mdp || 0}</td>
-          <td style="text-align:center">${r.ajout_etab || 0}</td>
+          ${types.map((t) => `<td style="text-align:center">${r[t] || 0}</td>`).join('')}
           <td style="text-align:center"><span class="badge st-terminee">${r.crees || 0}</span></td>
         </tr>`).join('')}
       </tbody></table></div>`;
@@ -305,7 +332,7 @@
     const shots = (r.artifacts || []).length ? `<h4>Captures d’écran</h4><div class="shots">${r.artifacts.map((f) => { const u = `/artifacts/${encodeURIComponent(r.reference)}/${encodeURIComponent(f)}`; return `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${escapeHtml(f)}" loading="lazy"/><span class="cap">${escapeHtml(f)}</span></a>`; }).join('')}</div>` : '';
     const emails = (r.emails || []).length ? `<h4>E-mail d'identifiants</h4>${r.emails.map((e) => `<div style="font-size:.88rem;padding:6px 0">${escapeHtml(e.to)} — ${statusBadge2(e.status)}</div>`).join('')}` : '';
     modal.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${r.type === 'reset_mdp' ? 'Réinitialisation de mot de passe' : r.type === 'ajout_etab' ? "Ajout d'établissement" : 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${TYPE_TITRES[r.type] || 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
       <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
       ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
       ${adminProgressHtml(r)}
@@ -367,14 +394,8 @@
   const EMAIL_LABELS = { a_envoyer: 'À envoyer', envoye: 'Envoyé', erreur: 'Erreur' };
   function statusBadge2(st) { const cls = st === 'envoye' ? 'st-terminee' : st === 'erreur' ? 'st-echec' : 'st-en_attente'; return `<span class="badge ${cls}">${EMAIL_LABELS[st] || st}</span>`; }
 
-  // Étiquette du type de demande (création / réinit. mdp / ajout établissement).
   function typeBadge(type) {
-    const map = {
-      reset_mdp: ['Réinit. mdp', 'st-en_cours'],
-      ajout_etab: ['Ajout étab.', 'st-en_attente'],
-      creation: ['Création', 'st-terminee'],
-    };
-    const [label, cls] = map[type] || map.creation;
+    const [label, cls] = TYPE_BADGES[type] || TYPE_BADGES.creation;
     return `<span class="badge ${cls}" style="font-size:.68rem">${label}</span>`;
   }
 
