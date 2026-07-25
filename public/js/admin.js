@@ -205,14 +205,18 @@
 
   function renderStats(s) {
     const k = s.kpis || {};
+    const ref = s.referents || {};
     const tiles = [
       { cls: 'k-ok', ic: 'check', v: k.crees ?? 0, l: 'Comptes créés' },
       { cls: 'k-total', ic: 'inbox', v: k.total ?? 0, l: 'Demandes au total' },
       { cls: 'k-info', ic: 'trend', v: (k.tauxReussite ?? 0) + '%', l: 'Taux de réussite' },
       { cls: 'k-warn', ic: 'clock', v: (k.en_attente ?? 0) + (k.en_cours ?? 0), l: 'En cours · attente' },
       { cls: 'k-danger', ic: 'x', v: k.echec ?? 0, l: 'Échecs' },
+      // Habilitations : sans référent, personne ne peut déposer de demande.
+      { cls: ref.actifs ? 'k-info' : 'k-danger', ic: 'building', v: ref.actifs ?? 0, l: 'Référents habilités' },
     ];
     el('kpis').innerHTML = tiles.map((t) => `<div class="kpi ${t.cls}"><div class="ic">${icon(t.ic)}</div><div class="v">${t.v}</div><div class="l">${t.l}</div></div>`).join('');
+    el('alerte-referents').innerHTML = alerteReferentsHtml(ref);
     el('chart-serie').innerHTML = areaChart(s.serie || []);
     el('chart-apps').innerHTML = appBars(s.parApplication || []);
     el('chart-demandeur').innerHTML = barChart(s.parDemandeur || [], { color: CHART.terra, empty: 'Aucun compte créé.' });
@@ -773,6 +777,30 @@
     referentsData = data.referents || [];
     referentApps = data.apps || [];
     renderReferents();
+  }
+
+  /**
+   * Alerte d'habilitation. Deux cas se voient mal autrement : aucun référent
+   * déclaré (personne ne peut déposer, le portail semble « cassé »), et un
+   * référent sans établissement (il se connecte mais ne voit rien).
+   */
+  function alerteReferentsHtml(ref) {
+    if (!ref.enforced) return '';
+    if (!ref.actifs) {
+      return `<div class="alert alert-err" style="margin-bottom:18px">
+        <b>Aucun référent habilité.</b> Personne ne peut déposer de demande pour l'instant :
+        le dépôt est réservé aux référents déclarés. Ajoutez-les dans
+        <a href="#referents">Configuration → Référents</a>.</div>`;
+    }
+    if (ref.sansEtablissement) {
+      return `<div class="alert alert-warn" style="margin-bottom:18px">
+        <b>${ref.sansEtablissement} référent${ref.sansEtablissement > 1 ? 's' : ''} sans établissement.</b>
+        ${ref.sansEtablissement > 1 ? 'Ils se connectent' : 'Il se connecte'} au portail mais ne
+        ${ref.sansEtablissement > 1 ? 'voient' : 'voit'} aucun compte et ne peut rien déposer.
+        Complétez ${ref.sansEtablissement > 1 ? 'leurs rattachements' : 'son rattachement'} dans
+        <a href="#referents">Configuration → Référents</a>.</div>`;
+    }
+    return '';
   }
 
   function renderReferents() {

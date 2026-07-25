@@ -38,9 +38,14 @@ function labelFor(appId, value) {
   return found ? found.label : String(value || '');
 }
 
-/** Le contrôle des référents est-il actif ? (SSO requis + au moins un référent). */
+/** Le contrôle des référents est-il actif ? (dès que le SSO est requis). */
 function enforced() {
-  return sso.required() && db.countReferents() > 0;
+  // Fermé par défaut : dès que le SSO est actif, seuls les référents déclarés
+  // peuvent déposer. Auparavant, une base SANS aucun référent ouvrait le dépôt
+  // à tout compte Microsoft du tenant — sur n'importe quel établissement, et
+  // sans que rien ne le signale. Un portail neuf refuse donc les dépôts jusqu'à
+  // ce qu'un administrateur déclare les référents (le panel l'affiche en alerte).
+  return sso.required();
 }
 
 /** Référent actif correspondant à l'utilisateur SSO connecté, ou null. */

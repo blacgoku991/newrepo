@@ -376,6 +376,8 @@ a.app-card:hover .go svg { transform: translateX(3px); }
    -------------------------------------------------------------------------- */
 .alert { border-radius: var(--radius-sm); padding: 13px 16px; font-size: .92rem; }
 .alert-err,.alert-error { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger-line); }
+.alert-warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+.alert a { color: inherit; text-decoration: underline; font-weight: 650; }
 .spinner { width: 15px; height: 15px; border: 2.5px solid rgba(36,26,3,.35); border-top-color: var(--gold-ink); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
 .btn-ghost .spinner, .spinner.dark { border-color: rgba(255,255,255,.2); border-top-color: var(--gold-bright); }
 @keyframes spin { to { transform: rotate(360deg); } }

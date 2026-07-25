@@ -22,10 +22,14 @@ l'identifiant de son installation.
 
 | Situation | Traitements | Données | Ce que voit l'utilisateur |
 |---|---|---|---|
-| Plus de 60 jours restants | actifs | consultables | rien |
-| 60 jours ou moins | actifs | consultables | bandeau orange « pensez au renouvellement » |
-| Échue, dans la tolérance (30 j par défaut) | actifs | consultables | bandeau orange « les traitements seront suspendus dans N jours » |
-| Tolérance dépassée | **suspendus** | consultables | bandeau rouge, dépôt de demande refusé |
+| Plus de 30 jours restants | actifs | consultables | rien |
+| **30 jours ou moins** | actifs | consultables | bandeau orange avec le DÉCOMPTE : « Licence : expiration dans 12 jours » |
+| **Le jour de l'échéance** | **suspendus** | consultables | bandeau rouge, dépôt de demande refusé |
+
+**Aucune tolérance** : la licence s'arrête le jour dit. Le décompte prévient un
+mois à l'avance, il n'y a donc pas de surprise. (`--grace N` reste disponible
+dans l'outil de signature pour un geste commercial explicite ; par défaut, rien
+n'est accordé.)
 
 **Mode limité = robots coupés, rien de perdu.** Les demandes déjà en file
 restent `en_attente` : dès la licence renouvelée, elles repartent seules. Les
@@ -80,7 +84,7 @@ Options utiles :
 | Option | Effet |
 |---|---|
 | `--debut AAAA-MM-JJ` | entrée en vigueur (défaut : aujourd'hui) |
-| `--grace N` | tolérance après l'échéance (défaut : 30 jours) |
+| `--grace N` | tolérance après l'échéance. **Défaut : 0** — arrêt le jour dit |
 | `--install ID` | lie la licence à une installation — **recommandé** |
 | `--note "texte"` | commentaire conservé dans la licence (n° de commande…) |
 | `--cle chemin` | autre emplacement de clé privée |

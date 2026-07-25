@@ -141,6 +141,17 @@ function compute() {
       .map(([account, v]) => ({ account, ...v }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 12),
+    // Habilitations : sans référent déclaré, personne ne peut déposer. Le
+    // compte remonte ici pour être visible dès la vue d'ensemble.
+    referents: (() => {
+      const liste = db.listReferents();
+      return {
+        total: liste.length,
+        actifs: liste.filter((r) => r.active).length,
+        sansEtablissement: liste.filter((r) => (r.etablissements || []).length === 0).length,
+        enforced: require('./referents').enforced(),
+      };
+    })(),
   };
 }
 

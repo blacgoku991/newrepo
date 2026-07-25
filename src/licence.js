@@ -19,9 +19,10 @@
  * - Une borne haute d'horloge (« high-water mark ») est mémorisée : reculer la
  *   date du serveur ne prolonge pas la licence.
  *
- * Quand la licence est échue (au-delà du délai de grâce), le portail passe en
- * MODE LIMITÉ : les robots sont coupés et aucune demande n'est déposée, mais
- * toutes les données restent consultables. On ne perd rien, on ne détruit rien.
+ * Un mois avant l'échéance, un bandeau affiche le DÉCOMPTE des jours restants.
+ * À la date de fin, sans aucune tolérance, le portail passe en MODE LIMITÉ :
+ * les robots sont coupés et aucune demande n'est déposée, mais toutes les
+ * données restent consultables. On ne perd rien, on ne détruit rien.
  *
  * Ce n'est pas un DRM : quelqu'un qui modifie le code source peut contourner
  * n'importe quel contrôle local. L'objectif est qu'un client ne puisse pas
@@ -41,8 +42,12 @@ const db = require('./db');
 const CLE_PUBLIQUE = 'REMPLACER_PAR_VOTRE_CLE_PUBLIQUE';
 
 const PREFIXE = 'ALG1';
-const GRACE_DEFAUT = 30; // jours de tolérance après la date de fin
-const ALERTE_JOURS = 60; // à partir de combien de jours restants on prévient
+// AUCUNE tolérance : à la date de fin, le portail passe en mode limité le jour
+// même. Le décompte prévient un mois à l'avance, il n'y a donc pas de surprise.
+// (`grace` reste lisible dans une licence pour un geste commercial explicite,
+// mais rien n'en met par défaut.)
+const GRACE_DEFAUT = 0;
+const ALERTE_JOURS = 30; // décompte affiché à partir de 30 jours restants
 const TOLERANCE_HORLOGE_MS = 48 * 3600 * 1000;
 const SAUT_HORLOGE_MAX_MS = 366 * 24 * 3600 * 1000;
 
@@ -51,7 +56,7 @@ const SAUT_HORLOGE_MAX_MS = 366 * 24 * 3600 * 1000;
 const ETATS = {
   ouvert: { robot: true, niveau: 'info', titre: 'Licence non configurée' },
   valide: { robot: true, niveau: 'ok', titre: 'Licence active' },
-  grace: { robot: true, niveau: 'warn', titre: 'Licence échue — période de tolérance' },
+  grace: { robot: true, niveau: 'warn', titre: 'Licence échue — tolérance accordée' },
   absente: { robot: false, niveau: 'danger', titre: 'Aucune licence installée' },
   invalide: { robot: false, niveau: 'danger', titre: 'Licence illisible ou falsifiée' },
   installation: { robot: false, niveau: 'danger', titre: 'Licence émise pour une autre installation' },
@@ -235,15 +240,20 @@ function etat() {
 
   const restants = joursEntre(maintenant, fin);
   if (restants >= 0) {
+    // Dernier mois : bandeau d'alerte avec le décompte, pour que le
+    // renouvellement soit anticipé et jamais découvert le jour de l'arrêt.
+    const proche = restants <= ALERTE_JOURS;
+    const jours = `${restants} jour${restants > 1 ? 's' : ''}`;
     return {
       ...infos,
       ...ETATS.valide,
       etat: 'valide',
+      niveau: proche ? 'warn' : 'ok',
+      titre: proche ? `Licence : expiration dans ${jours}` : ETATS.valide.titre,
       joursRestants: restants,
-      message:
-        restants <= ALERTE_JOURS
-          ? `Licence valable encore ${restants} jour${restants > 1 ? 's' : ''} (jusqu’au ${charge.fin}). Pensez au renouvellement.`
-          : `Licence valable jusqu’au ${charge.fin}.`,
+      message: proche
+        ? `Votre licence expire le ${charge.fin}, dans ${jours}. À cette date, les créations et modifications de comptes s’arrêteront ; vos données resteront consultables. Contactez votre éditeur pour renouveler.`
+        : `Licence valable jusqu’au ${charge.fin}.`,
     };
   }
 
@@ -263,7 +273,10 @@ function etat() {
     ...ETATS.expiree,
     etat: 'expiree',
     joursRestants: 0,
-    message: `Licence expirée depuis le ${charge.fin} (tolérance de ${grace} jours dépassée). Les créations et modifications de comptes sont suspendues ; vos données restent consultables.`,
+    message:
+      `Licence expirée depuis le ${charge.fin}${grace ? ` (tolérance de ${grace} jours dépassée)` : ''}. ` +
+      'Les créations et modifications de comptes sont suspendues ; vos données restent consultables. ' +
+      'Installez une licence à jour pour reprendre les traitements.',
   };
 }
 
