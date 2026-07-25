@@ -195,15 +195,64 @@ function normEtab(s) {
  * paramétrage de l'instance, et un décalage ferait comparer le mauvais champ —
  * donc dupliquer le mauvais utilisateur, en silence.
  */
-async function indexColonne(list, motif) {
+async function indexColonne(list, motif, valider = null) {
+  const candidats = [];
   for (const cible of [list.locator('th'), list.getByRole('columnheader')]) {
     const n = await cible.count().catch(() => 0);
     for (let i = 0; i < n; i++) {
-      const txt = await cible.nth(i).innerText().catch(() => '');
-      if (motif.test(normEtab(txt))) return i;
+      const cellule = cible.nth(i);
+      const txt = await cellule.innerText({ timeout: 2000 }).catch(() => '');
+      if (!motif.test(normEtab(txt))) continue;
+      // `cellIndex` = position RÉELLE de la cellule dans SA ligne. Le rang dans
+      // la liste des <th> ne vaut rien : le même intitulé apparaît ailleurs
+      // dans la page (info-bulle de la grille, sélecteur de colonnes), et on
+      // finissait par lire une colonne numérique à la place de l'établissement.
+      const reel = await cellule.evaluate((el) => (typeof el.cellIndex === 'number' ? el.cellIndex : -1)).catch(() => -1);
+      const idx = reel >= 0 ? reel : i;
+      if (!candidats.includes(idx)) candidats.push(idx);
     }
   }
+  if (!candidats.length) return -1;
+  if (!valider) return candidats[0];
+  // Plusieurs en-têtes portent le même intitulé : on retient celui dont la
+  // colonne contient réellement des libellés d'établissement.
+  for (const idx of candidats) {
+    if (await valider(idx)) return idx;
+  }
   return -1;
+}
+
+/**
+ * Vérifie que la colonne trouvée contient bien des libellés d'établissement.
+ * Un index faux (en-têtes sur une autre table, colonne masquée) donnerait des
+ * cellules vides ou numériques — et une recherche qui échoue sans rien dire.
+ */
+async function colonneCredible(list, colEtab, boutonDupliquer, connus = libellesEtablissements()) {
+  if (colEtab < 0) return false;
+  const lignes = list.locator('tr').filter({ has: list.locator(boutonDupliquer) });
+  const n = Math.min(await lignes.count().catch(() => 0), 10);
+  for (let i = 0; i < n; i++) {
+    const txt = normEtab(await lignes.nth(i).locator('td').nth(colEtab).innerText({ timeout: 2000 }).catch(() => ''));
+    if (txt.length < 4) continue;
+    // Un simple « du texte, pas un nombre » ne suffit pas : la colonne « Nom »
+    // passerait. On exige une valeur qui figure vraiment dans la liste des
+    // établissements de l'application.
+    if (connus.some((l) => txt === l || txt.includes(l) || l.includes(txt))) return true;
+  }
+  return false;
+}
+
+/** Libellés d'établissement connus de l'application, normalisés. */
+let cacheLibelles = null;
+function libellesEtablissements() {
+  if (cacheLibelles) return cacheLibelles;
+  const champ = (config.formSchema.sections || [])
+    .flatMap((s) => s.fields || [])
+    .find((f) => f.name === 'etablissement');
+  cacheLibelles = ((champ && champ.options) || [])
+    .map((o) => normEtab(o.label))
+    .filter((l) => l.length >= 4);
+  return cacheLibelles;
 }
 
 /**
@@ -218,20 +267,33 @@ async function indexColonne(list, motif) {
  * doit absorber.
  */
 async function trouverModele(list, { fonctionRe, colEtab, cible, boutonDupliquer }) {
+  const correspond = (etab) => etab
+    && (etab === cible || etab.includes(cible) || (etab.length >= 4 && cible.includes(etab)));
+
   const lignes = list.locator('tr').filter({ has: list.locator(boutonDupliquer) });
   const n = await lignes.count().catch(() => 0);
   const vus = new Set();
   for (let i = 0; i < n; i++) {
     const ligne = lignes.nth(i);
-    const texte = await ligne.innerText().catch(() => '');
+    const texte = await ligne.innerText({ timeout: 2000 }).catch(() => '');
     if (!fonctionRe.test(texte)) continue;
-    if (colEtab === -1) return { row: ligne, etab: null };
-    const etab = normEtab(await ligne.locator('td').nth(colEtab).innerText().catch(() => ''));
-    if (etab) vus.add(etab);
-    // Égalité stricte d'abord ; à défaut, inclusion (un libellé de grille
-    // parfois complété d'un code ou d'un suffixe).
-    if (etab === cible || (etab && (etab.includes(cible) || cible.includes(etab)))) {
-      return { row: ligne, etab };
+
+    if (colEtab >= 0) {
+      const etab = normEtab(await ligne.locator('td').nth(colEtab).innerText({ timeout: 2000 }).catch(() => ''));
+      if (etab) vus.add(etab);
+      if (correspond(etab)) return { row: ligne, etab };
+      continue;
+    }
+
+    // Colonne « Établissement par défaut » non résolue : on cherche le libellé
+    // dans TOUTES les cellules de la ligne. Mieux vaut ça que l'ancien repli
+    // « première ligne de la fonction », qui dupliquait un compte du SIEGE.
+    const cellules = ligne.locator('td');
+    const m = await cellules.count().catch(() => 0);
+    for (let j = 0; j < m; j++) {
+      const val = normEtab(await cellules.nth(j).innerText({ timeout: 2000 }).catch(() => ''));
+      if (val.length >= 4) vus.add(val);
+      if (correspond(val)) return { row: ligne, etab: val };
     }
   }
   return { row: null, vus: [...vus] };
@@ -481,30 +543,43 @@ async function createAccount(data, ctx) {
           // de 20 utilisateurs, rien ne change et on n'attend pas pour rien.
           await waitRowsChange(list, page, lignesAvant, 8000);
 
-          // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics, avec
-          //    attente entre les deux) pour regrouper les fonctions renseignées
-          //    et les faire remonter en tête (le 1er tri met les vides en tête).
-          ctx.log('Tri par la colonne « Fonctions ADEF Résidences » (2 clics)');
-          let header = list.getByRole('columnheader', { name: /Fonctions ADEF/ }).first();
-          if (!(await header.count().catch(() => 0))) {
-            header = list.getByText(/Fonctions ADEF/).first();
-          }
+          // 2. Tri de la grille. Deux colonnes nous intéressent :
+          //    - « Établissement par défaut » : regroupe les comptes de
+          //      l'établissement courant, donc le modèle cherché remonte parmi
+          //      les 200 lignes affichées ;
+          //    - « Fonctions ADEF Résidences » : regroupe les fonctions
+          //      renseignées (le 1er clic met les vides en tête, d'où 2 clics).
+          //    On essaie l'établissement d'abord : c'est le critère le plus
+          //    discriminant quand un établissement compte peu de comptes.
+          const entete = async (motif) => {
+            const parRole = list.getByRole('columnheader', { name: motif }).first();
+            if (await parRole.count().catch(() => 0)) return parRole;
+            return list.getByText(motif).first();
+          };
           // Le tri est un aller-retour serveur : la grille se recharge entre les
           // deux clics. Sans attente réelle, le second clic part sur l'ancienne
-          // grille et le tri finit à l'envers — les fonctions vides restent en
-          // tête et la fonction cherchée n'est sur aucune des 200 lignes
-          // affichées. On attend donc au moins 2 s après chaque clic, davantage
-          // si la grille bouge encore.
-          const trier = async () => {
-            // Attente légitime : on ré-arme le chien de garde du worker pour ne
-            // pas être tué à tort pendant ces rechargements de grille.
-            if (ctx.keepAlive) ctx.keepAlive();
-            await header.click().catch(() => {});
-            await waitGridSettle(list, page, { max: 8000, min: 2000, quiet: 800 });
+          // grille et le tri finit à l'envers — la ligne cherchée n'est alors
+          // sur aucune des 200 lignes affichées. On attend donc au moins 2 s
+          // après chaque clic, davantage si la grille bouge encore.
+          const trierPar = async (motif, libelle) => {
+            const header = await entete(motif);
+            if (!(await header.count().catch(() => 0))) {
+              ctx.log(`⚠ Colonne « ${libelle} » non cliquable : tri ignoré`);
+              return;
+            }
+            ctx.log(`Tri par la colonne « ${libelle} » (2 clics)`);
+            for (let i = 0; i < 2; i++) {
+              // Attente légitime : on ré-arme le chien de garde du worker pour
+              // ne pas être tué à tort pendant ces rechargements de grille.
+              if (ctx.keepAlive) ctx.keepAlive();
+              await header.click().catch(() => {});
+              await waitGridSettle(list, page, { max: 8000, min: 2000, quiet: 800 });
+            }
           };
-          await trier();
-          await trier();
-          ctx.log(`Recherche de la cellule « ${data.fonction} » et de son bouton dupliquer`);
+          const trierParEtablissement = () => trierPar(/Établissement par d[ée]faut/, 'Établissement par défaut');
+          const trierParFonction = () => trierPar(/Fonctions ADEF/, 'Fonctions ADEF Résidences');
+
+          await trierParEtablissement();
 
           // 3. Repérer la CELLULE (gridcell) contenant la fonction demandée.
           //    Correspondance partielle et insensible à la casse :
@@ -525,25 +600,30 @@ async function createAccount(data, ctx) {
           // avoir la MÊME fonction ET le MÊME établissement que la demande.
           // Prendre le premier venu donnait des comptes rattachés au SIEGE —
           // donc des droits plus larges que ceux de l'établissement demandé.
-          const colEtab = await indexColonne(list, /ETABLISSEMENT PAR D/);
+          const colEtab = await indexColonne(
+            list,
+            /ETABLISSEMENT PAR D/,
+            (idx) => colonneCredible(list, idx, S.userList.duplicateButton),
+          );
           if (colEtab === -1) {
-            ctx.log('⚠ Colonne « Établissement par défaut » introuvable : duplication sur la seule fonction');
-          } else {
-            ctx.log(`Recherche d'un modèle « ${data.fonction} » rattaché à « ${etabLabel} »`);
+            ctx.log("⚠ Colonne « Établissement par défaut » non résolue : l'établissement est cherché dans toute la ligne");
           }
+          ctx.log(`Recherche d'un modèle « ${data.fonction} » rattaché à « ${etabLabel} »`);
           const cible = normEtab(etabLabel);
           const chercherModele = () => trouverModele(list, {
             fonctionRe, colEtab, cible, boutonDupliquer: S.userList.duplicateButton,
           });
 
-          // Si rien n'est trouvé, c'est le plus souvent que le tri n'a pas pris
-          // (clic avalé pendant un rechargement) : on re-trie et on regarde à
-          // nouveau, plutôt que d'échouer sur un faux « fonction inexistante ».
+          // Si rien n'est trouvé, on change d'angle plutôt que de répéter le
+          // même tri : d'abord par fonction, puis à nouveau par établissement.
+          // Un clic avalé pendant un rechargement, ou une page de 200 lignes qui
+          // ne contient pas le bon groupe, se rattrape ainsi.
+          const tentatives = [trierParFonction, trierParEtablissement, trierParFonction];
           await cell.waitFor({ timeout: 10000 }).catch(() => {});
           let modele = await chercherModele();
-          for (let essai = 2; !modele.row && essai <= 3; essai++) {
-            ctx.log(`Aucun modèle correspondant — nouveau tri (essai ${essai}/3)`);
-            await trier();
+          for (let essai = 0; !modele.row && essai < tentatives.length; essai++) {
+            ctx.log(`Aucun modèle correspondant — nouvel angle de tri (${essai + 1}/${tentatives.length})`);
+            await tentatives[essai]();
             await cell.waitFor({ timeout: 10000 }).catch(() => {});
             modele = await chercherModele();
           }
@@ -964,4 +1044,4 @@ async function updateIdentity(data, ctx) {
   return result;
 }
 
-module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META, classerFenetre, trouverModele, indexColonne, normEtab };
+module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META, classerFenetre, trouverModele, indexColonne, colonneCredible, libellesEtablissements, normEtab };
