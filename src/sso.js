@@ -23,6 +23,7 @@
 
 const crypto = require('node:crypto');
 const db = require('./db');
+const graph = require('./graph');
 
 const COOKIE = 'portal_sso';
 const SESSION_TTL_H = Number(process.env.SSO_SESSION_TTL_HOURS || 10);
@@ -178,6 +179,12 @@ async function callbackRoute(req, res) {
       if (valeur === null || valeur === undefined || valeur === '') continue;
       claims[cle] = valeur;
     }
+
+    // Attributs d'annuaire complémentaires (attributs personnalisés Exchange,
+    // service, fonction, matricule…). Ils ne sont pas dans le jeton : Graph les
+    // fournit à la demande. Sans M365_GRAPH_ATTRIBUTS=true, aucun appel n'est
+    // fait ; en cas de panne, la connexion aboutit quand même.
+    Object.assign(claims, await graph.attributsDe(String(payload.oid || email)));
 
     const token = b64url(crypto.randomBytes(32));
     const expires = new Date(Date.now() + SESSION_TTL_H * 3600 * 1000)

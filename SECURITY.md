@@ -115,6 +115,16 @@ métier ne répond. Ce que « être habilité » signifie ensuite se règle :
 | `attribut` | les comptes dont le jeton porte l'attribut de `ACCES_ATTRIBUT` | tous les établissements |
 | `liste` | les référents déclarés dans le panneau | leurs établissements |
 
+Les attributs interrogeables sont ceux du jeton, plus — si
+`M365_GRAPH_ATTRIBUTS=true` — ceux lus via Microsoft Graph juste après la
+connexion : attributs personnalisés Exchange (`extensionAttribute1` à `15`),
+`department`, `jobTitle`, `employeeId`, `officeLocation`, `companyName`. Cet
+appel utilise les identifiants de l'application (permission **d'application**
+`User.Read.All`, consentement administrateur) ; il ne lit que ces champs, ne
+les écrit jamais, et une panne Graph n'empêche pas de se connecter. Les
+revendications purement techniques (`sid`, `ipaddr`, `amr`…) sont refusées
+comme critère : elles changent à chaque connexion.
+
 Dans tous les modes : une **fiche référent l'emporte** (elle limite la personne
 à ses établissements), une fiche **désactivée est un refus** que la politique ne
 contourne pas, et la **remise d'un mot de passe** (lien à usage unique) reste

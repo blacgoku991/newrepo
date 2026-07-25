@@ -85,6 +85,21 @@ function valeursDe(brut) {
   return String(brut).split(/[,;]+/).map((v) => v.trim()).filter(Boolean);
 }
 
+/**
+ * Valeur d'un attribut, en tolérant la casse du NOM : `extensionattribute2`
+ * écrit dans le .env doit trouver `extensionAttribute2`. Se tromper de casse
+ * est l'erreur la plus facile à commettre, et elle échouerait en silence —
+ * personne n'entrerait plus, sans le moindre message.
+ */
+function valeurClaim(claims, nom) {
+  if (claims && Object.prototype.hasOwnProperty.call(claims, nom)) return claims[nom];
+  const cible = norm(nom);
+  for (const [cle, val] of Object.entries(claims || {})) {
+    if (norm(cle) === cible) return val;
+  }
+  return undefined;
+}
+
 /** Attributs d'annuaire portés par le jeton de la session en cours. */
 function attributs(req) {
   const session = sso.session(req);
@@ -113,7 +128,7 @@ function verifie(claims) {
   }
   for (const regle of liste) {
     if (!utilisable(regle.attribut)) continue; // garde-fou : jamais sur du technique
-    const presentes = valeursDe(claims[regle.attribut]);
+    const presentes = valeursDe(valeurClaim(claims, regle.attribut));
     if (!presentes.length) continue;
     if (!regle.valeurs.length) return { ok: true, detail: `${regle.attribut} présent` };
     const trouvee = regle.valeurs.find((attendue) => presentes.some((p) => norm(p) === norm(attendue)));

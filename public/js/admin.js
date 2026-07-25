@@ -981,24 +981,43 @@
    * n'arrive : sans elle, on reste devant un tableau vide (ou plein de
    * revendications techniques) sans savoir quoi faire.
    */
-  const MARCHE_ENTRA = `
-    <div class="alert alert-warn" style="margin-top:10px">
-      <b>Aucun attribut exploitable dans ce jeton.</b>
-      Microsoft n'envoie que le strict nécessaire tant qu'on ne lui demande rien.
-      Dans <b>Entra ID → Applications → votre application Algonis</b>, au choix :
-      <ol style="margin:8px 0 0 18px;line-height:1.7">
-        <li><b>Rôle d'application</b> (recommandé) : <i>Rôles d'application</i> →
-          créer par ex. <code>Algonis.Referent</code>, puis <i>Applications d'entreprise →
-          Utilisateurs et groupes</i> pour l'attribuer aux personnes autorisées.
-          Le jeton portera alors <code>roles</code>.</li>
-        <li><b>Groupe de sécurité</b> : <i>Configuration du jeton → Ajouter une revendication
-          de groupe</i>. Le jeton portera <code>groups</code> (des identifiants, pas des noms).</li>
-        <li><b>Attribut d'annuaire</b> : <i>Configuration du jeton → Ajouter une revendication
-          facultative</i> (ex. <code>jobTitle</code>), ou un attribut d'extension personnalisé.</li>
-      </ol>
-      <p style="margin-top:8px">Déconnectez-vous, reconnectez-vous, puis rechargez cet écran :
-      le nouvel attribut apparaîtra ici avec sa règle prête à copier.</p>
-    </div>`;
+  function marcheASuivre(g) {
+    // Le chemin le plus court vers les attributs personnalisés Exchange
+    // (CustomAttribute1..15) est Microsoft Graph : les faire sortir dans le
+    // jeton demande une configuration nettement plus délicate.
+    if (g && g.actif === false) {
+      return `<div class="alert alert-warn" style="margin-top:10px">
+        <b>Aucun attribut exploitable dans ce jeton.</b>
+        Microsoft n'en met que le strict minimum : les attributs personnalisés Exchange
+        (<code>CustomAttribute1</code> à <code>15</code>), le service, la fonction ou le matricule
+        n'y sont pas.
+        <p style="margin-top:8px"><b>Le plus simple — les lire via Microsoft Graph :</b></p>
+        <ol style="margin:6px 0 0 18px;line-height:1.7">
+          <li>Entra ID → votre application → <i>API autorisées</i> → <i>Ajouter</i> →
+            Microsoft Graph → <b>Autorisations d'application</b> → <code>User.Read.All</code>,
+            puis <i>Accorder un consentement administrateur</i>.</li>
+          <li>Dans le <code>.env</code> : <code>M365_GRAPH_ATTRIBUTS=true</code>, puis redémarrer.</li>
+          <li>Se déconnecter, se reconnecter, revenir ici : <code>extensionAttribute1</code> à
+            <code>15</code>, <code>department</code>, <code>jobTitle</code>, <code>employeeId</code>
+            apparaîtront avec leur règle prête à copier.</li>
+        </ol>
+        <p style="margin-top:8px">Autre voie, sans Graph : attribuer un <b>rôle d'application</b>
+        aux comptes autorisés (<i>Rôles d'application</i> puis <i>Applications d'entreprise →
+        Utilisateurs et groupes</i>) — le jeton portera <code>roles</code>.</p>
+      </div>`;
+    }
+    if (g && g.dernierEchec) {
+      return `<div class="alert alert-err" style="margin-top:10px">
+        <b>Lecture Microsoft Graph en échec.</b> ${escapeHtml(g.dernierEchec.message)}
+        <p style="margin-top:6px">Vérifiez la permission <b>d'application</b> <code>User.Read.All</code>
+        et son consentement administrateur, puis reconnectez-vous.</p></div>`;
+    }
+    return `<div class="alert alert-warn" style="margin-top:10px">
+      <b>Aucun attribut exploitable pour ce compte.</b> La lecture Graph est active, mais ce compte
+      n'a aucun des champs interrogés renseigné
+      (<code>extensionAttribute1..15</code>, <code>department</code>, <code>jobTitle</code>,
+      <code>employeeId</code>…). Vérifiez la fiche de la personne dans l'annuaire.</div>`;
+  }
 
   function attributsHtml(d) {
     if (!d.connexions) {
@@ -1020,7 +1039,7 @@
     : '<span style="color:var(--muted)">technique — change à chaque connexion, inutilisable</span>'}</td>
           </tr>`).join('')}
         </tbody></table></div>` : ''}
-        ${derniere.attributs.some((a) => a.utilisable) ? '' : MARCHE_ENTRA}
+        ${derniere.attributs.some((a) => a.utilisable) ? '' : marcheASuivre(d.graph)}
       </div></div>` : ''}
       <div class="card"><div class="ch"><h3>Vu sur les ${d.connexions} dernières connexions</h3></div><div class="cb">
         ${d.attributs.length ? `<div style="overflow-x:auto"><table class="data" style="margin:0"><thead><tr>

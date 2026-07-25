@@ -12,6 +12,7 @@ const auth = require('./auth');
 const sso = require('./sso');
 const referents = require('./referents');
 const habilitation = require('./habilitation');
+const graph = require('./graph');
 const stats = require('./stats');
 const { validate } = require('./validate');
 const { augmentSchema, effectiveSchema, effectiveSchemaFor, validateOverrides, requesterLabel } = require('./schema');
@@ -1005,6 +1006,7 @@ app.get('/api/admin/sso/attributs', auth.requireApi, (req, res) => {
   }
   res.json({
     acces: habilitation.etat(),
+    graph: graph.etat(),
     connexions: sessions.length,
     // Les dernières connexions avec ce que leur jeton portait : c'est la vue
     // « je me connecte et je regarde ce que Microsoft envoie ».
