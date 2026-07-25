@@ -54,7 +54,7 @@ const DEMARCHES = {
     action: 'updateIdentity',
     succes: 'Identité corrigée',
     audit: 'maj_identite',
-    aside: "Algonis corrige le nom et le prénom sur la fiche. L'identifiant de connexion, déjà diffusé au titulaire, n'est pas touché.",
+    aside: "Algonis corrige le nom et le prénom sur la fiche. Sur BlueKanGo, l'identifiant de connexion est réaligné sur le nouveau nom : il est indiqué dans le suivi de la demande. Le mot de passe n'est pas touché.",
   },
   transfert_etab: {
     label: "Transfert vers un autre établissement",
@@ -105,7 +105,7 @@ const COMPOSEES = {
         value: 'identite',
         type: 'maj_identite',
         label: 'Corriger le nom ou le prénom',
-        help: 'L’identifiant de connexion, lui, reste inchangé.',
+        help: 'Sur BlueKanGo, l’identifiant de connexion suit le nouveau nom (il est indiqué dans le suivi).',
       },
       {
         value: 'transfert',

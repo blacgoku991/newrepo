@@ -268,10 +268,11 @@ module.exports.extensionSchema = {
 };
 
 // Correction de l'identité : nom et/ou prénom mal saisis à la création.
-// L'identifiant de connexion n'est pas modifié — il est déjà diffusé.
+// L'identifiant de connexion SUIT le nouveau nom (1re lettre du prénom + nom) :
+// le titulaire doit donc être averti de son nouvel identifiant.
 module.exports.identiteSchema = {
   intro:
-    'Le robot recherche le compte par son identifiant, puis corrige le nom et le prénom sur sa fiche. L’identifiant de connexion reste inchangé.',
+    'Le robot recherche le compte par son identifiant, puis corrige le nom et le prénom sur sa fiche. L’identifiant de connexion est réaligné sur le nouveau nom (1re lettre du prénom + nom) : pensez à le communiquer au titulaire — il figurera dans le suivi de la demande. Le mot de passe, lui, n’est pas modifié.',
   sections: [
     {
       title: 'Compte à corriger',

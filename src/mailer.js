@@ -24,6 +24,10 @@ function smtpConfigured() {
 function buildMessage(appName, data, reference, storedLogin, credentialLink, type = 'creation') {
   const isReset = type === 'reset_mdp';
   const isExtension = type === 'ajout_etab';
+  // Correction d'identité : l'identifiant de connexion a pu changer (il suit le
+  // nom). Le mot de passe, lui, n'est pas touché — il ne faut donc rien
+  // promettre à ce sujet.
+  const isIdentite = type === 'maj_identite';
   const beneficiaire = `${data.prenom || ''} ${data.nom || ''}`.trim();
   const frDate = (iso) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
@@ -37,7 +41,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, typ
       ? `Le mot de passe de votre compte ${appName} a été réinitialisé.`
       : isExtension
         ? `Un nouvel établissement a été ajouté à votre compte ${appName}.`
-        : `Votre compte ${appName} a été créé.`,
+        : isIdentite
+          ? `Votre identité a été corrigée sur votre compte ${appName}.`
+          : `Votre compte ${appName} a été créé.`,
     '',
     `Application    : ${appName}`,
   ];
@@ -55,6 +61,15 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, typ
     lines.push(`⚠ Ce lien ne peut être consulté qu'UNE SEULE fois et expire dans ${credentialLink.ttlDays} jours.`);
     lines.push('  Le mot de passe est provisoire : il devra être changé à la première connexion.');
     lines.push('  Lien déjà utilisé ou expiré ? Contactez votre administrateur pour en recevoir un nouveau.');
+  } else if (isIdentite) {
+    // Aucun secret ici : seul l'identifiant a changé, le mot de passe reste
+    // celui que le titulaire utilise déjà.
+    if (storedLogin) {
+      lines.push(`Nouvel identifiant de connexion : ${storedLogin}`);
+      lines.push('');
+      lines.push('Utilisez désormais cet identifiant pour vous connecter.');
+    }
+    lines.push('Votre mot de passe reste inchangé.');
   } else {
     // Repli (aucun lien généré) : on ne divulgue que l'identifiant.
     const login = storedLogin || (data.prenom && data.nom ? generateLogin(data.prenom, data.nom) : null);
@@ -69,7 +84,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, typ
       ? `Votre mot de passe ${appName} a été réinitialisé — récupérez vos identifiants`
       : isExtension
         ? `Nouvel établissement ajouté à votre compte ${appName}`
-        : `Votre compte ${appName} est prêt — récupérez vos identifiants`,
+        : isIdentite
+          ? `Votre identifiant ${appName} a changé`
+          : `Votre compte ${appName} est prêt — récupérez vos identifiants`,
     text: lines.join('\n'),
   };
 }

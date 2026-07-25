@@ -56,6 +56,7 @@ module.exports = {
     prenom: '#UTL_prenom',
     civiliteCellPattern: /M\..*Mlle.*Mme.*Sans/, // cellule contenant les 4 radios
     civiliteIndex: { m: 0, mlle: 1, mme: 2, sans: 3 }, // position du radio dans la cellule
+    ongletIdentite: 'Identité',                 // onglet nom/prénom de la fiche
     ongletAuthentification: 'Authentification',
     loginField: '#UTL_Login',
     password: '#UTL_pw',

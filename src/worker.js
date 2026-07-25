@@ -93,6 +93,19 @@ async function processOne(request) {
       // Mémorise l'identifiant généré (unicité future + affichage admin + e-mail).
       if (result.account && result.account.login) {
         db.setRequestLogin(request.id, result.account.login);
+        // Correction d'identité : l'identifiant a changé — on renomme la ligne
+        // du registre au lieu d'en créer une seconde, sinon l'espace du
+        // référent afficherait l'ancien ET le nouvel identifiant.
+        if (result.account.previousLogin && result.account.previousLogin !== result.account.login) {
+          db.renameAccount(
+            request.app_id,
+            result.account.previousLogin,
+            result.account.login,
+            result.account.nom,
+            result.account.prenom
+          );
+          log(`Registre mis à jour : « ${result.account.previousLogin} » → « ${result.account.login} »`);
+        }
         db.recordAccount(
           request.app_id,
           result.account.login,
@@ -103,8 +116,11 @@ async function processOne(request) {
       }
       // Lien sécurisé de récupération des identifiants (usage unique) : le
       // mot de passe ne circule jamais en clair dans l'e-mail.
+      // `credentials: false` (correction d'identité) : le mot de passe n'a pas
+      // bougé. Générer un lien reviendrait à annoncer au titulaire un mot de
+      // passe qui n'est pas le sien — on s'en abstient.
       let credentialLink = null;
-      if (result.account && result.account.login) {
+      if (result.account && result.account.login && result.account.credentials !== false) {
         try {
           const credentials = require('./credentials');
           // Le robot peut imposer un mot de passe précis (ex. réinitialisation :
@@ -126,7 +142,7 @@ async function processOne(request) {
         const mailer = require('./mailer');
         const outcome = await mailer.sendCredentials(db.getById(request.id), credentialLink);
         if (outcome) {
-          log(outcome.sent ? 'E-mail d’identifiants envoyé' : 'E-mail d’identifiants mis en boîte d’envoi (SMTP non configuré)');
+          log(outcome.sent ? 'E-mail au titulaire envoyé' : 'E-mail au titulaire mis en boîte d’envoi (SMTP non configuré)');
         } else {
           log('Aucun destinataire e-mail : pas d’envoi d’identifiants');
         }

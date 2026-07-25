@@ -408,6 +408,33 @@ const api = {
       .get(appId, login);
   },
 
+  /**
+   * Renomme un compte du registre après correction d'identité : l'identifiant
+   * de connexion suit le nouveau nom (1re lettre du prénom + nom). Sans ça,
+   * l'ancien identifiant resterait affiché dans l'espace du référent et les
+   * raccourcis pointeraient sur un compte qui n'existe plus.
+   * Si le nouvel identifiant est déjà présent (ré-import), on garde une seule
+   * ligne : l'ancienne est supprimée.
+   */
+  renameAccount(appId, ancienLogin, nouveauLogin, nom, prenom) {
+    if (!ancienLogin || !nouveauLogin || ancienLogin === nouveauLogin) return;
+    const tx = db.transaction(() => {
+      if (api.loginExists(appId, nouveauLogin)) {
+        db.prepare(`DELETE FROM created_accounts WHERE app_id = ? AND login = ?`).run(appId, ancienLogin);
+        db.prepare(
+          `UPDATE created_accounts SET nom = ?, prenom = ?, updated_at = datetime('now')
+            WHERE app_id = ? AND login = ?`
+        ).run(nom || '', prenom || '', appId, nouveauLogin);
+        return;
+      }
+      db.prepare(
+        `UPDATE created_accounts SET login = ?, nom = ?, prenom = ?, updated_at = datetime('now')
+          WHERE app_id = ? AND login = ?`
+      ).run(nouveauLogin, nom || '', prenom || '', appId, ancienLogin);
+    });
+    tx();
+  },
+
   recordAccount(appId, login, nom, prenom, reference) {
     db.prepare(
       `INSERT OR IGNORE INTO created_accounts (app_id, login, nom, prenom, reference) VALUES (?, ?, ?, ?, ?)`

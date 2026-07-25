@@ -123,7 +123,7 @@
       desc: () => 'Mot de passe oublié, nom ou prénom à corriger, transfert vers un autre établissement.',
     },
     reset_mdp: { icon: 'lock', desc: () => 'Réinitialiser le mot de passe d’un compte existant.' },
-    maj_identite: { icon: 'edit', desc: () => 'Corriger le nom ou le prénom sur la fiche.' },
+    maj_identite: { icon: 'edit', desc: () => 'Corriger le nom ou le prénom sur la fiche (l’identifiant suit le nouveau nom).' },
     transfert_etab: { icon: 'building', desc: () => 'Retirer l’établissement actuel et rattacher le nouveau.' },
   };
 

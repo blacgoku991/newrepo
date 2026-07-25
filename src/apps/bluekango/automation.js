@@ -613,16 +613,30 @@ async function resetPassword(data, ctx) {
 
 
 /**
- * Correction de l'identité d'un compte existant : nom et prénom sur la fiche.
- * L'identifiant de connexion n'est PAS touché — il est déjà diffusé au
- * titulaire, le changer romprait son accès.
+ * Correction de l'identité d'un compte existant : nom et prénom sur l'onglet
+ * « Identité », puis identifiant de connexion sur l'onglet « Authentification ».
+ *
+ * L'identifiant suit le nom (1re lettre du prénom + nom) : le titulaire doit
+ * donc être averti de son nouvel identifiant — il figure dans le message de la
+ * demande. Le mot de passe, lui, n'est pas touché.
  */
 async function updateIdentity(data, ctx) {
   const identifiant = String(data.identifiant || '').trim();
   const nouvelleIdentite = `${data.prenom || ''} ${data.nom || ''}`.trim();
+  // Nouvel identifiant, unique : l'identifiant ACTUEL ne compte pas comme une
+  // collision (sinon corriger un accent ferait passer « mzengis » à « mozengis »).
+  const nouveauLogin = pickUniqueLogin(
+    data.prenom,
+    data.nom,
+    (l) => l.toLowerCase() !== identifiant.toLowerCase() && db.loginExists(config.id, l)
+  );
   const etabLabel =
     config.formSchema.sections[1].fields.find((f) => f.name === 'etablissement')
       ?.options.find((o) => o.value === data.etablissement)?.label || data.etablissement;
+  const changeLogin = nouveauLogin !== identifiant;
+  const suiteMessage = changeLogin
+    ? ` — nouvel identifiant de connexion « ${nouveauLogin} » (à communiquer au titulaire)`
+    : '';
 
   if (getMode(ENV) === 'demo') {
     ctx.log('Mode démonstration actif (AUTOMATION_MODE=production pour cibler la vraie application)');
@@ -631,6 +645,7 @@ async function updateIdentity(data, ctx) {
       "Bascule sur l'établissement",
       `Recherche du compte « ${identifiant} »`,
       `Correction de l'identité (${nouvelleIdentite})`,
+      changeLogin ? `Identifiant de connexion → « ${nouveauLogin} »` : 'Identifiant de connexion inchangé',
       'Fiche validée',
     ];
     etapes.forEach((label, i) => {
@@ -639,8 +654,11 @@ async function updateIdentity(data, ctx) {
     });
     return {
       success: true,
-      message: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite} (environnement de démonstration)`,
+      message: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite}${suiteMessage} (environnement de démonstration)`,
       artifacts: [],
+      account: changeLogin
+        ? { login: nouveauLogin, previousLogin: identifiant, nom: data.nom, prenom: data.prenom, credentials: false }
+        : undefined,
     };
   }
 
@@ -668,9 +686,29 @@ async function updateIdentity(data, ctx) {
         }
         ctx.log(`Identifiant confirmé : « ${identifiant} »`);
 
-        await fancy().locator(S.form.nom).fill(data.nom);
-        await fancy().locator(S.form.prenom).fill(data.prenom);
+        // Le nom et le prénom sont sur l'onglet « Identité » : sans y revenir,
+        // les champs de l'onglet Authentification masquent les leurs.
+        await fancy().getByRole('button', { name: S.form.ongletIdentite }).click();
+        const nom = fancy().locator(S.form.nom);
+        await nom.click();
+        await nom.fill(data.nom.toUpperCase());
+        const prenom = fancy().locator(S.form.prenom);
+        await prenom.click();
+        await prenom.fill(data.prenom);
         ctx.log(`Nom et prénom corrigés : ${nouvelleIdentite}.`);
+
+        // L'identifiant de connexion suit le nouveau nom (1re lettre du prénom
+        // + nom), sur l'onglet Authentification. Il reste unique : en cas de
+        // collision, on ajoute des lettres du prénom (voir identifiants.js).
+        if (nouveauLogin === identifiant) {
+          ctx.log(`Identifiant inchangé : « ${identifiant} » correspond déjà à la nouvelle identité.`);
+          return;
+        }
+        await fancy().getByRole('button', { name: S.form.ongletAuthentification }).click();
+        const champLogin = fancy().locator(S.form.loginField);
+        await champLogin.click();
+        await champLogin.fill(nouveauLogin);
+        ctx.log(`Identifiant de connexion mis à jour : « ${identifiant} » → « ${nouveauLogin} ».`);
       },
     },
     {
@@ -689,13 +727,26 @@ async function updateIdentity(data, ctx) {
     },
   ];
 
-  return runScenario({
+  const result = await runScenario({
     reference: ctx.reference,
     log: ctx.log,
     onProgress: ctx.progress,
-    successMessage: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite} (établissement ${etabLabel})`,
+    successMessage: `Identité corrigée pour « ${identifiant} » → ${nouvelleIdentite}${suiteMessage} (établissement ${etabLabel})`,
     steps,
   });
+  // `credentials: false` : le mot de passe n'a pas changé, aucun lien
+  // d'identifiants à générer — seul l'identifiant est à retenir (et à
+  // communiquer au titulaire).
+  if (result.success && changeLogin) {
+    result.account = {
+      login: nouveauLogin,
+      previousLogin: identifiant,
+      nom: data.nom,
+      prenom: data.prenom,
+      credentials: false,
+    };
+  }
+  return result;
 }
 
 module.exports = { createAccount, resetPassword, updateIdentity, STEPS_META };
