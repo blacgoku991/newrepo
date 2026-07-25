@@ -134,6 +134,34 @@ async function waitGridSettle(list, page, { max = 6000, min = 900, quiet = 700 }
   }
 }
 
+/**
+ * Attend que le NOMBRE de lignes de la grille change (rechargement effectif),
+ * puis qu'il se stabilise brièvement. Rend la main dès que c'est fait — donc
+ * bien plus vite qu'une temporisation fixe — et au plus tard au bout de `max`.
+ * Sert après un changement de pagination : c'est l'effet qu'on attend, pas
+ * un délai arbitraire.
+ */
+async function waitRowsChange(list, page, avant, max = 8000) {
+  const start = Date.now();
+  let last = -1;
+  let stableSince = start;
+  while (Date.now() - start < max) {
+    let n = -1;
+    try { n = await list.locator('tr').count(); } catch { /* frame en navigation */ }
+    if (n !== last) { last = n; stableSince = Date.now(); }
+    // Grille rechargée : on la laisse se poser un instant et on repart.
+    if (n > 0 && n !== avant) {
+      await page.waitForTimeout(400).catch(() => {});
+      return true;
+    }
+    // Rien ne bouge depuis 1,5 s : il n'y avait probablement rien à charger
+    // (établissement de moins de 20 comptes). Inutile d'attendre davantage.
+    if (Date.now() - stableSince >= 1500) return false;
+    await page.waitForTimeout(200).catch(() => {});
+  }
+  return false;
+}
+
 async function createAccount(data, ctx) {
   // Identifiant unique : 1re lettre du prénom + nom, en ajoutant des lettres du
   // prénom si l'identifiant est déjà pris (voir identifiants.js).
@@ -235,18 +263,30 @@ async function createAccount(data, ctx) {
 
           // 1. Afficher 200 résultats par page : la fonction cherchée a plus de
           //    chances d'être présente (sinon elle peut être sur une autre page).
-          //    La grille met quelques secondes à recharger les 200 lignes.
+          //    Le sélecteur de pagination est la liste déroulante « 20 » du pied
+          //    de tableau (role listbox), dans la frame de la liste.
           ctx.log('Affichage de 200 résultats par page');
+          const lignesAvant = await list.locator('tr').count().catch(() => 0);
           const perPage = list.getByRole('listbox').first();
-          if (await perPage.count().catch(() => 0)) {
-            await perPage.selectOption('200').catch(() => {});
-          } else {
-            await list.locator('select').last().selectOption('200').catch(() => {});
+          try {
+            await perPage.waitFor({ timeout: 15000 });
+            await perPage.selectOption('200');
+          } catch (err) {
+            // Repli : la dernière liste déroulante du pied de tableau.
+            ctx.log(`Sélecteur de pagination inhabituel (${err.message.split('\n')[0]}) — repli sur la dernière liste déroulante`);
+            await list.locator('select').last().selectOption('200');
           }
-          // Attente adaptative : rend la main dès que les lignes sont chargées.
-          // 200 lignes prennent plusieurs secondes ; si on enchaîne trop vite,
-          // le clic de tri suivant part sur la grille précédente et est perdu.
-          await waitGridSettle(list, page, { max: 8000, min: 1500, quiet: 800 });
+          // Vérification : la sélection a-t-elle réellement pris ? Un échec
+          // silencieux laissait 20 lignes affichées, donc une fonction
+          // « introuvable » alors qu'elle est page 3.
+          const parPage = await perPage.inputValue().catch(() => null);
+          if (parPage !== '200') {
+            ctx.log(`⚠ Pagination restée sur « ${parPage || '?'} » : la fonction cherchée peut être sur une autre page`);
+          }
+          // Attente de l'EFFET (les lignes arrivent), pas d'une durée fixe : on
+          // repart dès que la grille a changé. Si l'établissement compte moins
+          // de 20 utilisateurs, rien ne change et on n'attend pas pour rien.
+          await waitRowsChange(list, page, lignesAvant, 8000);
 
           // 2. Trier par la colonne « Fonctions ADEF Résidences » (2 clics, avec
           //    attente entre les deux) pour regrouper les fonctions renseignées
