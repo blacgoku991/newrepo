@@ -44,6 +44,74 @@ function topN(map, n, mapKey = (k) => k) {
     .slice(0, n);
 }
 
+/**
+ * Valeur produite par le portail : temps de saisie évité, délai de traitement,
+ * et — si un taux horaire est renseigné — l'équivalent en euros.
+ *
+ * Ne comptent que les demandes RÉELLEMENT abouties : une demande en échec n'a
+ * fait gagner de temps à personne. Le chiffre annoncé doit tenir devant un
+ * directeur qui le vérifie.
+ */
+function valeur(rows) {
+  const maintenant = Date.now();
+  const jours = (n) => maintenant - n * 86400000;
+  const seuils = { mois: jours(30), trimestre: jours(90), toujours: 0 };
+  const cumul = { mois: 0, trimestre: 0, toujours: 0 };
+  const parType = new Map();
+  let delais = [];
+  let abouties = 0;
+
+  for (const r of rows) {
+    if (r.status !== 'terminee') continue;
+    abouties++;
+    // `normalise` ramène les alias (identite → maj_identite) sur la clé du
+    // registre : sans cela, la même démarche compterait deux fois sous deux
+    // libellés, dont l'un serait affiché en brut.
+    const type = demarches.normalise(r.request_type || 'creation');
+    const minutes = demarches.minutesManuelles(type);
+    parType.set(type, (parType.get(type) || 0) + minutes);
+
+    const fin = Date.parse((r.finished_at || r.created_at || '').replace(' ', 'T') + 'Z');
+    for (const [cle, seuil] of Object.entries(seuils)) {
+      if (!Number.isFinite(fin) || fin >= seuil) cumul[cle] += minutes;
+    }
+
+    const debut = Date.parse((r.created_at || '').replace(' ', 'T') + 'Z');
+    if (Number.isFinite(fin) && Number.isFinite(debut) && fin >= debut) delais.push(fin - debut);
+  }
+
+  delais = delais.sort((a, b) => a - b);
+  // Médiane plutôt que moyenne : une demande restée en file une nuit ne doit
+  // pas laisser croire que le robot met huit heures.
+  const medianeMs = delais.length ? delais[Math.floor(delais.length / 2)] : 0;
+
+  const taux = Number(process.env.TAUX_HORAIRE);
+  const enEuros = (minutes) => (Number.isFinite(taux) && taux > 0
+    ? Math.round((minutes / 60) * taux) : null);
+
+  return {
+    abouties,
+    minutes: cumul,
+    heures: Object.fromEntries(Object.entries(cumul).map(([k, v]) => [k, Math.round(v / 6) / 10])),
+    euros: Object.fromEntries(Object.entries(cumul).map(([k, v]) => [k, enEuros(v)])),
+    tauxHoraire: Number.isFinite(taux) && taux > 0 ? taux : null,
+    parType: [...parType.entries()]
+      .map(([type, minutes]) => ({
+        type,
+        label: demarches.court(type),
+        minutes,
+        heures: Math.round(minutes / 6) / 10,
+      }))
+      .sort((a, b) => b.minutes - a.minutes),
+    delaiMedianSecondes: Math.round(medianeMs / 1000),
+    // Barème appliqué, affiché tel quel : un chiffre dont on ne peut pas voir
+    // l'hypothèse n'est pas un argument, c'est une affirmation.
+    bareme: Object.fromEntries(
+      Object.keys(demarches.DEMARCHES).map((t) => [t, demarches.minutesManuelles(t)]),
+    ),
+  };
+}
+
 function compute() {
   const rows = db.allForStats();
 
@@ -137,6 +205,7 @@ function compute() {
     parFonction: topN(byFonction, 8),
     parDemandeur: topN(byDemandeur, 8),
     parType: byType,
+    valeur: valeur(rows),
     parCompteMicrosoft: [...byMsAccount.entries()]
       .map(([account, v]) => ({ account, ...v }))
       .sort((a, b) => b.total - a.total)

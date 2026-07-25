@@ -241,12 +241,70 @@
     ];
     el('kpis').innerHTML = tiles.map((t) => `<div class="kpi ${t.cls}"><div class="ic">${icon(t.ic)}</div><div class="v">${t.v}</div><div class="l">${t.l}</div></div>`).join('');
     el('alerte-referents').innerHTML = alerteReferentsHtml(ref);
+    el('valeur').innerHTML = valeurHtml(s.valeur || {});
     el('chart-serie').innerHTML = areaChart(s.serie || []);
     el('chart-apps').innerHTML = appBars(s.parApplication || []);
     el('chart-demandeur').innerHTML = barChart(s.parDemandeur || [], { color: CHART.terra, empty: 'Aucun compte créé.' });
     el('chart-etab').innerHTML = barChart(s.parEtablissement || [], { color: CHART.pine, empty: 'Aucun établissement.' });
     el('chart-fonction').innerHTML = barChart(s.parFonction || [], { color: CHART.gold, empty: 'Aucune fonction.' });
     el('ms-accounts').innerHTML = msAccountsTable(s.parCompteMicrosoft || []);
+  }
+
+  /** « 3 h 20 », « 47 h », « 12 min » — jamais « 3.3333 heures ». */
+  function dureeCourte(minutes) {
+    const m = Math.round(minutes);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    const reste = m % 60;
+    if (h < 10 && reste) return `${h} h ${String(reste).padStart(2, '0')}`;
+    return `${h} h`;
+  }
+
+  function delaiCourt(secondes) {
+    if (!secondes) return '—';
+    if (secondes < 90) return `${Math.round(secondes)} s`;
+    return `${Math.round(secondes / 60)} min`;
+  }
+
+  /**
+   * Valeur produite : temps de saisie évité. Le barème est affiché avec le
+   * résultat — un chiffre dont on ne peut pas voir l'hypothèse ne convainc
+   * personne, et se retourne contre vous dès qu'on le questionne.
+   */
+  function valeurHtml(v) {
+    if (!v || !v.abouties) return '';
+    const euros = (n) => (n === null || n === undefined ? '' :
+      ` <span style="color:var(--muted);font-size:.82rem">≈ ${n.toLocaleString('fr-FR')} €</span>`);
+    // Échappé une seule fois : ré-échapper la chaîne assemblée afficherait
+    // « d&#39;établissement » à l'écran.
+    const bareme = Object.entries(v.bareme || {})
+      .map(([t, min]) => `${escapeHtml((TYPE_TITRES && TYPE_TITRES[t]) || t)} ${min} min`)
+      .join(' · ');
+
+    return `
+      <div class="card" style="margin-bottom:18px"><div class="ch">
+        <h3>Temps de saisie évité</h3>
+        <span class="hint">${v.abouties} demande${v.abouties > 1 ? 's' : ''} réellement aboutie${v.abouties > 1 ? 's' : ''}</span>
+      </div><div class="cb">
+        <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+          <div><div style="font-size:1.7rem;font-weight:650;color:var(--gold-bright);font-variant-numeric:tabular-nums">${dureeCourte(v.minutes.mois)}</div>
+            <div style="font-size:.82rem;color:var(--muted)">sur 30 jours${euros(v.euros.mois)}</div></div>
+          <div><div style="font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums">${dureeCourte(v.minutes.trimestre)}</div>
+            <div style="font-size:.82rem;color:var(--muted)">sur 90 jours${euros(v.euros.trimestre)}</div></div>
+          <div><div style="font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums">${dureeCourte(v.minutes.toujours)}</div>
+            <div style="font-size:.82rem;color:var(--muted)">depuis le début${euros(v.euros.toujours)}</div></div>
+          <div><div style="font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums">${delaiCourt(v.delaiMedianSecondes)}</div>
+            <div style="font-size:.82rem;color:var(--muted)">délai médian de traitement</div></div>
+        </div>
+        ${v.parType.length ? `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          ${v.parType.map((t) => `<span class="badge st-en_cours">${escapeHtml(t.label)} · ${dureeCourte(t.minutes)}</span>`).join('')}
+        </div>` : ''}
+        <p style="font-size:.78rem;color:var(--faint);margin-top:14px">
+          Barème appliqué (temps d'une opération à la main) : ${bareme}.
+          ${v.tauxHoraire ? `Coût horaire chargé : ${v.tauxHoraire} €.` : 'Renseignez <code>TAUX_HORAIRE</code> dans le <code>.env</code> pour afficher l’équivalent en euros.'}
+          Ajustable par <code>TEMPS_MANUEL_&lt;DÉMARCHE&gt;</code>.
+        </p>
+      </div></div>`;
   }
 
   // « Qui a fait quoi » : par compte Microsoft, avec le détail par type de démarche.

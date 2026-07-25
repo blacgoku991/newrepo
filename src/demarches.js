@@ -327,8 +327,35 @@ function resoudre(type, data) {
   return option ? option.type : null;
 }
 
+/**
+ * Temps qu'une démarche prendrait À LA MAIN, en minutes : ouvrir l'application,
+ * retrouver la personne, effectuer l'opération, prévenir l'intéressé.
+ *
+ * Sert au tableau de bord de valeur. Ce sont des ordres de grandeur observés,
+ * volontairement prudents — mieux vaut sous-estimer le gain que le gonfler.
+ * Ajustables sans toucher au code : TEMPS_MANUEL_CREATION=15 dans le .env.
+ */
+const MINUTES_MANUELLES = {
+  creation: 12,
+  reset_mdp: 6,
+  ajout_etab: 8,
+  transfert_etab: 10,
+  maj_identite: 7,
+};
+
+function minutesManuelles(type) {
+  // Toujours sur la clé du registre : `identite` est un alias de
+  // `maj_identite`, et compter l'un pour l'autre fausserait le tableau de bord.
+  const cle = normalise(type);
+  const surcharge = Number(process.env[`TEMPS_MANUEL_${String(cle).toUpperCase()}`]);
+  if (Number.isFinite(surcharge) && surcharge >= 0) return surcharge;
+  return MINUTES_MANUELLES[cle] ?? 8;
+}
+
 module.exports = {
   DEMARCHES,
+  MINUTES_MANUELLES,
+  minutesManuelles,
   COMPOSEES,
   DEFAUT,
   ALIAS,
