@@ -976,6 +976,30 @@
       </div></div>`;
   }
 
+  /**
+   * Marche à suivre côté Entra ID. Affichée dès qu'aucun attribut exploitable
+   * n'arrive : sans elle, on reste devant un tableau vide (ou plein de
+   * revendications techniques) sans savoir quoi faire.
+   */
+  const MARCHE_ENTRA = `
+    <div class="alert alert-warn" style="margin-top:10px">
+      <b>Aucun attribut exploitable dans ce jeton.</b>
+      Microsoft n'envoie que le strict nécessaire tant qu'on ne lui demande rien.
+      Dans <b>Entra ID → Applications → votre application Algonis</b>, au choix :
+      <ol style="margin:8px 0 0 18px;line-height:1.7">
+        <li><b>Rôle d'application</b> (recommandé) : <i>Rôles d'application</i> →
+          créer par ex. <code>Algonis.Referent</code>, puis <i>Applications d'entreprise →
+          Utilisateurs et groupes</i> pour l'attribuer aux personnes autorisées.
+          Le jeton portera alors <code>roles</code>.</li>
+        <li><b>Groupe de sécurité</b> : <i>Configuration du jeton → Ajouter une revendication
+          de groupe</i>. Le jeton portera <code>groups</code> (des identifiants, pas des noms).</li>
+        <li><b>Attribut d'annuaire</b> : <i>Configuration du jeton → Ajouter une revendication
+          facultative</i> (ex. <code>jobTitle</code>), ou un attribut d'extension personnalisé.</li>
+      </ol>
+      <p style="margin-top:8px">Déconnectez-vous, reconnectez-vous, puis rechargez cet écran :
+      le nouvel attribut apparaîtra ici avec sa règle prête à copier.</p>
+    </div>`;
+
   function attributsHtml(d) {
     if (!d.connexions) {
       return `<div class="alert alert-warn">Aucune connexion SSO enregistrée pour l'instant.
@@ -991,20 +1015,18 @@
           ${derniere.attributs.map((a) => `<tr>
             <td><code>${escapeHtml(a.nom)}</code></td>
             <td>${a.valeurs.length ? a.valeurs.map((v) => `<code>${escapeHtml(v)}</code>`).join(' ') : escapeHtml(a.brut)}</td>
-            <td><code>ACCES_ATTRIBUT=${escapeHtml(a.nom)}${a.valeurs.length ? `=${a.valeurs[0]}` : ''}</code></td>
+            <td>${a.utilisable
+    ? `<code>ACCES_ATTRIBUT=${escapeHtml(a.nom)}${a.valeurs.length ? `=${a.valeurs[0]}` : ''}</code>`
+    : '<span style="color:var(--muted)">technique — change à chaque connexion, inutilisable</span>'}</td>
           </tr>`).join('')}
-        </tbody></table></div>` : `<div class="alert alert-warn" style="margin-top:10px">
-          <b>Ce jeton ne porte aucun attribut personnalisé.</b> Microsoft n'envoie que le strict nécessaire
-          tant qu'on ne le lui demande pas : dans Entra ID, ouvrez votre application →
-          <i>Configuration du jeton</i> → <i>Ajouter une revendication facultative</i> (ou
-          <i>Ajouter une revendication de groupe</i>), ou attribuez un <i>rôle d'application</i>
-          aux comptes autorisés. Reconnectez-vous ensuite et rechargez cette page.</div>`}
+        </tbody></table></div>` : ''}
+        ${derniere.attributs.some((a) => a.utilisable) ? '' : MARCHE_ENTRA}
       </div></div>` : ''}
       <div class="card"><div class="ch"><h3>Vu sur les ${d.connexions} dernières connexions</h3></div><div class="cb">
         ${d.attributs.length ? `<div style="overflow-x:auto"><table class="data" style="margin:0"><thead><tr>
             <th>Attribut</th><th>Comptes</th><th>Valeurs les plus fréquentes</th></tr></thead><tbody>
           ${d.attributs.map((a) => `<tr>
-            <td><code>${escapeHtml(a.attribut)}</code></td>
+            <td><code>${escapeHtml(a.attribut)}</code>${a.utilisable ? '' : ' <span class="badge st-en_attente">technique</span>'}</td>
             <td>${a.comptes}</td>
             <td>${a.valeurs.map((v) => `<code>${escapeHtml(v.valeur)}</code> <span style="color:var(--muted)">×${v.n}</span>`).join(' · ')}</td>
           </tr>`).join('')}

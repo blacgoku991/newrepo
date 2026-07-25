@@ -43,10 +43,18 @@
       ? etabGroupesHtml(ref.etablissements, data.apps || [])
       : '<p style="color:var(--faint);margin-top:10px">Aucun établissement rattaché à votre profil pour le moment.</p>';
 
+    // Deux situations très différentes : une habilitation nominative sur
+    // quelques établissements, ou un accès ouvert à tout le groupe. Annoncer
+    // « les établissements dont vous êtes référent » dans le second cas est
+    // faux et inquiète autant qu'il désoriente.
+    const intro = ref.tous
+      ? 'Vous avez accès à l’ensemble des établissements du groupe. Lancez une nouvelle démarche ou agissez sur un compte existant en un clic.'
+      : 'Voici les comptes des établissements dont vous êtes référent. Lancez une nouvelle démarche ou agissez sur un compte existant en un clic.';
+
     root.innerHTML = `
       <div class="esp-head">
         <h1>Bonjour${prenom ? ' ' + escapeHtml(prenom) : ''}</h1>
-        <p>Voici les comptes des établissements dont vous êtes référent. Lancez une nouvelle démarche ou agissez sur un compte existant en un clic.</p>
+        <p>${intro}</p>
         ${chips}
       </div>
 
@@ -84,12 +92,18 @@
     return `<div class="etab-groupes">
       ${[...parApp.entries()].map(([appId, liste]) => {
         const app = nomDe.get(appId);
+        // Au-delà d'une douzaine, dérouler la liste noie la page : on la replie
+        // derrière un <details>. Le compte, lui, reste toujours visible.
+        const replie = liste.length > 12;
+        const chips = `<div class="etab-chips">
+            ${liste.map((e) => `<span class="etab-chip"><code>${escapeHtml(e.value)}</code>${escapeHtml(e.label)}</span>`).join('')}
+          </div>`;
         return `<div class="etab-groupe">
           <span class="ag">${app ? visualFor(app) : icon('grid')}<b>${escapeHtml(app ? app.name : appId)}</b>
             <span class="nb">${liste.length} établissement${liste.length > 1 ? 's' : ''}</span></span>
-          <div class="etab-chips">
-            ${liste.map((e) => `<span class="etab-chip"><code>${escapeHtml(e.value)}</code>${escapeHtml(e.label)}</span>`).join('')}
-          </div>
+          ${replie
+    ? `<details class="etab-repli"><summary>Voir les ${liste.length} établissements</summary>${chips}</details>`
+    : chips}
         </div>`;
       }).join('')}
     </div>`;

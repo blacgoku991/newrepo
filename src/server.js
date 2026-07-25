@@ -1019,6 +1019,7 @@ app.get('/api/admin/sso/attributs', auth.requireApi, (req, res) => {
           nom,
           valeurs: habilitation.valeursDe(brut),
           brut: typeof brut === 'object' ? JSON.stringify(brut) : String(brut),
+          utilisable: habilitation.utilisable(nom),
         })),
         satisfait: habilitation.verifie(claims),
       };
@@ -1027,6 +1028,7 @@ app.get('/api/admin/sso/attributs', auth.requireApi, (req, res) => {
       .map((i) => ({
         attribut: i.attribut,
         comptes: i.comptes.size,
+        utilisable: habilitation.utilisable(i.attribut),
         valeurs: [...i.valeurs.entries()]
           .sort((a, b) => b[1] - a[1])
           .slice(0, 25)

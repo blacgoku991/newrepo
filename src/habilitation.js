@@ -61,6 +61,19 @@ function regles() {
 const norm = (v) => String(v).trim().toLowerCase();
 
 /**
+ * Revendications techniques qui traversent le jeton sans rien dire de la
+ * personne : identifiant de session, adresse IP, méthode d'authentification…
+ * Elles changent d'une connexion à l'autre ou sont identiques pour tout le
+ * monde : bâtir une autorisation dessus ne protégerait rien.
+ */
+const INUTILISABLES = new Set([
+  'sid', 'ipaddr', 'acr', 'amr', 'azp', 'azpacr', 'appid', 'appidacr', 'idp',
+  'auth_time', 'xms_st', 'xms_tcdt', 'xms_cc', 'login_hint', 'tenant_region_scope',
+]);
+
+const utilisable = (nom) => !INUTILISABLES.has(String(nom));
+
+/**
  * Un attribut de jeton peut être une chaîne, une liste, ou une chaîne à
  * séparateurs. On ne découpe QUE sur la virgule et le point-virgule : découper
  * aussi sur l'espace ferait de « Cadre de santé » trois valeurs distinctes.
@@ -99,6 +112,7 @@ function verifie(claims) {
     return { ok: false, detail: 'aucune règle ACCES_ATTRIBUT définie' };
   }
   for (const regle of liste) {
+    if (!utilisable(regle.attribut)) continue; // garde-fou : jamais sur du technique
     const presentes = valeursDe(claims[regle.attribut]);
     if (!presentes.length) continue;
     if (!regle.valeurs.length) return { ok: true, detail: `${regle.attribut} présent` };
@@ -141,4 +155,4 @@ function etat() {
   };
 }
 
-module.exports = { mode, regles, attributs, valeursDe, verifie, ouvertePour, etat, MODES };
+module.exports = { mode, regles, attributs, valeursDe, verifie, ouvertePour, etat, utilisable, MODES };
