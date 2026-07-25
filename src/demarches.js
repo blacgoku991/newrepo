@@ -66,6 +66,26 @@ const DEMARCHES = {
 /** Démarche par défaut quand aucun type n'est précisé. */
 const DEFAUT = 'creation';
 
+/**
+ * Correspondance entre le paramètre `?type=` des URL et le type stocké en base.
+ * Les alias courts existent depuis l'origine dans les liens du portail : on les
+ * conserve pour ne casser aucun lien déjà diffusé ou mis en favori.
+ */
+const ALIAS = {
+  reset: 'reset_mdp',
+  extension: 'ajout_etab',
+  identite: 'maj_identite',
+  transfert: 'transfert_etab',
+};
+
+/** Type de démarche correspondant à un `?type=` d'URL (défaut : création). */
+function fromQuery(valeur) {
+  const v = String(valeur || '');
+  if (!v) return DEFAUT;
+  if (Object.prototype.hasOwnProperty.call(ALIAS, v)) return ALIAS[v];
+  return Object.prototype.hasOwnProperty.call(DEMARCHES, v) ? v : DEFAUT;
+}
+
 /** Définition d'une démarche, ou null si le type est inconnu. */
 function get(type) {
   const cle = String(type || DEFAUT);
@@ -97,4 +117,4 @@ function disponibles(config, automation) {
   });
 }
 
-module.exports = { DEMARCHES, DEFAUT, get, normalise, prefixe, court, disponibles };
+module.exports = { DEMARCHES, DEFAUT, ALIAS, get, normalise, fromQuery, prefixe, court, disponibles };

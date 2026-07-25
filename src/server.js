@@ -13,7 +13,8 @@ const sso = require('./sso');
 const referents = require('./referents');
 const stats = require('./stats');
 const { validate } = require('./validate');
-const { augmentSchema, effectiveSchema, effectiveResetSchema, effectiveExtensionSchema, validateOverrides, requesterLabel } = require('./schema');
+const { augmentSchema, effectiveSchema, effectiveSchemaFor, effectiveResetSchema, effectiveExtensionSchema, validateOverrides, requesterLabel } = require('./schema');
+const demarches = require('./demarches');
 const { validateScenarioOverrides } = require('./automation/scenarioRuntime');
 const mailer = require('./mailer');
 const worker = require('./worker');
@@ -255,13 +256,8 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     });
   }
 
-  const isReset = req.query.type === 'reset';
-  const isExtension = req.query.type === 'extension';
-  const schema = isReset
-    ? effectiveResetSchema(entry.config)
-    : isExtension
-      ? effectiveExtensionSchema(entry.config)
-      : effectiveSchema(entry.config);
+  const type = demarches.fromQuery(req.query.type);
+  const schema = effectiveSchemaFor(entry.config, type);
   if (!schema) return res.status(404).json({ error: 'Démarche indisponible pour cette application' });
 
   // Connexion SSO : l'identité du demandeur (nom + e-mail) vient du compte
@@ -282,8 +278,14 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   // établissements. Sans ce contrôle, il suffirait de modifier la valeur
   // envoyée pour créer un compte — ou réinitialiser un mot de passe, et donc
   // en récupérer le nouveau — dans n'importe quel établissement du groupe.
+  //
+  // Le transfert mérite une attention particulière : il faut être habilité sur
+  // l'établissement de DÉPART comme sur celui d'ARRIVÉE. Ne contrôler que
+  // l'arrivée permettrait de « transférer » chez soi le compte de n'importe quel
+  // établissement, donc d'en prendre le contrôle — le cloisonnement tomberait
+  // par cette porte.
   if (enforce) {
-    const cibles = [data.etablissement, ...(data.etablissements_autorises || [])]
+    const cibles = [data.etablissement, data.etablissement_cible, ...(data.etablissements_autorises || [])]
       .filter(Boolean)
       .map(String);
     const horsPerimetre = [...new Set(cibles)].filter((v) => !referents.allows(referent, entry.config.id, v));
@@ -307,18 +309,18 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
   const demandeur = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : requesterLabel(data);
   const reference = db.createRequest(
     entry.config.id,
-    isReset ? 'MDP' : isExtension ? 'ETB' : entry.config.referencePrefix,
+    demarches.prefixe(type, entry.config),
     data,
     demandeur,
     ssoUser ? ssoUser.email : '',
     ip,
-    isReset ? 'reset_mdp' : isExtension ? 'ajout_etab' : 'creation'
+    type
   );
   db.audit(
     demandeur,
-    isReset ? 'depot_reinit_mdp' : isExtension ? 'depot_ajout_etab' : 'depot_demande',
+    `depot_${type}`,
     reference,
-    `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim(),
+    `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim() || `${entry.config.name} — ${data.identifiant || ''}`,
     ip
   );
   res.status(201).json({ reference });

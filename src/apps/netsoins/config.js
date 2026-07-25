@@ -147,6 +147,66 @@ module.exports.resetSchema = {
   ],
 };
 
+// Champ « identifiant du compte concerné », commun aux démarches portant sur un
+// compte existant.
+const identifiantField = {
+  name: 'identifiant',
+  label: 'Identifiant NetSoins (NOM PRÉNOM)',
+  type: 'text',
+  required: true,
+  placeholder: 'MARTIN PAUL',
+  help: 'L’identifiant exact du compte, tel qu’il figure dans NetSoins.',
+};
+
+// Correction de l'identité : nom et/ou prénom mal saisis à la création.
+module.exports.identiteSchema = {
+  intro:
+    'Le robot retrouve l’intervenant, puis corrige son nom de naissance et son premier prénom. L’identifiant de connexion, lui, n’est pas modifié.',
+  sections: [
+    {
+      title: 'Compte à corriger',
+      fields: [
+        identifiantField,
+        { ...etabField, help: 'Établissement auquel le compte est rattaché.' },
+      ],
+    },
+    {
+      title: 'Identité corrigée',
+      fields: [
+        { name: 'nom', label: 'Nom de naissance', type: 'text', required: true, placeholder: 'MARTIN' },
+        { name: 'prenom', label: 'Premier prénom', type: 'text', required: true, placeholder: 'Paul' },
+      ],
+    },
+  ],
+};
+
+// Transfert : on RETIRE l'établissement d'origine et on rattache le nouveau.
+// À distinguer de l'ajout d'établissement, qui cumule les rattachements.
+module.exports.transfertSchema = {
+  intro:
+    'Le robot retire l’établissement d’origine et rattache le nouveau : l’intervenant n’aura plus accès à son établissement précédent. Pour conserver les deux, utilisez « Ajouter un établissement ».',
+  sections: [
+    {
+      title: 'Compte à transférer',
+      fields: [
+        identifiantField,
+        {
+          ...etabField,
+          name: 'etablissement',
+          label: 'Établissement actuel (à retirer)',
+          help: 'Établissement dont l’intervenant part.',
+        },
+        {
+          ...etabField,
+          name: 'etablissement_cible',
+          label: 'Nouvel établissement',
+          help: 'Établissement auquel l’intervenant est désormais rattaché.',
+        },
+      ],
+    },
+  ],
+};
+
 // Ajout d'établissement : on rattache un établissement à un compte existant.
 module.exports.extensionSchema = {
   intro:

@@ -252,3 +252,34 @@ module.exports.extensionSchema = {
     },
   ],
 };
+
+// Correction de l'identité : nom et/ou prénom mal saisis à la création.
+// L'identifiant de connexion n'est pas modifié — il est déjà diffusé.
+module.exports.identiteSchema = {
+  intro:
+    'Le robot recherche le compte par son identifiant, puis corrige le nom et le prénom sur sa fiche. L’identifiant de connexion reste inchangé.',
+  sections: [
+    {
+      title: 'Compte à corriger',
+      fields: [
+        {
+          name: 'identifiant',
+          label: 'Identifiant BlueKanGo (exact)',
+          type: 'text',
+          required: true,
+          placeholder: 'mdupont',
+          pattern: '^[a-zA-Z0-9._-]{2,60}$',
+          patternMessage: 'Identifiant invalide (lettres/chiffres/._-)',
+        },
+        { ...etabField, help: 'Établissement auquel le compte est rattaché.' },
+      ],
+    },
+    {
+      title: 'Identité corrigée',
+      fields: [
+        { name: 'nom', label: 'Nom', type: 'text', required: true, placeholder: 'DUPONT' },
+        { name: 'prenom', label: 'Prénom', type: 'text', required: true, placeholder: 'Marie' },
+      ],
+    },
+  ],
+};
