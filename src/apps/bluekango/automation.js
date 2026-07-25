@@ -408,10 +408,40 @@ async function createAccount(data, ctx) {
             ctx.log(`Déjà sur « ${etabLabel} » : aucun changement nécessaire`);
             return;
           }
+          // Ce que la liste propose RÉELLEMENT. Sans cette lecture, un
+          // établissement absent du menu (compte administrateur du robot non
+          // rattaché, code changé côté BlueKanGo) se traduisait par un
+          // « Timeout 30000ms » opaque, impossible à diagnostiquer.
+          const options = await select.locator('option').evaluateAll(
+            (els) => els.map((o) => ({ value: o.value, label: (o.textContent || '').trim() })),
+          ).catch(() => []);
+
+          let valeur = data.etablissement;
+          if (options.length && !options.some((o) => o.value === valeur)) {
+            // Repli par le libellé : le code a pu changer côté BlueKanGo alors
+            // que le nom, lui, est resté le même.
+            const parLabel = options.find((o) => normEtab(o.label) === normEtab(etabLabel))
+              || options.find((o) => normEtab(o.label).includes(normEtab(etabLabel))
+                || normEtab(etabLabel).includes(normEtab(o.label)));
+            if (parLabel) {
+              ctx.log(`⚠ Code « ${valeur} » absent du menu — retrouvé par le nom sous le code « ${parLabel.value} »`);
+              valeur = parLabel.value;
+            } else {
+              const dispo = options.filter((o) => o.value).slice(0, 12)
+                .map((o) => `${o.value} = ${o.label}`).join(' · ');
+              throw new Error(
+                `L'établissement « ${etabLabel} » (code ${data.etablissement}) n'est pas proposé par le `
+                + `compte administrateur du robot dans BlueKanGo. Rattachez ce compte à l'établissement, `
+                + `ou corrigez le code dans la configuration de l'application. `
+                + `Établissements proposés : ${dispo || '(aucun)'}${options.length > 12 ? ` … et ${options.length - 12} autres` : ''}`,
+              );
+            }
+          }
+
           // On bascule sur le bon établissement, puis on rouvre la liste des
           // utilisateurs (elle se recharge pour le nouvel établissement).
           ctx.log(`Bascule d'établissement vers « ${etabLabel} »…`);
-          await select.selectOption(data.etablissement);
+          await select.selectOption(valeur, { timeout: 15000 });
           await page.waitForLoadState('networkidle');
           await main().getByRole('button', { name: S.nav.gestionRessources }).click();
           await main().getByRole('link', { name: S.nav.utilisateurs }).click();
