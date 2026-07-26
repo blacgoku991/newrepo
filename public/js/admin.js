@@ -1172,6 +1172,16 @@
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Automatisation</h3></div><div class="cb">
         <p style="font-size:.92rem">Mode d'automatisation : <b>${s.automationMode === 'production' ? 'Production (vraies applications)' : 'Démonstration (console factice)'}</b></p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Se règle via la variable d'environnement <code>AUTOMATION_MODE</code> côté serveur.</p>
+        ${(() => {
+    const w = s.worker || {};
+    if (!w.parallele) return '';
+    const actifs = Object.entries(w.enCours || {});
+    return `<p style="font-size:.92rem;margin-top:12px">Traitement en parallèle : <b>${w.parallele} demande${w.parallele > 1 ? 's' : ''} au maximum</b>,
+        1 par application (<code>WORKER_PARALLELE</code>, <code>WORKER_PARALLELE_&lt;APP&gt;</code>).</p>
+      <p style="font-size:.84rem;color:var(--muted);margin-top:6px">${actifs.length
+    ? `En cours : ${actifs.map(([a, n]) => `${escapeHtml(a)} (${n})`).join(' · ')}`
+    : 'Aucun robot en cours d’exécution.'}</p>`;
+  })()}
       </div></div>
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Connexion SSO Microsoft 365</h3></div><div class="cb">
         <p style="font-size:.92rem">État : ${s.sso && s.sso.required ? '<span class="badge st-terminee">Actif — accès réservé aux comptes ADEF</span>' : s.sso && s.sso.configured ? '<span class="badge st-en_attente">Configuré mais désactivé (SSO_REQUIRED=false)</span>' : '<span class="badge st-en_attente">Non configuré — site en accès libre</span>'}</p>

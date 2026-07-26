@@ -395,6 +395,9 @@ app.post('/api/apps/:id/requests', security.rateLimit('depot', 60, 10 * 60 * 100
     `${entry.config.name} — ${data.prenom || ''} ${data.nom || ''}`.trim() || `${entry.config.name} — ${data.identifiant || ''}`,
     ip
   );
+  // Le worker prend la demande tout de suite au lieu d'attendre son prochain
+  // tour de file : sur un dépôt en rafale, ça se voit.
+  worker.reveiller();
   res.status(201).json({ reference });
 });
 
@@ -967,6 +970,7 @@ app.get('/api/admin/settings', auth.requireApi, (req, res) => {
   const defaultAdminPassword = !!(seedUser && !seedUser.disabled && auth.verifyPassword('admin', seedUser.password_hash));
   res.json({
     automationMode: process.env.AUTOMATION_MODE === 'production' ? 'production' : 'demo',
+    worker: worker.etat(),
     smtp: mailer.smtpConfigured(),
     sso: { configured: sso.configured(), required: sso.required(), tenant: process.env.M365_TENANT_ID || null },
     acces: habilitation.etat(),

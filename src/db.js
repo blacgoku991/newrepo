@@ -335,6 +335,82 @@ const api = {
       .get();
   },
 
+  /**
+   * Prend UNE demande en attente et la marque « en cours » dans la même
+   * instruction. Indispensable dès que plusieurs robots tournent : entre un
+   * SELECT et un UPDATE séparés, deux d'entre eux prendraient la même demande
+   * et créeraient le compte en double.
+   *
+   * `appId` limite la prise à une application (une file par application).
+   */
+  claimNext(appId = null) {
+    return db
+      .prepare(
+        `UPDATE requests
+            SET status = 'en_cours', attempts = attempts + 1, started_at = datetime('now'),
+                progress_done = 0, progress_total = 0, progress_label = '',
+                awaiting_otp = 0, otp_code = '', otp_prompt = ''
+          WHERE id = (
+            SELECT id FROM requests
+             WHERE status = 'en_attente'
+               AND (@appId IS NULL OR app_id = @appId)
+               AND (json_extract(payload, '$.date_debut') IS NULL
+                    OR json_extract(payload, '$.date_debut') = ''
+                    OR json_extract(payload, '$.date_debut') <= date('now'))
+             ORDER BY id ASC LIMIT 1)
+          RETURNING *`
+      )
+      .get({ appId });
+  },
+
+  /** Applications ayant au moins une demande à traiter, les plus anciennes d'abord. */
+  pendingAppIds() {
+    return db
+      .prepare(
+        `SELECT app_id, COUNT(*) AS n, MIN(id) AS premier
+           FROM requests
+          WHERE status = 'en_attente'
+            AND (json_extract(payload, '$.date_debut') IS NULL
+                 OR json_extract(payload, '$.date_debut') = ''
+                 OR json_extract(payload, '$.date_debut') <= date('now'))
+          GROUP BY app_id
+          ORDER BY premier ASC`
+      )
+      .all();
+  },
+
+  /**
+   * Remet en file les demandes restées « en cours » sans robot pour les
+   * traiter : le serveur a redémarré, ou le processus a été tué en plein vol.
+   * Sans cela, elles resteraient bloquées indéfiniment dans un état trompeur.
+   * `minutes = 0` reprend tout (au démarrage, aucun robot ne tourne encore).
+   */
+  requeueStale(minutes = 0, maxAttempts = 3) {
+    const rows = db
+      .prepare(
+        `SELECT id, reference, attempts FROM requests
+          WHERE status = 'en_cours'
+            AND (@minutes = 0 OR started_at <= datetime('now', @fenetre))`
+      )
+      .all({ minutes, fenetre: `-${Number(minutes) || 0} minutes` });
+
+    const relance = db.prepare(`UPDATE requests SET status = 'en_attente', started_at = NULL WHERE id = ?`);
+    const abandon = db.prepare(
+      `UPDATE requests SET status = 'echec', finished_at = datetime('now'),
+              result_message = 'Interrompu à répétition (redémarrage ou blocage du robot)'
+        WHERE id = ?`
+    );
+    const reprises = [];
+    for (const r of rows) {
+      // Une demande qui a déjà épuisé ses tentatives ne repart pas en boucle :
+      // elle finirait par être reprise à chaque redémarrage, indéfiniment.
+      if (r.attempts >= maxAttempts) { abandon.run(r.id); continue; }
+      relance.run(r.id);
+      reprises.push(r.reference);
+    }
+    return { reprises, abandons: rows.length - reprises.length };
+  },
+
   markProcessing(id) {
     db.prepare(
       `UPDATE requests

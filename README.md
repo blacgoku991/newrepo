@@ -165,6 +165,30 @@ module.exports = {
 | GET | `/api/admin/requests` | Liste complète + statistiques + journaux + captures |
 | POST | `/api/admin/requests/:id/retry` | Relance d'une demande en échec |
 
+## Service continu (24/7)
+
+Le worker traite plusieurs demandes en parallèle, avec **une file par
+application** : les robots d'une même application partagent le compte
+administrateur, deux sessions simultanées peuvent s'invalider mutuellement.
+BlueKanGo et NetSoins avancent donc en même temps, mais chacun une demande à la
+fois par défaut (`WORKER_PARALLELE_<APP>` pour monter, `WORKER_PARALLELE` pour
+le plafond global — chaque robot est un Chromium, comptez ~400 Mo).
+
+Ce qui tient sans surveillance :
+
+- une demande déposée est prise **immédiatement**, sans attendre le tour de file ;
+- au redémarrage, les demandes restées « en cours » sont **reprises** ; après
+  trois tentatives, elles passent en échec au lieu de boucler indéfiniment ;
+- une demande dont le robot a été tué sans prévenir (OOM, `kill -9`) est remise
+  en file par un contrôle toutes les 5 minutes ;
+- une erreur d'un robot n'arrête ni les autres ni le processus ;
+- `SIGTERM` / `SIGINT` laissent finir les demandes en vol avant de rendre la
+  main — un redémarrage ne coupe personne au milieu d'une création.
+
+Pour que le processus survive à un reboot de la machine, il faut un
+gestionnaire de service : `systemd` (Linux), NSSM ou le planificateur de tâches
+(Windows), ou `pm2 start npm -- start`. Node ne se relance pas tout seul.
+
 ## Notes de production
 
 - Données dans `data/` (SQLite + captures d'écran), exclu du dépôt.
