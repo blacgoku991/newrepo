@@ -140,6 +140,32 @@ app.get('/api/sso/me', (req, res) => {
   });
 });
 
+/**
+ * Un onglet décoché n'est pas seulement masqué du menu : la page n'est plus
+ * servie. Sinon l'adresse reste accessible à qui la connaît, et « masquer »
+ * ne veut rien dire.
+ *
+ * L'administration est le seul cas à part : elle est masquée du menu par
+ * défaut, et la bloquer enfermerait l'administrateur dehors.
+ */
+const PAGES_NAV = {
+  '/index.html': 'apps', '/demande.html': 'apps',
+  '/demarches.html': 'demarches',
+  '/espace.html': 'espace', '/espace': 'espace',
+  '/suivi.html': 'suivi', '/suivi': 'suivi',
+};
+
+app.use((req, res, next) => {
+  const cle = PAGES_NAV[req.path];
+  if (!cle || req.method !== 'GET') return next();
+  if (siteNav()[cle] !== false) return next();
+  // On renvoie vers la première page encore ouverte plutôt qu'une erreur.
+  const nav = siteNav();
+  const repli = nav.espace ? '/espace' : nav.suivi ? '/suivi.html' : nav.apps ? '/index.html' : null;
+  if (repli && repli !== req.path) return res.redirect(repli);
+  return res.status(404).send('Page désactivée.');
+});
+
 // URL propre de la page de connexion (sert /connexion.html).
 app.get('/connexion', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'connexion.html'));

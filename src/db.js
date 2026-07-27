@@ -637,7 +637,8 @@ const api = {
   allForStats() {
     return db
       .prepare(
-        `SELECT app_id, demandeur, sso_email, request_type, status, payload, created_at, finished_at FROM requests`
+        `SELECT app_id, demandeur, sso_email, request_type, status, payload,
+                created_at, started_at, finished_at FROM requests`
       )
       .all();
   },

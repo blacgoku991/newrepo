@@ -243,6 +243,7 @@
     el('alerte-referents').innerHTML = alerteReferentsHtml(ref);
     el('valeur').innerHTML = valeurHtml(s.valeur || {});
     el('chart-serie').innerHTML = areaChart(s.serie || []);
+    brancherInfobulles();
     el('chart-apps').innerHTML = appBars(s.parApplication || []);
     el('chart-demandeur').innerHTML = barChart(s.parDemandeur || [], { color: CHART.terra, empty: 'Aucun compte créé.' });
     el('chart-etab').innerHTML = barChart(s.parEtablissement || [], { color: CHART.pine, empty: 'Aucun établissement.' });
@@ -261,9 +262,62 @@
   }
 
   function delaiCourt(secondes) {
-    if (!secondes) return '—';
+    if (!secondes && secondes !== 0) return '—';
     if (secondes < 90) return `${Math.round(secondes)} s`;
-    return `${Math.round(secondes / 60)} min`;
+    const min = Math.floor(secondes / 60);
+    if (min < 60) return `${min} min ${String(Math.round(secondes % 60)).padStart(2, '0')} s`;
+    return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
+  }
+
+  /**
+   * Temps passé par le robot sur UNE demande : début d'exécution → fin.
+   * Distinct du délai déposée → traitée, qui contient l'attente en file.
+   */
+  function dureeRobot(r) {
+    const debut = Date.parse(String(r.startedAt || '').replace(' ', 'T') + 'Z');
+    const fin = Date.parse(String(r.finishedAt || '').replace(' ', 'T') + 'Z');
+    if (!Number.isFinite(debut) || !Number.isFinite(fin) || fin < debut) return null;
+    return Math.round((fin - debut) / 1000);
+  }
+
+  function dureeRobotTexte(r) {
+    const s = dureeRobot(r);
+    return s === null ? '' : ` — robot : ${delaiCourt(s)}`;
+  }
+
+  /**
+   * Combien de temps le robot a réellement passé dans l'application, démarche
+   * par démarche. C'est la question qu'on se pose devant un écran de suivi :
+   * « c'est normal que ce soit si long ? » — la médiane et le maximum y
+   * répondent mieux qu'une moyenne seule.
+   */
+  function robotHtml(r) {
+    if (!r || !r.n) return '';
+    const ligne = (o, nom) => `<tr>
+      <td>${escapeHtml(nom)}</td>
+      <td style="text-align:center">${o.n}</td>
+      <td style="text-align:center">${delaiCourt(o.medianeSecondes)}</td>
+      <td style="text-align:center">${delaiCourt(o.moyenneSecondes)}</td>
+      <td style="text-align:center;color:var(--muted)">${delaiCourt(o.minSecondes)} → ${delaiCourt(o.maxSecondes)}</td>
+    </tr>`;
+    return `
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:.86rem;color:var(--muted)">
+          Détail du temps passé par le robot (${r.n} exécution${r.n > 1 ? 's' : ''},
+          ${delaiCourt(r.totalSecondes)} au total)
+        </summary>
+        <div style="overflow-x:auto;margin-top:10px"><table class="data" style="margin:0"><thead><tr>
+          <th>Démarche</th><th style="text-align:center">Exéc.</th>
+          <th style="text-align:center">Médiane</th><th style="text-align:center">Moyenne</th>
+          <th style="text-align:center">Min → Max</th>
+        </tr></thead><tbody>
+          ${(r.parType || []).map((t) => ligne(t, t.label)).join('')}
+          ${(r.parApplication || []).length > 1
+    ? `<tr><td colspan="5" style="padding-top:12px;color:var(--muted);font-size:.78rem">Par application</td></tr>`
+      + r.parApplication.map((a) => ligne(a, a.app)).join('')
+    : ''}
+        </tbody></table></div>
+      </details>`;
   }
 
   /**
@@ -293,16 +347,17 @@
             <div style="font-size:.82rem;color:var(--muted)">sur 90 jours${euros(v.euros.trimestre)}</div></div>
           <div><div style="font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums">${dureeCourte(v.minutes.toujours)}</div>
             <div style="font-size:.82rem;color:var(--muted)">depuis le début${euros(v.euros.toujours)}</div></div>
-          <div><div style="font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums">${delaiCourt(v.delaiMedianSecondes)}</div>
-            <div style="font-size:.82rem;color:var(--muted)">délai médian de traitement</div></div>
+          <div><div style="font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums">${delaiCourt((v.robot || {}).medianeSecondes)}</div>
+            <div style="font-size:.82rem;color:var(--muted)">durée médiane du robot${
+  v.delaiMedianSecondes ? ` · ${delaiCourt(v.delaiMedianSecondes)} du dépôt à la fin` : ''}</div></div>
         </div>
+        ${robotHtml(v.robot)}
         ${v.parType.length ? `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
           ${v.parType.map((t) => `<span class="badge st-en_cours">${escapeHtml(t.label)} · ${dureeCourte(t.minutes)}</span>`).join('')}
         </div>` : ''}
         <p style="font-size:.78rem;color:var(--faint);margin-top:14px">
           Barème appliqué (temps d'une opération à la main) : ${bareme}.
-          ${v.tauxHoraire ? `Coût horaire chargé : ${v.tauxHoraire} €.` : 'Renseignez <code>TAUX_HORAIRE</code> dans le <code>.env</code> pour afficher l’équivalent en euros.'}
-          Ajustable par <code>TEMPS_MANUEL_&lt;DÉMARCHE&gt;</code>.
+          ${v.tauxHoraire ? `Coût horaire chargé : ${v.tauxHoraire} €.` : ''}
         </p>
       </div></div>`;
   }
@@ -354,13 +409,17 @@
   function renderRows() {
     renderRecent();
     const vis = requests.filter(matches);
-    if (!vis.length) { el('rows').innerHTML = `<tr><td colspan="7" class="loading">${requests.length ? 'Aucune demande ne correspond aux filtres.' : 'Aucune demande.'}</td></tr>`; return; }
+    if (!vis.length) { el('rows').innerHTML = `<tr><td colspan="8" class="loading">${requests.length ? 'Aucune demande ne correspond aux filtres.' : 'Aucune demande.'}</td></tr>`; return; }
     el('rows').innerHTML = vis.map((r) => `<tr>
       <td><span class="ref">${escapeHtml(r.reference)}</span></td>
       <td>${escapeHtml(r.app)} ${typeBadge(r.type)}</td>
       <td><span class="who">${escapeHtml(who(r.payload))}<small>${escapeHtml(r.payload?.email || '')}</small></span></td>
       <td>${escapeHtml(r.demandeur || '—')}</td>
       <td>${formatDate(r.createdAt)}</td>
+      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${(() => {
+    const s = dureeRobot(r);
+    return s === null ? '<span style="color:var(--faint)">—</span>' : delaiCourt(s);
+  })()}</td>
       <td>${statusBadge(r.status)}</td>
       <td style="text-align:right;white-space:nowrap">${r.status === 'echec' ? `<button class="btn btn-ghost btn-sm" data-retry="${r.id}">Relancer</button> ` : ''}<button class="btn btn-ghost btn-sm" data-detail="${r.id}">Détail</button></td>
     </tr>`).join('');
@@ -419,7 +478,7 @@
     const emails = (r.emails || []).length ? `<h4>E-mail d'identifiants</h4>${r.emails.map((e) => `<div style="font-size:.88rem;padding:6px 0">${escapeHtml(e.to)} — ${statusBadge2(e.status)}</div>`).join('')}` : '';
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3>${TYPE_TITRES[r.type] || 'Demande'} <span class="ref">${escapeHtml(r.reference)}</span></h3>${statusBadge(r.status)}</div>
-      <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
+      <p style="color:var(--muted);font-size:.85rem;margin-top:4px">${escapeHtml(r.app)} — déposée le ${formatDate(r.createdAt)}${r.finishedAt ? ' — traitée le ' + formatDate(r.finishedAt) : ''}${dureeRobotTexte(r)} — ${r.attempts} tentative(s)${r.demandeur ? ' — demandeur : ' + escapeHtml(r.demandeur) : ''}</p>
       ${r.ssoEmail || r.ip ? `<p style="color:var(--muted);font-size:.82rem;margin-top:2px">Traçabilité : ${r.ssoEmail ? 'déposée via Microsoft 365 (' + escapeHtml(r.ssoEmail) + ')' : 'sans SSO'}${r.ip ? ' — IP ' + escapeHtml(r.ip) : ''}</p>` : ''}
       ${adminProgressHtml(r)}
       ${otpBoxHtml(r)}
@@ -493,7 +552,7 @@
     try { data = await fetchJson('/api/admin/emails'); } catch (e) { el('emails-rows').innerHTML = `<tr><td colspan="5" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
     el('emails-info').innerHTML = data.smtp
       ? '✔ SMTP configuré : les e-mails sont envoyés automatiquement à la création du compte.'
-      : '⚠ SMTP non configuré : les e-mails restent ici (à transmettre manuellement). Renseignez SMTP_* dans .env pour l\'envoi automatique.';
+      : '⚠ Envoi automatique indisponible : les e-mails restent ici, à transmettre manuellement.';
     if (!data.emails.length) { el('emails-rows').innerHTML = '<tr><td colspan="5" class="loading">Aucun e-mail pour le moment.</td></tr>'; return; }
     el('emails-rows').innerHTML = data.emails.map((e) => `<tr>
       <td><span class="ref">${escapeHtml(e.reference || '—')}</span></td>
@@ -875,8 +934,7 @@
     if (acces.mode === 'attribut' && acces.configure === false) {
       return `<div class="alert alert-err" style="margin-bottom:18px">
         <b>Accès par attributs actif, mais aucune règle définie.</b> Personne ne peut entrer.
-        Renseignez <code>ACCES_ATTRIBUT</code> dans le <code>.env</code>, ou repassez
-        <code>ACCES_PORTAIL</code> sur <code>tenant</code>.</div>`;
+        Contactez votre prestataire pour compléter la configuration.</div>`;
     }
     // Hors mode « liste », l'absence de référent n'est pas un problème : la
     // porte est tenue par le SSO ou par les attributs.
@@ -1019,16 +1077,13 @@
     const regles = (acces.regles || []).map((r) =>
       `<code>${escapeHtml(r.attribut)}${r.valeurs.length ? ` = ${r.valeurs.join(', ')}` : ''}</code>`).join(' ou ');
     return `
-      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Qui a accès au portail</h3><span class="hint">variable ACCES_PORTAIL</span></div><div class="cb">
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Qui a accès au portail</h3></div><div class="cb">
         <p style="font-size:.92rem"><span class="badge ${cls}">${escapeHtml(titre)}</span></p>
         <p style="font-size:.84rem;color:var(--muted);margin-top:8px">${escapeHtml(aide)}</p>
         ${acces.mode === 'attribut' ? (regles
     ? `<p style="font-size:.84rem;margin-top:10px">Règle appliquée : ${regles}</p>`
-    : `<div class="alert alert-err" style="margin-top:10px"><b>Aucune règle définie.</b> Renseignez <code>ACCES_ATTRIBUT</code> dans le <code>.env</code> : personne ne peut entrer en l'état.</div>`) : ''}
-        <p style="font-size:.84rem;color:var(--muted);margin-top:10px">
-          Se règle dans le <code>.env</code> : <code>ACCES_PORTAIL=tenant</code> (défaut),
-          <code>attribut</code> ou <code>liste</code>.
-        </p>
+    : `<div class="alert alert-err" style="margin-top:10px"><b>Aucune règle définie</b> : personne ne peut entrer en l'état. Contactez votre prestataire.</div>`) : ''}
+
         <button class="btn btn-sm" id="acces-voir" style="margin-top:14px">Voir les attributs reçus des connexions SSO</button>
         <div id="acces-attributs" style="margin-top:14px"></div>
       </div></div>`;
@@ -1054,7 +1109,7 @@
           <li>Entra ID → votre application → <i>API autorisées</i> → <i>Ajouter</i> →
             Microsoft Graph → <b>Autorisations d'application</b> → <code>User.Read.All</code>,
             puis <i>Accorder un consentement administrateur</i>.</li>
-          <li>Dans le <code>.env</code> : <code>M365_GRAPH_ATTRIBUTS=true</code>, puis redémarrer.</li>
+          <li>Demandez à votre prestataire d'activer la lecture des attributs, puis redémarrez le portail.</li>
           <li>Se déconnecter, se reconnecter, revenir ici : <code>extensionAttribute1</code> à
             <code>15</code>, <code>department</code>, <code>jobTitle</code>, <code>employeeId</code>
             apparaîtront avec leur règle prête à copier.</li>
@@ -1088,12 +1143,12 @@
         <span class="hint">${escapeHtml(derniere.date || '')}</span></div><div class="cb">
         <p style="font-size:.92rem"><b>${escapeHtml(derniere.name || '')}</b> &lt;${escapeHtml(derniere.email || '')}&gt;</p>
         ${derniere.attributs.length ? `<div style="overflow-x:auto;margin-top:10px"><table class="data" style="margin:0"><thead><tr>
-            <th>Attribut</th><th>Valeur(s) reçue(s)</th><th>Règle à écrire</th></tr></thead><tbody>
+            <th>Attribut</th><th>Valeur(s) reçue(s)</th><th>Utilisable pour filtrer l'accès</th></tr></thead><tbody>
           ${derniere.attributs.map((a) => `<tr>
             <td><code>${escapeHtml(a.nom)}</code></td>
             <td>${a.valeurs.length ? a.valeurs.map((v) => `<code>${escapeHtml(v)}</code>`).join(' ') : escapeHtml(a.brut)}</td>
             <td>${a.utilisable
-    ? `<code>ACCES_ATTRIBUT=${escapeHtml(a.nom)}${a.valeurs.length ? `=${a.valeurs[0]}` : ''}</code>`
+    ? '<span class="badge st-terminee">oui</span>'
     : '<span style="color:var(--muted)">technique — change à chaque connexion, inutilisable</span>'}</td>
           </tr>`).join('')}
         </tbody></table></div>` : ''}
@@ -1124,16 +1179,13 @@
     // l'étape qui manque, avec la marche à suivre.
     const saisie = l.configuree === false
       ? `<div class="alert alert-warn" style="margin-top:14px;font-size:.86rem">
-           <b>Étape éditeur manquante — l'installation d'une licence est impossible en l'état.</b>
-           <ol style="margin:8px 0 0 18px;line-height:1.7">
-             <li>sur votre poste : <code>node licence-keygen.js (outils éditeur)</code></li>
-             <li>coller la ligne <code>const CLE_PUBLIQUE = '…'</code> affichée dans <code>src/licence.js</code></li>
-             <li>redémarrer le portail, puis revenir installer la licence ici</li>
-           </ol>
-           <p style="margin-top:8px">D'ici là, le portail fonctionne sans aucune limitation.</p>
+           <b>Cette installation n'est pas encore rattachée à une licence.</b>
+           <p style="margin-top:6px">Contactez votre prestataire : la mise en service est à faire de son côté.
+           D'ici là, le portail fonctionne sans limitation.</p>
          </div>`
       : `<label style="display:block;margin-top:14px;font-size:.86rem">Licence fournie par l'éditeur
-           <textarea class="inp" id="lic-jeton" rows="3" spellcheck="false" placeholder="ALG1.…" style="margin-top:6px;font-family:var(--mono);font-size:.8rem"></textarea>
+           <textarea class="inp" id="lic-jeton" rows="6" spellcheck="false" placeholder="ALG1.…"
+             style="margin-top:6px;font-family:var(--mono);font-size:.82rem;line-height:1.6;width:100%;min-height:130px;resize:vertical;word-break:break-all"></textarea>
          </label>
          <button class="btn btn-primary btn-sm" id="lic-save" style="margin-top:10px">Installer la licence</button>
          <p id="lic-erreur" style="color:var(--danger);font-size:.86rem;margin-top:8px"></p>`;
@@ -1171,13 +1223,13 @@
       </div></div>
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Automatisation</h3></div><div class="cb">
         <p style="font-size:.92rem">Mode d'automatisation : <b>${s.automationMode === 'production' ? 'Production (vraies applications)' : 'Démonstration (console factice)'}</b></p>
-        <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Se règle via la variable d'environnement <code>AUTOMATION_MODE</code> côté serveur.</p>
+
         ${(() => {
     const w = s.worker || {};
     if (!w.parallele) return '';
     const actifs = Object.entries(w.enCours || {});
     return `<p style="font-size:.92rem;margin-top:12px">Traitement en parallèle : <b>${w.parallele} demande${w.parallele > 1 ? 's' : ''} au maximum</b>,
-        1 par application (<code>WORKER_PARALLELE</code>, <code>WORKER_PARALLELE_&lt;APP&gt;</code>).</p>
+        1 par application.</p>
       <p style="font-size:.84rem;color:var(--muted);margin-top:6px">${actifs.length
     ? `En cours : ${actifs.map(([a, n]) => `${escapeHtml(a)} (${n})`).join(' · ')}`
     : 'Aucun robot en cours d’exécution.'}</p>`;
@@ -1185,15 +1237,15 @@
       </div></div>
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Connexion SSO Microsoft 365</h3></div><div class="cb">
         <p style="font-size:.92rem">État : ${s.sso && s.sso.required ? '<span class="badge st-terminee">Actif — accès réservé aux comptes ADEF</span>' : s.sso && s.sso.configured ? '<span class="badge st-en_attente">Configuré mais désactivé (SSO_REQUIRED=false)</span>' : '<span class="badge st-en_attente">Non configuré — site en accès libre</span>'}</p>
-        <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Renseignez <code>M365_TENANT_ID</code>, <code>M365_CLIENT_ID</code>, <code>M365_CLIENT_SECRET</code> et <code>M365_REDIRECT_URI</code> dans le <code>.env</code> (application « Web » enregistrée dans Entra ID). Seuls les comptes Microsoft 365 du tenant ADEF pourront alors accéder au portail.</p>
+
       </div></div>
       ${accesCardHtml(s.acces || {})}
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Envoi d'e-mails (SMTP)</h3></div><div class="cb">
         <p style="font-size:.92rem">État : ${badge(s.smtp)}</p>
-        <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Renseignez <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> (et <code>MAIL_FROM</code>) dans le <code>.env</code> pour l'envoi automatique. Sinon les e-mails restent en boîte d'envoi.</p>
+        <p style="font-size:.84rem;color:var(--muted);margin-top:6px">Sans envoi automatique, les e-mails restent en boîte d'envoi, à transmettre manuellement.</p>
       </div></div>
       <div class="card"><div class="ch"><h3>Applications</h3><span class="hint">configuration du mode production</span></div><div class="cb">
-        ${s.apps.map((a) => `<div class="settings-app"><div style="flex:1"><b>${escapeHtml(a.name)}</b>${a.comingSoon ? ' <span class="badge st-en_attente">Bientôt</span>' : ''}<div style="font-size:.8rem;color:var(--muted);margin-top:3px">${a.vars.map((v) => `${v.name}: ${v.set ? '✔' : '—'}`).join(' · ') || 'aucune variable'}</div></div><div class="st">${a.comingSoon ? '' : badge(a.configured)}</div></div>`).join('')}
+        ${s.apps.map((a) => `<div class="settings-app"><div style="flex:1"><b>${escapeHtml(a.name)}</b>${a.comingSoon ? ' <span class="badge st-en_attente">Bientôt</span>' : ''}</div><div class="st">${a.comingSoon ? '' : badge(a.configured)}</div></div>`).join('')}
       </div></div>`;
 
     const voir = el('acces-voir');

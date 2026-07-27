@@ -792,3 +792,20 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
 .licence-banner b { font-weight: 650; }
 .lb-warn { background: var(--warn-soft); border-bottom-color: var(--warn-line); color: #f5d489; }
 .lb-danger { background: var(--danger-soft); border-bottom-color: var(--danger-line); color: #ffbdbd; }
+
+/* --- Infobulle des graphiques ---------------------------------------------
+   Le survol d'une journée éclaire sa colonne et affiche les deux chiffres :
+   sans cela, il faut estimer la hauteur d'une barre à l'œil. */
+.chart-hover { position: relative; }
+.chart-hover .zone { cursor: crosshair; }
+.chart-hover .zone:hover { fill: rgba(107,143,242,.09); }
+.chart-tip {
+  position: absolute; z-index: 5; pointer-events: none;
+  background: var(--surface-3); border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+  padding: 8px 11px; font-size: .82rem; line-height: 1.5; white-space: nowrap;
+}
+.chart-tip b { display: block; margin-bottom: 3px; font-size: .8rem; color: var(--ink); }
+.chart-tip span { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.chart-tip i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+@media (hover: none) { .chart-tip { display: none; } }

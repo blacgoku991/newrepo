@@ -6,9 +6,12 @@
  */
 
 const CHART = {
-  pine: '#6b8ff2',   /* série principale : bleu clair (fond sombre) */
-  terra: '#e3b74f',  /* série secondaire : or */
-  gold: '#e3b74f',   /* accent : or */
+  // Couple vérifié sur le fond sombre du panneau (#121936) : écart perceptif
+  // suffisant en vision normale comme en vision déficiente, contraste ≥ 3:1,
+  // et clarté comparable pour que ni l'une ni l'autre série ne domine.
+  pine: '#6b8ff2',   /* série principale : bleu */
+  terra: '#b8862a',  /* série secondaire : or profond */
+  gold: '#b8862a',   /* accent : or profond */
   info: '#6b8ff2',
   line: '#242e52',
   muted: '#8b96b5',
@@ -19,64 +22,136 @@ function chartEmpty(msg) {
   return `<div class="empty">${escapeHtml(msg || 'Aucune donnée pour le moment.')}</div>`;
 }
 
-/** Graphique en aire/ligne : 2 séries (demandes, comptes créés) sur des jours. */
+/**
+ * Activité par jour : deux séries (demandes déposées, comptes créés).
+ *
+ * Barres groupées plutôt qu'une courbe : les valeurs sont de petits entiers,
+ * souvent nuls. Une ligne qui relie 0 à 4 puis retombe à 0 dessine des pics
+ * qui suggèrent une progression continue là où il n'y a que trois évènements ;
+ * une barre par jour ne raconte rien de plus que ce qui s'est passé.
+ *
+ * Au survol : la journée entière s'éclaire et une infobulle donne les deux
+ * chiffres. Sans elle, il faut deviner la valeur à l'œil sur la grille.
+ *
+ * Couleurs vérifiées sur le fond sombre du panneau (écart perceptif suffisant
+ * y compris en vision des couleurs déficiente), et la forme des barres +
+ * la légende portent l'identité : jamais la couleur seule.
+ */
 function areaChart(serie) {
   const total = serie.reduce((s, d) => s + d.demandes + d.crees, 0);
   if (total === 0) return chartEmpty('Aucune activité sur la période.');
 
-  const W = 640, H = 200, P = { t: 14, r: 12, b: 26, l: 26 };
-  const iw = W - P.l - P.r, ih = H - P.t - P.b;
-  const max = Math.max(1, ...serie.map((d) => Math.max(d.demandes, d.crees)));
   const n = serie.length;
-  const x = (i) => P.l + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
-  const y = (v) => P.t + ih - (v / max) * ih;
+  const W = 640, H = 210, P = { t: 16, r: 14, b: 34, l: 30 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const brut = Math.max(1, ...serie.map((d) => Math.max(d.demandes, d.crees)));
+  // Échelle sur un entier « rond » : un axe gradué 0-1-2-3 se lit mieux qu'une
+  // graduation à 2,33 pour des comptages.
+  const pas = brut <= 4 ? 1 : brut <= 10 ? 2 : Math.ceil(brut / 5);
+  const max = Math.ceil(brut / pas) * pas;
+  const basse = P.t + ih;
 
-  const linePath = (key) =>
-    serie.map((d, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(d[key]).toFixed(1)}`).join(' ');
-  const areaPath = (key) =>
-    `${linePath(key)} L ${x(n - 1).toFixed(1)} ${(P.t + ih).toFixed(1)} L ${x(0).toFixed(1)} ${(P.t + ih).toFixed(1)} Z`;
+  const bandeW = iw / n;
+  const barW = Math.min(11, Math.max(4, bandeW * 0.30));
+  const ecart = 2; // séparation entre les deux barres d'un même jour
+  const xBande = (i) => P.l + i * bandeW;
+  const y = (v) => basse - (v / max) * ih;
+  const hauteur = (v) => (v <= 0 ? 0 : Math.max(2.5, (v / max) * ih));
 
-  // Repères horizontaux
-  const grid = [0, 0.5, 1]
-    .map((f) => {
-      const yy = (P.t + ih - f * ih).toFixed(1);
-      return `<line x1="${P.l}" y1="${yy}" x2="${W - P.r}" y2="${yy}" stroke="${CHART.line}" stroke-width="1"/>
-              <text x="4" y="${(+yy + 3).toFixed(1)}" font-size="10" fill="${CHART.muted}">${Math.round(f * max)}</text>`;
-    })
-    .join('');
+  const grille = [];
+  for (let v = 0; v <= max; v += pas) {
+    const yy = y(v);
+    grille.push(`<line x1="${P.l}" y1="${yy.toFixed(1)}" x2="${W - P.r}" y2="${yy.toFixed(1)}"
+      stroke="${CHART.line}" stroke-width="1" ${v === 0 ? '' : 'stroke-dasharray="2 4"'}/>
+      <text x="${P.l - 8}" y="${(yy + 3.5).toFixed(1)}" font-size="10" fill="${CHART.muted}" text-anchor="end">${v}</text>`);
+  }
 
-  const labels = serie
-    .map((d, i) => {
-      if (n > 8 && i % 2 !== 0 && i !== n - 1) return '';
-      const day = d.date.slice(8, 10) + '/' + d.date.slice(5, 7);
-      return `<text x="${x(i).toFixed(1)}" y="${H - 8}" font-size="9.5" fill="${CHART.muted}" text-anchor="middle">${day}</text>`;
-    })
-    .join('');
+  const barre = (i, d) => {
+    const cx = xBande(i) + bandeW / 2;
+    const gauche = cx - barW - ecart / 2;
+    const droite = cx + ecart / 2;
+    const rect = (x, val, couleur) => {
+      const h = hauteur(val);
+      if (!h) return '';
+      const r = Math.min(3, h / 2, barW / 2);
+      return `<rect x="${x.toFixed(1)}" y="${(basse - h).toFixed(1)}" width="${barW.toFixed(1)}"
+        height="${h.toFixed(1)}" rx="${r.toFixed(1)}" fill="${couleur}"/>`;
+    };
+    return rect(gauche, d.demandes, CHART.terra) + rect(droite, d.crees, CHART.pine);
+  };
 
-  const dots = (key, color) =>
-    serie
-      .map((d) => (d[key] > 0 ? `<circle cx="${x(serie.indexOf(d)).toFixed(1)}" cy="${y(d[key]).toFixed(1)}" r="2.6" fill="${color}"/>` : ''))
-      .join('');
+  const jourFr = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  const etiquettes = serie.map((d, i) => {
+    if (n > 8 && i % 2 !== 0 && i !== n - 1) return '';
+    return `<text x="${(xBande(i) + bandeW / 2).toFixed(1)}" y="${H - 12}" font-size="9.5"
+      fill="${CHART.muted}" text-anchor="middle">${jourFr(d.date)}</text>`;
+  }).join('');
+
+  // Zones de survol : toute la colonne du jour, bien plus large que les barres.
+  const survol = serie.map((d, i) => `
+    <g class="jour" data-jour="${escapeHtml(d.date)}">
+      <rect class="zone" x="${xBande(i).toFixed(1)}" y="${P.t}" width="${bandeW.toFixed(1)}" height="${ih.toFixed(1)}"
+        fill="transparent"><title>${jourFr(d.date)} — ${d.demandes} demande(s) déposée(s), ${d.crees} compte(s) créé(s)</title></rect>
+    </g>`).join('');
 
   return `
-    <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img">
-      <defs>
-        <linearGradient id="gpine" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${CHART.pine}" stop-opacity="0.20"/>
-          <stop offset="100%" stop-color="${CHART.pine}" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      ${grid}
-      <path d="${areaPath('crees')}" fill="url(#gpine)"/>
-      <path d="${linePath('demandes')}" fill="none" stroke="${CHART.terra}" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round"/>
-      <path d="${linePath('crees')}" fill="none" stroke="${CHART.pine}" stroke-width="2.4" stroke-linejoin="round"/>
-      ${dots('crees', CHART.pine)}
-      ${labels}
-    </svg>
+    <div class="chart-hover" data-chart="activite">
+      <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet"
+           role="img" aria-label="Activité des 14 derniers jours : demandes déposées et comptes créés par jour">
+        ${grille.join('')}
+        ${serie.map((d, i) => barre(i, d)).join('')}
+        ${etiquettes}
+        ${survol}
+      </svg>
+      <div class="chart-tip" hidden></div>
+    </div>
     <div class="chart-legend">
-      <span><i style="background:${CHART.pine}"></i> Comptes créés</span>
       <span><i style="background:${CHART.terra}"></i> Demandes déposées</span>
+      <span><i style="background:${CHART.pine}"></i> Comptes créés</span>
     </div>`;
+}
+
+/**
+ * Infobulle du graphique d'activité. Branchée une fois pour toutes sur le
+ * document : le graphique est redessiné à chaque rafraîchissement, un écouteur
+ * posé sur ses éléments disparaîtrait avec eux.
+ */
+function brancherInfobulles() {
+  if (brancherInfobulles.fait) return;
+  brancherInfobulles.fait = true;
+
+  document.addEventListener('mousemove', (ev) => {
+    const zone = ev.target.closest ? ev.target.closest('.chart-hover .zone') : null;
+    const boite = zone && zone.closest('.chart-hover');
+    document.querySelectorAll('.chart-hover').forEach((c) => {
+      if (c !== boite) { c.querySelector('.chart-tip').hidden = true; c.classList.remove('actif'); }
+    });
+    if (!zone || !boite) return;
+
+    const titre = zone.querySelector('title');
+    const texte = titre ? titre.textContent : '';
+    const [jour, reste] = texte.split(' — ');
+    const tip = boite.querySelector('.chart-tip');
+    const [dep, cre] = (reste || '').split(', ');
+    tip.innerHTML = `<b>${escapeHtml(jour || '')}</b>
+      <span><i style="background:${CHART.terra}"></i>${escapeHtml(dep || '')}</span>
+      <span><i style="background:${CHART.pine}"></i>${escapeHtml(cre || '')}</span>`;
+    tip.hidden = false;
+    boite.classList.add('actif');
+
+    const cadre = boite.getBoundingClientRect();
+    const largeur = tip.offsetWidth || 160;
+    let gauche = ev.clientX - cadre.left + 14;
+    if (gauche + largeur > cadre.width) gauche = ev.clientX - cadre.left - largeur - 14;
+    tip.style.left = `${Math.max(4, gauche)}px`;
+    tip.style.top = `${Math.max(4, ev.clientY - cadre.top - 10)}px`;
+  });
+
+  document.addEventListener('mouseleave', () => {
+    document.querySelectorAll('.chart-hover').forEach((c) => {
+      c.querySelector('.chart-tip').hidden = true; c.classList.remove('actif');
+    });
+  }, true);
 }
 
 /** Barres horizontales : liste de { label, count }. */

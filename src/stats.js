@@ -60,6 +60,11 @@ function valeur(rows) {
   const parType = new Map();
   let delais = [];
   let abouties = 0;
+  // Durée RÉELLE du robot (début → fin d'exécution), à ne pas confondre avec
+  // le délai de traitement (dépôt → fin), qui inclut l'attente en file.
+  const dureesParType = new Map();
+  const dureesParApp = new Map();
+  const toutesDurees = [];
 
   for (const r of rows) {
     if (r.status !== 'terminee') continue;
@@ -78,7 +83,32 @@ function valeur(rows) {
 
     const debut = Date.parse((r.created_at || '').replace(' ', 'T') + 'Z');
     if (Number.isFinite(fin) && Number.isFinite(debut) && fin >= debut) delais.push(fin - debut);
+
+    const lance = Date.parse((r.started_at || '').replace(' ', 'T') + 'Z');
+    if (Number.isFinite(fin) && Number.isFinite(lance) && fin >= lance) {
+      const duree = fin - lance;
+      toutesDurees.push(duree);
+      if (!dureesParType.has(type)) dureesParType.set(type, []);
+      dureesParType.get(type).push(duree);
+      if (!dureesParApp.has(r.app_id)) dureesParApp.set(r.app_id, []);
+      dureesParApp.get(r.app_id).push(duree);
+    }
   }
+
+  /** Médiane, moyenne et extrêmes d'une série de durées (en secondes). */
+  const resume = (ms) => {
+    if (!ms.length) return null;
+    const tri = ms.slice().sort((a, b) => a - b);
+    const s = (v) => Math.round(v / 1000);
+    return {
+      n: tri.length,
+      medianeSecondes: s(tri[Math.floor(tri.length / 2)]),
+      moyenneSecondes: s(tri.reduce((a, b) => a + b, 0) / tri.length),
+      minSecondes: s(tri[0]),
+      maxSecondes: s(tri[tri.length - 1]),
+      totalSecondes: s(tri.reduce((a, b) => a + b, 0)),
+    };
+  };
 
   delais = delais.sort((a, b) => a - b);
   // Médiane plutôt que moyenne : une demande restée en file une nuit ne doit
@@ -104,6 +134,17 @@ function valeur(rows) {
       }))
       .sort((a, b) => b.minutes - a.minutes),
     delaiMedianSecondes: Math.round(medianeMs / 1000),
+    // Temps de travail du robot lui-même : ce qu'il a réellement passé dans
+    // l'application, attente en file exclue.
+    robot: {
+      ...(resume(toutesDurees) || { n: 0 }),
+      parType: [...dureesParType.entries()]
+        .map(([type, liste]) => ({ type, label: demarches.court(type), ...resume(liste) }))
+        .sort((a, b) => b.n - a.n),
+      parApplication: [...dureesParApp.entries()]
+        .map(([appId, liste]) => ({ appId, app: appName(appId), ...resume(liste) }))
+        .sort((a, b) => b.n - a.n),
+    },
     // Barème appliqué, affiché tel quel : un chiffre dont on ne peut pas voir
     // l'hypothèse n'est pas un argument, c'est une affirmation.
     bareme: Object.fromEntries(

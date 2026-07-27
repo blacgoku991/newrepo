@@ -213,8 +213,8 @@ function etat() {
       ...ETATS.ouvert,
       etat: 'ouvert',
       message:
-        'Aucune clé publique de licence n’est embarquée : le portail fonctionne sans limitation. ' +
-        'Posez votre clé publique dans src/licence.js avant toute mise en service chez un client.',
+        'Cette installation n’est rattachée à aucune licence : le portail fonctionne sans limitation. ' +
+        'La mise en service est à faire par votre prestataire.',
     };
   }
 
@@ -338,7 +338,7 @@ function autorise() {
 function installer(jeton, par = '') {
   const propre = String(jeton || '').trim().replace(/\s+/g, '');
   if (!propre) return { ok: false, erreur: 'Collez la licence fournie par l’éditeur.' };
-  if (!configuree()) return { ok: false, erreur: 'Aucune clé publique de licence n’est embarquée dans cette version du portail.' };
+  if (!configuree()) return { ok: false, erreur: 'Cette installation n’est pas prête à recevoir une licence. Contactez votre prestataire.' };
 
   const charge = lireJeton(propre);
   if (!charge) return { ok: false, erreur: 'Licence invalide : signature incorrecte, format inattendu, ou texte incomplet lors du copier-coller.' };

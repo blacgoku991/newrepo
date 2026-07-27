@@ -39,8 +39,30 @@ for (const entry of fs.readdirSync(APPS_DIR, { withFileTypes: true })) {
   apps.set(config.id, { config, automation });
 }
 
+/**
+ * Applications mises en service, via `APPS_ACTIVES` dans le .env
+ * (ex. `APPS_ACTIVES=bluekango,netsoins`). Vide ou absent = toutes.
+ *
+ * Le dossier `src/apps/` contient tout ce que le portail SAIT faire ; un client
+ * n'achète pas forcément tout. Filtrer ici évite de lui montrer des
+ * applications qu'il n'utilisera jamais — sur le site comme dans le panneau —
+ * sans supprimer de code ni casser les autres déploiements.
+ */
+function activesConfigurees() {
+  const brut = String(process.env.APPS_ACTIVES || '').trim();
+  if (!brut) return null;
+  const liste = brut.split(/[,;\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return liste.length ? new Set(liste) : null;
+}
+
+function estActive(id) {
+  const actives = activesConfigurees();
+  return !actives || actives.has(String(id).toLowerCase());
+}
+
 function publicList() {
   return [...apps.values()]
+    .filter(({ config }) => estActive(config.id))
     .map(({ config }) => ({
       id: config.id,
       name: config.name,
@@ -56,13 +78,16 @@ function publicList() {
 }
 
 function get(id) {
+  // Une application désactivée n'existe plus, pour personne : sinon un dépôt
+  // resterait possible en visant directement son identifiant dans l'URL.
+  if (!estActive(id)) return null;
   return apps.get(id) || null;
 }
 
 function getAvailable(id) {
-  const app = apps.get(id);
+  const app = get(id);
   if (!app || app.config.comingSoon) return null;
   return app;
 }
 
-module.exports = { publicList, get, getAvailable };
+module.exports = { publicList, get, getAvailable, estActive };
