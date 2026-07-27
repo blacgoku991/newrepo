@@ -363,6 +363,37 @@ const api = {
       .get({ appId });
   },
 
+  /**
+   * État de la file au démarrage : de quoi annoncer ce qui va être traité
+   * avant de lancer quoi que ce soit. `programmees` = demandes dont la date de
+   * début était dans le passé (déposées avant-hier pour aujourd'hui, par
+   * exemple) : elles étaient en attente de leur date, elles sont dues.
+   */
+  backlog() {
+    const base = `status = 'en_attente'`;
+    const due = `(json_extract(payload, '$.date_debut') IS NULL
+                  OR json_extract(payload, '$.date_debut') = ''
+                  OR json_extract(payload, '$.date_debut') <= date('now'))`;
+    const un = (sql, params = {}) => db.prepare(sql).get(params) || {};
+    return {
+      aTraiter: un(`SELECT COUNT(*) AS n FROM requests WHERE ${base} AND ${due}`).n || 0,
+      programmees: un(
+        `SELECT COUNT(*) AS n FROM requests WHERE ${base}
+          AND json_extract(payload, '$.date_debut') IS NOT NULL
+          AND json_extract(payload, '$.date_debut') <> ''
+          AND json_extract(payload, '$.date_debut') <= date('now')`,
+      ).n || 0,
+      aVenir: un(
+        `SELECT COUNT(*) AS n FROM requests WHERE ${base}
+          AND json_extract(payload, '$.date_debut') > date('now')`,
+      ).n || 0,
+      plusAncienne: un(`SELECT MIN(created_at) AS d FROM requests WHERE ${base} AND ${due}`).d || null,
+      parApp: db
+        .prepare(`SELECT app_id, COUNT(*) AS n FROM requests WHERE ${base} AND ${due} GROUP BY app_id`)
+        .all(),
+    };
+  },
+
   /** Applications ayant au moins une demande à traiter, les plus anciennes d'abord. */
   pendingAppIds() {
     return db

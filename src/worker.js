@@ -38,17 +38,63 @@ const entier = (valeur, defaut, min = 1) => {
 };
 
 const PARALLELE_TOTAL = entier(process.env.WORKER_PARALLELE, 3);
+// Démarrage à froid : on laisse le serveur finir de se lever et on annonce ce
+// qu'il y a à faire avant de lancer le premier navigateur. Un robot qui part
+// dans la seconde qui suit `npm start` surprend, et se fait couper net si
+// l'utilisateur relance encore une fois derrière.
+const DEMARRAGE_MS = entier(process.env.WORKER_DEMARRAGE_MS, 10000, 0);
+// Respiration entre deux demandes d'une même file : on ne martèle pas
+// l'application métier lors d'un rattrapage de plusieurs dizaines de demandes.
+const PAUSE_MS = entier(process.env.WORKER_PAUSE_MS, 3000, 0);
 const parallelePourApp = (appId) =>
   entier(process.env[`WORKER_PARALLELE_${String(appId).toUpperCase()}`], 1);
 
 // Demandes en cours d'exécution : total et détail par application.
 const enCours = new Map(); // appId -> nombre de robots actifs
+// Instant à partir duquel une file peut relancer un robot : c'est ce qui rend
+// la pause réelle. Sans elle, le tour de file suivant (POLL_INTERVAL) repartait
+// aussitôt et la respiration ne servait à rien.
+const prochainDepart = new Map(); // appId -> timestamp
 const enVol = new Set(); // promesses en cours, pour l'arrêt propre
 let arret = false;
+let pret = false; // devient vrai après le délai de démarrage
 let tickEnCours = false;
 let reveil = null;
 
 const total = () => [...enCours.values()].reduce((a, b) => a + b, 0);
+
+/**
+ * Traduit les erreurs techniques de Playwright en phrases exploitables.
+ * « Target page, context or browser has been closed » ne dit rien à personne :
+ * c'est presque toujours la fenêtre du robot fermée à la main, ou le serveur
+ * relancé alors qu'un robot travaillait encore.
+ */
+function expliquer(brut) {
+  const texte = String(brut || '');
+  if (/browser has been closed|Target (page|closed)|browserContext\.close|Browser closed/i.test(texte)) {
+    return 'La fenêtre du robot a été fermée avant la fin (fenêtre fermée à la main, '
+      + 'serveur relancé, ou mise en veille de la machine). La demande peut être relancée telle quelle.';
+  }
+  if (/net::ERR_|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(texte)) {
+    return `L'application métier est injoignable depuis le serveur (${texte.split('\n')[0]}). `
+      + 'Vérifiez le réseau et l\'URL configurée.';
+  }
+  if (/Timeout .*exceeded/i.test(texte)) {
+    return `${texte.split('\n')[0]} — l'application n'a pas répondu à temps. Voir la capture d'écran.`;
+  }
+  return `Erreur pendant l'automatisation : ${texte}`;
+}
+
+/**
+ * Même traduction, en préservant le préfixe « Échec à l'étape N (« … ») : »
+ * produit par le moteur de scénario — l'étape reste la première information.
+ */
+function expliquerEtape(message) {
+  const m = /^(Échec à l'étape [^:]+ : )([\s\S]*)$/.exec(String(message || ''));
+  if (!m) return String(message || '');
+  const clair = expliquer(m[2]).replace(/^Erreur pendant l'automatisation : /, '');
+  return m[1] + clair;
+}
 
 async function processOne(request) {
   const app = registry.getAvailable(request.app_id);
@@ -182,15 +228,18 @@ async function processOne(request) {
         log(`Envoi e-mail impossible : ${mailErr.message}`);
       }
     } else {
-      const msg = (result && result.message) || 'Le scénario a signalé un échec';
+      // Les échecs d'étape passent par la même traduction : le message rendu
+      // au référent doit lui dire quoi faire, pas citer Playwright.
+      const msg = expliquerEtape((result && result.message) || 'Le scénario a signalé un échec');
       log(`Échec : ${msg}`);
       db.markFinished(request.id, false, msg, logs, artifacts);
       db.audit('robot', 'echec_creation', request.reference, msg);
     }
   } catch (err) {
-    log(`Erreur : ${err.message}`);
-    db.markFinished(request.id, false, `Erreur pendant l'automatisation : ${err.message}`, logs);
-    db.audit('robot', 'echec_creation', request.reference, String(err.message));
+    const message = expliquer(err.message);
+    log(`Erreur : ${message}`);
+    db.markFinished(request.id, false, message, logs);
+    db.audit('robot', 'echec_creation', request.reference, String(message));
   } finally {
     clearTimeout(watchdogTimer);
   }
@@ -216,7 +265,7 @@ function robotsSuspendus() {
  * Ne bloque pas — les robots partent en parallèle et se libèrent tout seuls.
  */
 function tick() {
-  if (arret || tickEnCours) return;
+  if (arret || !pret || tickEnCours) return;
   if (robotsSuspendus()) return;
   tickEnCours = true;
   try {
@@ -225,6 +274,8 @@ function tick() {
 
     for (const { app_id: appId } of db.pendingAppIds()) {
       if (places <= 0) break;
+      // File en pause : on la reprendra au tour suivant.
+      if ((prochainDepart.get(appId) || 0) > Date.now()) continue;
       const limiteApp = parallelePourApp(appId);
       let libresApp = limiteApp - (enCours.get(appId) || 0);
       while (libresApp > 0 && places > 0) {
@@ -255,8 +306,13 @@ function lancer(appId, request) {
     .finally(() => {
       enCours.set(appId, Math.max(0, (enCours.get(appId) || 1) - 1));
       enVol.delete(promesse);
-      // Une place s'est libérée : on enchaîne sans attendre le prochain tour.
-      if (!arret) setImmediate(tick);
+      // Respiration avant la demande suivante de CETTE file : on n'enchaîne pas
+      // les connexions à l'application métier sans reprendre son souffle.
+      prochainDepart.set(appId, Date.now() + PAUSE_MS);
+      if (!arret) {
+        const suite = setTimeout(tick, PAUSE_MS);
+        if (suite.unref) suite.unref();
+      }
     });
   enVol.add(promesse);
 }
@@ -294,6 +350,35 @@ function start() {
     console.error(`[worker] Reprise impossible : ${err.message}`);
   }
 
+  // État des lieux AVANT de lancer quoi que ce soit : on annonce ce qui va
+  // être traité, y compris les demandes programmées pour une date passée
+  // (déposées il y a deux jours pour aujourd'hui, par exemple).
+  try {
+    const b = db.backlog();
+    if (b.aTraiter) {
+      const detail = b.parApp.map((a) => `${a.app_id} : ${a.n}`).join(', ');
+      console.log(`[worker] ${b.aTraiter} demande(s) à traiter (${detail})`);
+      if (b.programmees) console.log(`[worker]   dont ${b.programmees} programmée(s) pour une date déjà passée`);
+      if (b.plusAncienne) console.log(`[worker]   la plus ancienne date du ${b.plusAncienne.slice(0, 16).replace(' ', ' à ')}`);
+    } else {
+      console.log('[worker] Aucune demande en attente.');
+    }
+    if (b.aVenir) console.log(`[worker] ${b.aVenir} demande(s) programmée(s) pour plus tard, laissée(s) en file`);
+  } catch (err) {
+    console.error(`[worker] État de la file illisible : ${err.message}`);
+  }
+
+  // Démarrage en douceur : rien ne part avant ce délai. Le serveur finit de se
+  // lever, et un double lancement (relance juste après un premier essai) ne
+  // laisse pas un navigateur ouvert à moitié.
+  if (DEMARRAGE_MS > 0) {
+    console.log(`[worker] Reprise du travail dans ${Math.round(DEMARRAGE_MS / 1000)} s`);
+    const depart = setTimeout(() => { pret = true; tick(); }, DEMARRAGE_MS);
+    if (depart.unref) depart.unref();
+  } else {
+    pret = true;
+  }
+
   setInterval(tick, POLL_INTERVAL).unref();
   // Filet de sécurité pour un service 24/7 : une demande dont le robot a été
   // tué sans passer par le `finally` (OOM, kill -9) repart d'elle-même.
@@ -315,7 +400,7 @@ function start() {
 
   console.log(
     `[worker] Démarré — ${PARALLELE_TOTAL} demande(s) en parallèle au maximum, `
-    + `1 par application (intervalle ${POLL_INTERVAL} ms)`
+    + `1 par application, ${Math.round(PAUSE_MS / 1000)} s de pause entre deux demandes`
   );
 }
 
@@ -323,6 +408,8 @@ function start() {
 function etat() {
   return {
     parallele: PARALLELE_TOTAL,
+    pauseSecondes: Math.round(PAUSE_MS / 1000),
+    pret,
     enCours: Object.fromEntries([...enCours.entries()].filter(([, n]) => n > 0)),
     total: total(),
     arret,

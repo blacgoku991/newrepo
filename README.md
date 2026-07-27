@@ -174,6 +174,22 @@ BlueKanGo et NetSoins avancent donc en même temps, mais chacun une demande à l
 fois par défaut (`WORKER_PARALLELE_<APP>` pour monter, `WORKER_PARALLELE` pour
 le plafond global — chaque robot est un Chromium, comptez ~400 Mo).
 
+**Au démarrage**, le worker annonce l'état de la file avant de lancer quoi que
+ce soit, puis attend `WORKER_DEMARRAGE_MS` (10 s par défaut) :
+
+```
+[worker] Reprise de 2 demande(s) interrompue(s) : BKG-260726-A4IH, NS-260726-PLQO
+[worker] 14 demande(s) à traiter (bluekango : 9, netsoins : 5)
+[worker]   dont 6 programmée(s) pour une date déjà passée
+[worker]   la plus ancienne date du 2026-07-24 à 08:12
+[worker] 3 demande(s) programmée(s) pour plus tard, laissée(s) en file
+[worker] Reprise du travail dans 10 s
+```
+
+Le rattrapage se fait ensuite **au rythme**, avec `WORKER_PAUSE_MS` (3 s) entre
+deux demandes d'une même application : une reprise de quarante demandes ne
+transforme pas le robot en marteau-pilon sur BlueKanGo.
+
 Ce qui tient sans surveillance :
 
 - une demande déposée est prise **immédiatement**, sans attendre le tour de file ;
