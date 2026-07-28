@@ -149,11 +149,15 @@ app.get('/api/sso/me', (req, res) => {
  * défaut, et la bloquer enfermerait l'administrateur dehors.
  */
 const PAGES_NAV = {
-  '/index.html': 'apps', '/demande.html': 'apps',
+  '/index.html': 'apps',
   '/demarches.html': 'demarches',
   '/espace.html': 'espace', '/espace': 'espace',
   '/suivi.html': 'suivi', '/suivi': 'suivi',
 };
+// `/demande.html` n'est JAMAIS dans cette table : c'est la page de formulaire
+// vers laquelle mène « Faire une demande » depuis l'espace personnel. Les
+// onglets règlent l'affichage du MENU, pas la possibilité de déposer une
+// demande — la fermer coupait le portail en deux.
 
 app.use((req, res, next) => {
   const cle = PAGES_NAV[req.path];
