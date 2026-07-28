@@ -12,7 +12,6 @@
 
 const crypto = require('crypto');
 const db = require('./db');
-const totp = require('./totp');
 
 const SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_TTL_MS || 12 * 60 * 60 * 1000); // 12 h
 const COOKIE = 'portail_sid';
@@ -70,85 +69,15 @@ function ensureSeedAdmin() {
 // même que l'utilisateur existe ou non (anti-énumération par mesure du temps).
 const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
 
-function ouvrirSession(user) {
+function login(username, password) {
+  const user = db.getAdminByUsername(username);
+  const ok = verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
+  if (!user || user.disabled || !ok) return null;
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString().replace('T', ' ').slice(0, 19);
   db.createSession(token, user.id, expiresAt);
   db.touchAdminLogin(user.id);
   return { token, user };
-}
-
-/**
- * Défis en attente du second facteur.
- *
- * Le mot de passe seul n'ouvre AUCUNE session : il donne un jeton de passage
- * éphémère, sans valeur tant que le code n'a pas été fourni. Conservé en
- * mémoire — un redémarrage oblige simplement à ressaisir le mot de passe.
- */
-const defis = new Map(); // jeton -> { userId, expire, essais }
-const DEFI_TTL_MS = 5 * 60 * 1000;
-const DEFI_ESSAIS_MAX = 5;
-
-function purgerDefis(maintenant = Date.now()) {
-  for (const [jeton, d] of defis) if (d.expire <= maintenant) defis.delete(jeton);
-}
-
-/**
- * Première étape : identifiant + mot de passe.
- *
- * Renvoie `null` (échec), `{ token, user }` (pas de double authentification),
- * ou `{ besoin2fa: true, defi, user }`.
- */
-function login(username, password) {
-  const user = db.getAdminByUsername(username);
-  const ok = verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
-  if (!user || user.disabled || !ok) return null;
-  if (!user.totp_active || !user.totp_secret) return ouvrirSession(user);
-
-  purgerDefis();
-  const defi = crypto.randomBytes(32).toString('hex');
-  defis.set(defi, { userId: user.id, expire: Date.now() + DEFI_TTL_MS, essais: 0 });
-  return { besoin2fa: true, defi, user };
-}
-
-/**
- * Seconde étape : code de l'application d'authentification, ou code de secours.
- *
- * Renvoie `{ token, user, via }` ou un objet d'erreur `{ erreur }` — le motif
- * sert au journal, jamais à distinguer « mauvais code » de « défi expiré » côté
- * client, ce qui aiderait à cibler une attaque.
- */
-function completer2fa(defi, code) {
-  purgerDefis();
-  const attente = defis.get(defi);
-  if (!attente) return { erreur: 'defi_inconnu' };
-  attente.essais += 1;
-  // Un code à six chiffres se devine en quelques milliers d'essais : on ferme
-  // le défi bien avant, quitte à refaire saisir le mot de passe.
-  if (attente.essais > DEFI_ESSAIS_MAX) {
-    defis.delete(defi);
-    return { erreur: 'trop_d_essais' };
-  }
-  const user = db.getAdminById(attente.userId);
-  if (!user || user.disabled) {
-    defis.delete(defi);
-    return { erreur: 'compte_indisponible' };
-  }
-
-  let via = null;
-  const pas = totp.verifie(user.totp_secret, code, { pasMinimum: user.totp_dernier_pas });
-  if (pas) {
-    db.marquerPasTotp(user.id, pas);
-    via = 'application';
-  } else if (db.consommerCodeSecours(user.id, totp.hacherCodeSecours(code))) {
-    // Un code de secours ne sert qu'une fois : la consommation est faite par
-    // l'UPDATE conditionnel, deux essais simultanés ne peuvent pas passer.
-    via = 'code_de_secours';
-  }
-  if (!via) return { erreur: 'code_invalide' };
-
-  defis.delete(defi);
-  return { ...ouvrirSession(user), via, codesRestants: db.codesSecoursRestants(user.id) };
 }
 
 function parseCookies(req) {
@@ -206,7 +135,6 @@ function requirePage(req, res, next) {
 }
 
 module.exports = {
-  completer2fa,
   COOKIE,
   hashPassword,
   verifyPassword,

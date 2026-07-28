@@ -22,7 +22,6 @@ const mailer = require('./mailer');
 const worker = require('./worker');
 
 const security = require('./security');
-const totp = require('./totp');
 const licence = require('./licence');
 const comptesProteges = require('./comptesProteges');
 
@@ -724,12 +723,6 @@ app.post('/api/auth/login', security.rateLimit('login', 10, 15 * 60 * 1000), (re
     db.audit(String(username).trim(), 'echec_connexion_admin', '', '', sso.clientIp(req));
     return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
   }
-  // Double authentification : le mot de passe n'ouvre AUCUNE session. Il donne
-  // un jeton de passage, sans valeur tant que le code n'a pas été fourni.
-  if (result.besoin2fa) {
-    db.audit(result.user.username, 'connexion_admin_2fa_attendue', '', '', sso.clientIp(req));
-    return res.json({ besoin2fa: true, defi: result.defi });
-  }
   db.audit(result.user.username, 'connexion_admin', '', '', sso.clientIp(req));
   security.clearRateLimit('login', req);
   auth.setSessionCookie(res, result.token);
@@ -742,123 +735,6 @@ app.post('/api/auth/login', security.rateLimit('login', 10, 15 * 60 * 1000), (re
       displayName: result.user.display_name || result.user.username,
       role: result.user.role,
     },
-  });
-});
-
-/**
- * Seconde étape de la connexion : code de l'application d'authentification, ou
- * code de secours.
- *
- * Le client reçoit toujours le même message d'échec : distinguer « code faux »
- * de « jeton expiré » indiquerait à un attaquant s'il vaut la peine d'insister.
- * Le motif exact, lui, part au journal.
- */
-app.post('/api/auth/login/2fa', security.rateLimit('login2fa', 20, 15 * 60 * 1000), (req, res) => {
-  const { defi, code } = req.body || {};
-  if (!defi || !code) return res.status(400).json({ error: 'Code requis' });
-  const result = auth.completer2fa(String(defi), String(code));
-  if (result.erreur) {
-    db.audit('inconnu', 'echec_connexion_admin_2fa', '', result.erreur, sso.clientIp(req));
-    return res.status(401).json({ error: 'Code incorrect ou expiré. Recommencez la connexion.' });
-  }
-  db.audit(result.user.username, 'connexion_admin', '', `second facteur : ${result.via}`, sso.clientIp(req));
-  security.clearRateLimit('login', req);
-  security.clearRateLimit('login2fa', req);
-  auth.setSessionCookie(res, result.token);
-  res.json({
-    token: result.token,
-    // Prévenir quand la réserve s'épuise : un administrateur sans code de
-    // secours et sans téléphone n'a plus aucun moyen d'entrer.
-    codesRestants: result.via === 'code_de_secours' ? result.codesRestants : undefined,
-    user: {
-      username: result.user.username,
-      displayName: result.user.display_name || result.user.username,
-      role: result.user.role,
-    },
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Double authentification — activation par l'administrateur lui-même.
-//
-// Un administrateur ne peut agir que sur SON propre compte : personne ne pose
-// ni ne retire la double authentification d'un collègue, ce qui reviendrait à
-// pouvoir se rendre maître de son accès.
-// ---------------------------------------------------------------------------
-
-/** Étape 1 : produit un secret EN ATTENTE et l'URI à enregistrer sur le téléphone. */
-app.post('/api/admin/2fa/preparer', auth.requireApi, (req, res) => {
-  const session = auth.currentSession(req);
-  const user = db.getAdminById(session.user_id);
-  if (user.totp_active) {
-    return res.status(409).json({ error: 'La double authentification est déjà active sur ce compte.' });
-  }
-  const secret = totp.genererSecret();
-  db.setTotpSecret(user.id, secret);
-  db.audit(user.username, '2fa_preparee', user.username, '', sso.clientIp(req));
-  res.json({
-    secret,
-    secretLisible: totp.secretLisible(secret),
-    uri: totp.uriOtpauth(secret, user.username, process.env.LICENCE_SOCIETE || 'Algonis'),
-  });
-});
-
-/**
- * Étape 2 : un premier code prouve que le téléphone est bien appairé.
- *
- * C'est seulement ici que la double authentification devient active. Sans cette
- * confirmation, un secret mal recopié enfermerait l'administrateur dehors.
- */
-app.post('/api/admin/2fa/activer', auth.requireApi, security.rateLimit('2fa', 20, 15 * 60 * 1000), (req, res) => {
-  const session = auth.currentSession(req);
-  const user = db.getAdminById(session.user_id);
-  if (user.totp_active) return res.status(409).json({ error: 'Déjà active.' });
-  if (!user.totp_secret) return res.status(409).json({ error: 'Commencez par préparer la double authentification.' });
-  const pas = totp.verifie(user.totp_secret, String(req.body?.code || ''));
-  if (!pas) return res.status(400).json({ error: 'Code incorrect. Vérifiez l’heure de votre téléphone.' });
-
-  const codes = totp.genererCodesSecours(8);
-  db.remplacerCodesSecours(user.id, codes.map(totp.hacherCodeSecours));
-  db.activerTotp(user.id, pas);
-  db.audit(user.username, '2fa_activee', user.username, '', sso.clientIp(req));
-  // Les codes ne sont montrés QU'ICI : ils ne sont stockés que hachés.
-  res.json({ ok: true, codesSecours: codes });
-});
-
-/** Désactivation : le mot de passe est redemandé — un poste laissé ouvert ne suffit pas. */
-app.post('/api/admin/2fa/desactiver', auth.requireApi, security.rateLimit('2fa', 20, 15 * 60 * 1000), (req, res) => {
-  const session = auth.currentSession(req);
-  const user = db.getAdminById(session.user_id);
-  if (!auth.verifyPassword(String(req.body?.password || ''), user.password_hash)) {
-    db.audit(user.username, 'echec_2fa_desactivation', user.username, 'mot de passe incorrect', sso.clientIp(req));
-    return res.status(401).json({ error: 'Mot de passe incorrect.' });
-  }
-  db.desactiverTotp(user.id);
-  db.audit(user.username, '2fa_desactivee', user.username, '', sso.clientIp(req));
-  res.json({ ok: true });
-});
-
-/** Régénère les codes de secours (les anciens sont invalidés). */
-app.post('/api/admin/2fa/codes', auth.requireApi, security.rateLimit('2fa', 20, 15 * 60 * 1000), (req, res) => {
-  const session = auth.currentSession(req);
-  const user = db.getAdminById(session.user_id);
-  if (!user.totp_active) return res.status(409).json({ error: 'Double authentification inactive.' });
-  if (!auth.verifyPassword(String(req.body?.password || ''), user.password_hash)) {
-    return res.status(401).json({ error: 'Mot de passe incorrect.' });
-  }
-  const codes = totp.genererCodesSecours(8);
-  db.remplacerCodesSecours(user.id, codes.map(totp.hacherCodeSecours));
-  db.audit(user.username, '2fa_codes_regeneres', user.username, '', sso.clientIp(req));
-  res.json({ ok: true, codesSecours: codes });
-});
-
-/** État de la double authentification du compte connecté. */
-app.get('/api/admin/2fa', auth.requireApi, (req, res) => {
-  const session = auth.currentSession(req);
-  const user = db.getAdminById(session.user_id);
-  res.json({
-    active: !!user.totp_active,
-    codesRestants: user.totp_active ? db.codesSecoursRestants(user.id) : 0,
   });
 });
 

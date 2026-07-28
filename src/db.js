@@ -206,34 +206,6 @@ const adminCols = db.prepare(`PRAGMA table_info(admin_users)`).all().map((c) => 
 if (!adminCols.includes('disabled')) {
   db.exec(`ALTER TABLE admin_users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0`);
 }
-// Double authentification. `totp_secret` n'est actif que si `totp_active` vaut
-// 1 : on garde le secret en attente entre son affichage et sa confirmation par
-// un premier code, pour ne jamais enfermer dehors un administrateur qui aurait
-// mal recopié la clé.
-if (!adminCols.includes('totp_secret')) {
-  db.exec(`ALTER TABLE admin_users ADD COLUMN totp_secret TEXT NOT NULL DEFAULT ''`);
-}
-if (!adminCols.includes('totp_active')) {
-  db.exec(`ALTER TABLE admin_users ADD COLUMN totp_active INTEGER NOT NULL DEFAULT 0`);
-}
-// Dernier pas de 30 s consommé : interdit de rejouer le même code, y compris
-// dans sa fenêtre de validité (code lu par-dessus l'épaule, journal, capture).
-if (!adminCols.includes('totp_dernier_pas')) {
-  db.exec(`ALTER TABLE admin_users ADD COLUMN totp_dernier_pas INTEGER NOT NULL DEFAULT 0`);
-}
-
-// Codes de secours à usage unique, stockés hachés.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS admin_codes_secours (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    code_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    used_at TEXT,
-    UNIQUE(user_id, code_hash)
-  );
-  CREATE INDEX IF NOT EXISTS idx_codes_secours_user ON admin_codes_secours(user_id);
-`);
 if (!columns.includes('generated_login')) {
   db.exec(`ALTER TABLE requests ADD COLUMN generated_login TEXT NOT NULL DEFAULT ''`);
 }
@@ -697,7 +669,7 @@ const api = {
 
   listAdmins() {
     return db
-      .prepare(`SELECT id, username, display_name, role, created_at, last_login, totp_active FROM admin_users ORDER BY id ASC`)
+      .prepare(`SELECT id, username, display_name, role, created_at, last_login FROM admin_users ORDER BY id ASC`)
       .all();
   },
 
@@ -707,60 +679,6 @@ const api = {
 
   setAdminPassword(id, passwordHash) {
     db.prepare(`UPDATE admin_users SET password_hash = ? WHERE id = ?`).run(passwordHash, id);
-  },
-
-  // --- Double authentification ----------------------------------------------
-
-  /** Enregistre un secret EN ATTENTE : la 2FA ne s'active qu'après un code valide. */
-  setTotpSecret(id, secret) {
-    db.prepare(`UPDATE admin_users SET totp_secret = ?, totp_active = 0, totp_dernier_pas = 0 WHERE id = ?`)
-      .run(secret || '', id);
-  },
-
-  activerTotp(id, pas) {
-    db.prepare(`UPDATE admin_users SET totp_active = 1, totp_dernier_pas = ? WHERE id = ?`).run(pas || 0, id);
-  },
-
-  /** Désactive et EFFACE le secret : le réactiver exigera un nouvel appairage. */
-  desactiverTotp(id) {
-    const tx = db.transaction(() => {
-      db.prepare(`UPDATE admin_users SET totp_secret = '', totp_active = 0, totp_dernier_pas = 0 WHERE id = ?`).run(id);
-      db.prepare(`DELETE FROM admin_codes_secours WHERE user_id = ?`).run(id);
-    });
-    tx();
-  },
-
-  /** Mémorise le pas consommé — un même code ne peut pas resservir. */
-  marquerPasTotp(id, pas) {
-    db.prepare(`UPDATE admin_users SET totp_dernier_pas = ? WHERE id = ? AND totp_dernier_pas < ?`).run(pas, id, pas);
-  },
-
-  remplacerCodesSecours(userId, hashes) {
-    const tx = db.transaction(() => {
-      db.prepare(`DELETE FROM admin_codes_secours WHERE user_id = ?`).run(userId);
-      const ins = db.prepare(`INSERT INTO admin_codes_secours (user_id, code_hash) VALUES (?, ?)`);
-      for (const h of hashes) ins.run(userId, h);
-    });
-    tx();
-  },
-
-  /**
-   * Consomme un code de secours. L'UPDATE conditionnel fait le contrôle et la
-   * consommation en une seule opération : deux tentatives simultanées avec le
-   * même code ne peuvent pas réussir toutes les deux.
-   */
-  consommerCodeSecours(userId, hash) {
-    const info = db
-      .prepare(`UPDATE admin_codes_secours SET used_at = datetime('now')
-                 WHERE user_id = ? AND code_hash = ? AND used_at IS NULL`)
-      .run(userId, hash);
-    return info.changes === 1;
-  },
-
-  codesSecoursRestants(userId) {
-    return db
-      .prepare(`SELECT COUNT(*) AS n FROM admin_codes_secours WHERE user_id = ? AND used_at IS NULL`)
-      .get(userId).n;
   },
 
   createSession(token, userId, expiresAt) {

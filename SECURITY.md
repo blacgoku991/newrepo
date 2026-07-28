@@ -15,25 +15,6 @@ mises en place et la checklist de mise en production.
   `localStorage`.
 - **Mot de passe admin : 8 caractères minimum** ; alerte dans Réglages si le
   compte « admin » utilise encore le mot de passe par défaut.
-- **Double authentification (TOTP, RFC 6238)**, activable par chaque
-  administrateur sur son propre compte depuis Réglages :
-  - implémentée avec `node:crypto` seul, **sans dépendance** ; conforme aux
-    vecteurs de test de la RFC 6238 ;
-  - le mot de passe seul n'ouvre **aucune session** : il donne un jeton de
-    passage éphémère (5 min, 5 essais), sans valeur tant que le code manque ;
-  - **anti-rejeu** : le pas de 30 s consommé est mémorisé, un même code ne
-    resert pas — y compris dans sa fenêtre de validité ;
-  - comparaison du code à **temps constant** ; message d'échec identique que le
-    code soit faux ou le jeton expiré ;
-  - **8 codes de secours** à usage unique, stockés **hachés** (SHA-256, 40 bits
-    d'aléa), affichés une seule fois ; consommation atomique en base ;
-  - activation confirmée par un premier code — un secret mal recopié ne peut
-    pas enfermer l'administrateur dehors ;
-  - désactivation et régénération des codes **protégées par le mot de passe** ;
-    la désactivation **efface** le secret et les codes ;
-  - un administrateur n'agit que sur **son propre** compte ;
-  - journalisé : préparation, activation, désactivation, échecs, et moyen
-    d'entrée employé (application ou code de secours) — jamais le secret.
 - **SSO Microsoft 365** : OpenID Connect « authorization code » + **PKCE (S256)**,
   `state` et `nonce` aléatoires à usage unique (10 min), vérification de
   l'audience, de l'émetteur, de l'expiration et du nonce du jeton. L'échange du
