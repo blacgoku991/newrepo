@@ -51,6 +51,7 @@
   // ==========================================================================
   let parc = [];
   let echeances = [];
+  let alertes = [];
   let domaine = 'smartfixx.fr';
 
   const toast = (msg, erreur) => {
@@ -102,6 +103,7 @@
       el('vue-' + b.dataset.vue).classList.add('active');
       if (b.dataset.vue === 'journal') chargerJournal();
       if (b.dataset.vue === 'cle') chargerCle();
+      if (b.dataset.vue === 'sauvegardes') chargerSauvegardes();
     });
   }
 
@@ -117,6 +119,7 @@
     catch (e) { el('liste').innerHTML = `<div class="alerte err">${echapper(e.message)}</div>`; return; }
     parc = d.societes;
     echeances = d.echeances;
+    alertes = d.alertes || [];
     domaine = d.domaine || domaine;
     dessinerKpis();
     dessinerListe();
@@ -134,15 +137,16 @@
       <div class="kpi attention"><div class="v">${bientot.length}</div><div class="l">À renouveler sous 30 j</div></div>
       <div class="kpi danger"><div class="v">${expirees.length + sans.length}</div><div class="l">Expirées ou sans licence</div></div>`;
 
-    const urgentes = echeances.filter((e) => {
-      const j = Math.ceil((new Date(e.fin + 'T00:00:00Z') - new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z')) / 86400000);
-      return j <= 30;
-    });
-    const box = el('alerte-echeances');
-    if (!urgentes.length) { box.hidden = true; return; }
-    box.hidden = false;
-    box.innerHTML = `<b>À traiter :</b> ${urgentes.map((e) =>
-      `${echapper(e.societe)} (${dateFr(e.fin)})`).join(' · ')}`;
+    // Points d'attention, du plus grave au moins grave.
+    const box = el('alertes');
+    if (!alertes.length) {
+      box.innerHTML = '<div class="alerte ok" style="margin-bottom:18px">Rien à signaler : tous les portails tournent, aucune licence n’arrive à échéance.</div>';
+      return;
+    }
+    box.innerHTML = alertes.map((a) => `
+      <div class="alerte ${a.gravite === 'danger' ? 'err' : 'attention'}" style="margin-bottom:10px">
+        <b>${echapper(a.societe)} — ${echapper(a.titre)}</b><br>${echapper(a.detail)}
+      </div>`).join('');
   }
 
   function dessinerListe() {
@@ -178,8 +182,14 @@
             ? `<a href="https://${echapper(s.sousDomaine)}.${echapper(domaine)}" target="_blank" rel="noreferrer noopener">${echapper(s.sousDomaine)}.${echapper(domaine)}</a>`
             : '<span class="aide">aucun sous-domaine</span>'}</dd>
           <dt>Portail</dt><dd>${s.instance && s.instance.enMarche
-            ? `<span class="etiq ok">En marche</span>`
+            ? (s.instance.instable
+                ? `<span class="etiq danger">Instable (${s.instance.redemarrages} redémarrages)</span>`
+                : `<span class="etiq ok">En marche</span>`)
             : `<span class="etiq neutre">Arrêté</span>`}</dd>
+          ${s.activite ? `
+          <dt>Activité</dt><dd>${s.activite.total} demande(s)${s.activite.semaine ? ` · <b>${s.activite.semaine}</b> cette semaine` : ''}${
+            s.activite.echecs ? ` · <span style="color:var(--danger)">${s.activite.echecs} échec(s)</span>` : ''}</dd>
+          <dt>Dernière</dt><dd>${s.activite.derniereDemande ? dateHeure(s.activite.derniereDemande) : '<span class="aide">aucune</span>'}</dd>` : ''}
           <dt>Historique</dt><dd>${s.nbLicences} licence(s)</dd>
         </dl>
         <div class="actions">
@@ -551,6 +561,38 @@
     </tr>`).join('') : '<tr><td colspan="6" class="vide">Aucune entrée.</td></tr>';
   }
   el('recherche-journal').addEventListener('input', dessinerJournal);
+
+  // --- Sauvegardes ----------------------------------------------------------
+  const koMo = (o) => (o > 1048576 ? `${(o / 1048576).toFixed(1)} Mo` : `${Math.round(o / 1024)} ko`);
+
+  async function chargerSauvegardes() {
+    let d;
+    try { d = await api('/api/sauvegardes'); }
+    catch (e) { return toast(e.message, true); }
+    el('sauv-info').textContent =
+      `Une sauvegarde automatique chaque nuit, ${d.gardees} conservées. Dossier : ${d.dossier}`;
+    el('sauv-lignes').innerHTML = d.sauvegardes.length
+      ? d.sauvegardes.map((s) => `<tr>
+          <td data-intitule="Sauvegarde"><code>${echapper(s.nom)}</code></td>
+          <td data-intitule="Date">${dateHeure(s.date.replace('T', ' ').slice(0, 19))}</td>
+          <td data-intitule="Taille">${koMo(s.octets)}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="vide">Aucune sauvegarde pour le moment.</td></tr>';
+  }
+
+  el('sauv-lancer').addEventListener('click', async () => {
+    const b = el('sauv-lancer');
+    b.disabled = true;
+    b.textContent = 'Sauvegarde en cours…';
+    try {
+      const r = await poster('/api/sauvegardes');
+      toast(r.erreurs.length
+        ? `Sauvegarde faite avec ${r.erreurs.length} erreur(s)`
+        : `Sauvegarde faite : ${r.elements.length} élément(s), ${koMo(r.octets)}`, !!r.erreurs.length);
+      chargerSauvegardes();
+    } catch (e) { toast(e.message, true); }
+    b.disabled = false;
+    b.textContent = 'Sauvegarder maintenant';
+  });
 
   // --- Clé ------------------------------------------------------------------
   async function chargerCle() {

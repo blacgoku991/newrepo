@@ -24,6 +24,8 @@ const signature = require('./lib/signature');
 const logos = require('./lib/logos');
 const orchestrateur = require('./lib/orchestrateur');
 const reglages = require('./lib/reglages');
+const supervision = require('./lib/supervision');
+const sauvegarde = require('./lib/sauvegarde');
 
 const app = express();
 const COOKIE = 'smartfixx_sid';
@@ -207,15 +209,29 @@ function sousDomaineValide(saisi, nom) {
 }
 
 app.get('/api/societes', exigeSession, (req, res) => {
-  const marche = orchestrateur.etat();
-  const societes = db.vue().map((s) => ({
-    ...s,
-    logo: !!logos.trouver(s.id),
-    instance: s.sousDomaine && marche[s.sousDomaine]
-      ? { enMarche: true, port: marche[s.sousDomaine].port, depuis: marche[s.sousDomaine].depuis }
-      : { enMarche: false },
-  }));
-  res.json({ societes, echeances: db.echeances(60), empreinteCle: signature.empreinte(), domaine: DOMAINE });
+  const societes = supervision.parc().map((s) => ({ ...s, logo: !!logos.trouver(s.id) }));
+  res.json({
+    societes,
+    alertes: supervision.alertes(),
+    echeances: db.echeances(60),
+    empreinteCle: signature.empreinte(),
+    domaine: DOMAINE,
+  });
+});
+
+// --- Sauvegardes -------------------------------------------------------------
+
+app.get('/api/sauvegardes', exigeSession, (req, res) => {
+  res.json({ sauvegardes: sauvegarde.liste(), dossier: sauvegarde.CIBLE, gardees: sauvegarde.GARDER });
+});
+
+app.post('/api/sauvegardes', exigeSession, limiter('sauvegarde', 6, 60 * 60 * 1000), (req, res) => {
+  try {
+    const r = sauvegarde.executer(req.operateur.username);
+    res.json({ ok: true, nom: path.basename(r.dossier), elements: r.elements, erreurs: r.erreurs, octets: r.octets });
+  } catch (e) {
+    res.status(500).json({ error: `Sauvegarde impossible : ${e.message}` });
+  }
 });
 
 // --- Pilotage des instances --------------------------------------------------

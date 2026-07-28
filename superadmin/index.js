@@ -23,6 +23,7 @@ const path = require('path');
 const panel = require('./server');
 const db = require('./lib/db');
 const orchestrateur = require('./lib/orchestrateur');
+const sauvegarde = require('./lib/sauvegarde');
 
 const PORT = Number(process.env.SMARTFIXX_PORT || 4000);
 const HOST = process.env.SMARTFIXX_HOST || '127.0.0.1';
@@ -152,6 +153,9 @@ serveur.listen(PORT, HOST, () => {
   console.log(`  Panel      : ${[...HOTES_PANEL].slice(0, 2).join(', ')}`);
   console.log(`  Sociétés   : <sous-domaine>.${DOMAINE}\n`);
   const resultats = orchestrateur.demarrerTout();
+  // Programmée après le démarrage des portails : une sauvegarde n'a d'intérêt
+  // que si les bases sont là.
+  sauvegarde.programmer();
   if (!resultats.length) {
     console.log('  Aucune société enregistrée. Créez-en une depuis le panel.\n');
   } else {
