@@ -1,0 +1,43 @@
+[Unit]
+Description=Smartfixx — panel des licences et portails clients
+Documentation=file:/opt/smartfixx/superadmin/LISEZ-MOI.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smartfixx
+Group=smartfixx
+WorkingDirectory=/opt/smartfixx
+ExecStart=/usr/bin/node superadmin/index.js
+
+Environment=NODE_ENV=production
+Environment=SMARTFIXX_DOMAINE=__DOMAINE__
+Environment=SMARTFIXX_HOST=127.0.0.1
+Environment=SMARTFIXX_PORT=4000
+# Chromium est installé dans le dossier du compte de service.
+Environment=HOME=/home/smartfixx
+
+# Le portail lance des robots : on lui laisse le temps de les terminer avant
+# de couper, plutôt que d'abandonner une création à mi-parcours.
+Restart=always
+RestartSec=5
+TimeoutStopSec=45
+KillSignal=SIGTERM
+
+# Durcissement : le service n'a besoin d'écrire que dans son dossier de
+# données. Tout le reste du système lui est en lecture seule.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/smartfixx /opt/smartfixx
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

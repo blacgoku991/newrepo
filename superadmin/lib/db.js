@@ -230,6 +230,19 @@ module.exports = {
     return db.prepare(`SELECT COUNT(*) n FROM operateurs`).get().n;
   },
 
+  operateurs() {
+    return db.prepare(`SELECT id, username, created_at, last_login FROM operateurs ORDER BY id ASC`).all();
+  },
+
+  majMotDePasseOperateur(id, passwordHash) {
+    db.prepare(`UPDATE operateurs SET password_hash = ? WHERE id = ?`).run(passwordHash, id);
+  },
+
+  /** Ferme les sessions d'un opérateur — un changement de mot de passe doit couper l'existant. */
+  fermerSessionsOperateur(userId) {
+    return db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(userId).changes;
+  },
+
   creerOperateur(username, passwordHash) {
     return db.prepare(`INSERT INTO operateurs (username, password_hash) VALUES (?, ?)`)
       .run(username, passwordHash).lastInsertRowid;

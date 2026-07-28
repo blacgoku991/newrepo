@@ -43,12 +43,12 @@ function clePrivee() {
     const pub = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
     console.warn(
       `\n[licences] Nouvelle paire de clés créée : ${FICHIER_CLE}\n` +
-      '\n  Recopiez cette clé PUBLIQUE dans src/licence.js (constante CLE_PUBLIQUE)\n' +
-      "  avant de compiler la version livrée aux clients, sinon aucune licence\n" +
-      "  émise ici ne sera acceptée :\n" +
-      `\n  ${pub}\n` +
-      '\n  Sauvegardez le fichier de clé privée hors de cette machine.\n' +
-      "  Sans lui, plus aucune licence ne peut être émise ni renouvelée.\n"
+      '\n  SAUVEGARDEZ CE FICHIER HORS DE CETTE MACHINE.\n' +
+      "  Sans lui, plus aucune licence ne peut être émise ni renouvelée,\n" +
+      '  pour aucun client.\n' +
+      '\n  Clé publique correspondante (transmise automatiquement aux portails,\n' +
+      "  à n'embarquer dans le code que pour un client qui héberge lui-même) :\n" +
+      `\n  ${pub}\n`
     );
   }
   try {
