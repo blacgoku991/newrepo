@@ -23,6 +23,7 @@ const db = require('./lib/db');
 const signature = require('./lib/signature');
 const logos = require('./lib/logos');
 const orchestrateur = require('./lib/orchestrateur');
+const reglages = require('./lib/reglages');
 
 const app = express();
 const COOKIE = 'smartfixx_sid';
@@ -293,6 +294,32 @@ app.post('/api/societes/:id/archiver', exigeSession, (req, res) => {
   else orchestrateur.demarrer(s.id);
   db.tracer(req.operateur.username, archivee ? 'societe_archivee' : 'societe_reactivee', s.nom, '', ip(req));
   res.json({ ok: true });
+});
+
+// --- Réglages d'une société --------------------------------------------------
+
+app.get('/api/societes/:id/reglages', exigeSession, (req, res) => {
+  const s = db.societe(Number(req.params.id));
+  if (!s) return res.status(404).json({ error: 'Société introuvable' });
+  res.json({ societe: { id: s.id, nom: s.nom, sousDomaine: s.sous_domaine }, ...reglages.etat(s.id) });
+});
+
+app.put('/api/societes/:id/reglages', exigeSession, async (req, res) => {
+  const s = db.societe(Number(req.params.id));
+  if (!s) return res.status(404).json({ error: 'Société introuvable' });
+  const corps = req.body && typeof req.body === 'object' ? req.body : {};
+  const { modifies } = reglages.definir(s.id, corps, req.operateur.username);
+  if (modifies.length) {
+    // Le journal retient CE QUI a changé, jamais la valeur.
+    db.tracer(req.operateur.username, 'reglages_modifies', s.nom, modifies.join(', '), ip(req));
+  }
+  // Les réglages sont injectés au démarrage : sans redémarrage, ils ne
+  // prendraient effet qu'au prochain incident.
+  let instance = null;
+  if (modifies.length && orchestrateur.etat()[s.sous_domaine]) {
+    try { instance = await orchestrateur.redemarrer(s.id); } catch (e) { instance = { ok: false, raison: e.message }; }
+  }
+  res.json({ ok: true, modifies, instance, ...reglages.etat(s.id) });
 });
 
 // --- Logos -------------------------------------------------------------------

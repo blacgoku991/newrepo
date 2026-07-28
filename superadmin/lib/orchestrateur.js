@@ -23,6 +23,7 @@ const { fork } = require('child_process');
 
 const db = require('./db');
 const signature = require('./signature');
+const reglages = require('./reglages');
 
 const RACINE = path.join(__dirname, '..', '..');
 const DOSSIER = process.env.SMARTFIXX_DIR || path.join(os.homedir(), '.smartfixx');
@@ -191,7 +192,11 @@ function demarrer(societeId) {
     cwd: RACINE,
     env: {
       ...process.env,
+      // Le fichier .env de la société reste pris en compte (installation
+      // historique), mais les réglages saisis au panel l'emportent : c'est le
+      // choix le plus récent, et le seul endroit où l'on veut avoir à revenir.
       ...environnementDe(dossier),
+      ...reglages.environnement(s.id),
       DATA_DIR: dossier,
       PORT: String(port),
       // L'instance n'écoute qu'en local : elle n'est joignable que par le

@@ -185,6 +185,7 @@
         <div class="actions">
           <button class="btn primaire" data-emettre="${s.id}" type="button">${s.licence ? 'Renouveler' : 'Émettre une licence'}</button>
           <button class="btn" data-historique="${s.id}" type="button">Historique</button>
+          <button class="btn discret" data-reglages="${s.id}" type="button">Réglages</button>
           <button class="btn discret" data-modifier="${s.id}" type="button">Modifier</button>
           ${s.instance && s.instance.enMarche
             ? `<button class="btn discret" data-instance="arreter" data-sid="${s.id}" type="button">Arrêter</button>
@@ -198,6 +199,7 @@
     for (const b of el('liste').querySelectorAll('[data-emettre]')) b.addEventListener('click', () => emettre(Number(b.dataset.emettre)));
     for (const b of el('liste').querySelectorAll('[data-historique]')) b.addEventListener('click', () => historique(Number(b.dataset.historique)));
     for (const b of el('liste').querySelectorAll('[data-modifier]')) b.addEventListener('click', () => fiche(Number(b.dataset.modifier)));
+    for (const b of el('liste').querySelectorAll('[data-reglages]')) b.addEventListener('click', () => reglagesSociete(Number(b.dataset.reglages)));
     for (const b of el('liste').querySelectorAll('[data-archiver]')) b.addEventListener('click', () => archiver(Number(b.dataset.archiver)));
     for (const b of el('liste').querySelectorAll('[data-instance]')) {
       b.addEventListener('click', async () => {
@@ -315,6 +317,78 @@
         toast('Logo retiré');
         charger();
       } catch (ex) { toast(ex.message, true); }
+    });
+  }
+
+  // --- Réglages d'une société ----------------------------------------------
+  //
+  // Ce sont les valeurs posées une seule fois à la mise en service. Elles ne
+  // sortent jamais du serveur en clair : un secret déjà enregistré s'affiche
+  // « renseigné », et n'est réécrit que s'il est retapé.
+  async function reglagesSociete(id) {
+    let d;
+    try { d = await api(`/api/societes/${id}/reglages`); }
+    catch (e) { return toast(e.message, true); }
+
+    const champHtml = (c) => {
+      if (c.options) {
+        return `<label class="pleine">${echapper(c.libelle)}
+          <select class="inp" data-cle="${echapper(c.cle)}">
+            ${c.options.map(([v, l]) =>
+              `<option value="${echapper(v)}"${c.valeur === v ? ' selected' : ''}>${echapper(l)}</option>`).join('')}
+          </select></label>`;
+      }
+      return `<label class="pleine">${echapper(c.libelle)}
+        <input class="inp" data-cle="${echapper(c.cle)}"
+               type="${c.secret ? 'password' : 'text'}"
+               autocomplete="${c.secret ? 'new-password' : 'off'}"
+               value="${echapper(c.valeur)}"
+               placeholder="${c.secret
+                 ? (c.renseigne ? 'renseigné — retapez pour modifier' : 'non renseigné')
+                 : echapper(c.exemple)}" /></label>`;
+    };
+
+    ouvrir(`
+      <h2>Réglages — ${echapper(d.societe.nom)}</h2>
+      <p class="aide">Ces valeurs ne sont posées qu'une fois. Elles sont chiffrées sur ce serveur et ne redescendent jamais en clair — même ici.</p>
+      ${d.ssoActif
+        ? '<p class="alerte ok" style="margin-top:14px">Connexion Microsoft 365 configurée : le portail est fermé aux personnes extérieures.</p>'
+        : '<p class="alerte attention" style="margin-top:14px">Sans les trois clés Microsoft, le portail de cette société reste <b>ouvert à tous</b>. À ne laisser ainsi qu\'en recette.</p>'}
+      ${d.groupes.map((g) => `
+        <div style="margin-top:20px">
+          <div style="font-weight:650;font-size:.95rem;margin-bottom:4px">${echapper(g.titre)}</div>
+          ${g.aide ? `<p class="aide" style="margin-bottom:10px">${echapper(g.aide).replace('&lt;sous-domaine&gt;', echapper(d.societe.sousDomaine || '…') + '.' + echapper(domaine))}</p>` : ''}
+          <div class="grille">${g.champs.map(champHtml).join('')}</div>
+        </div>`).join('')}
+      <div class="alerte err" id="rg-err" hidden style="margin-top:14px"></div>
+      <div class="pied">
+        <button class="btn discret" id="rg-annuler" type="button">Fermer</button>
+        <button class="btn primaire" id="rg-ok" type="button">Enregistrer</button>
+      </div>`, true);
+
+    el('rg-annuler').addEventListener('click', fermer);
+    el('rg-ok').addEventListener('click', async () => {
+      const corps = {};
+      for (const champ of el('modale').querySelectorAll('[data-cle]')) {
+        // Un secret laissé vide n'est pas envoyé : il reste tel quel.
+        if (champ.type === 'password' && !champ.value) continue;
+        corps[champ.dataset.cle] = champ.value;
+      }
+      el('rg-ok').disabled = true;
+      try {
+        const out = await api(`/api/societes/${id}/reglages`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps),
+        });
+        toast(out.modifies.length
+          ? `Enregistré : ${out.modifies.length} réglage(s)${out.instance ? ' — portail redémarré' : ''}`
+          : 'Aucun changement');
+        fermer();
+        setTimeout(charger, 1200);
+      } catch (ex) {
+        el('rg-err').textContent = ex.message;
+        el('rg-err').hidden = false;
+      }
+      el('rg-ok').disabled = false;
     });
   }
 

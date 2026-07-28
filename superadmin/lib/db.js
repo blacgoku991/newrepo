@@ -77,6 +77,17 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES operateurs(id) ON DELETE CASCADE
   );
 
+  -- Réglages d'une société, chiffrés. Le panel ne les rend jamais en clair.
+  CREATE TABLE IF NOT EXISTS reglages (
+    societe_id INTEGER NOT NULL,
+    cle TEXT NOT NULL,
+    valeur TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (societe_id, cle),
+    FOREIGN KEY (societe_id) REFERENCES societes(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS journal (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     acteur TEXT NOT NULL,
@@ -280,6 +291,27 @@ module.exports = {
 
   purgerSessions() {
     db.prepare(`DELETE FROM sessions WHERE expires_at <= datetime('now')`).run();
+  },
+
+  /** Réglages chiffrés d'une société : { cle: valeurChiffree }. */
+  reglages(societeId) {
+    const out = {};
+    for (const r of db.prepare(`SELECT cle, valeur FROM reglages WHERE societe_id = ?`).all(societeId)) {
+      out[r.cle] = r.valeur;
+    }
+    return out;
+  },
+
+  enregistrerReglages(societeId, valeurs, par) {
+    const tx = db.transaction(() => {
+      const ins = db.prepare(`INSERT INTO reglages (societe_id, cle, valeur, updated_by)
+                              VALUES (?, ?, ?, ?)
+                              ON CONFLICT(societe_id, cle) DO UPDATE
+                              SET valeur = excluded.valeur, updated_at = datetime('now'),
+                                  updated_by = excluded.updated_by`);
+      for (const [cle, valeur] of Object.entries(valeurs)) ins.run(societeId, cle, valeur || '', par || '');
+    });
+    tx();
   },
 
   tracer(acteur, action, cible, details, ip) {
