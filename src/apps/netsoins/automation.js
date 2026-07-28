@@ -707,25 +707,72 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
       critical: true,
       label: `Recherche de l'intervenant « ${identifiant} »`,
       run: async (page) => {
-        // Champ de recherche s'il existe : réduit la liste avant de cliquer.
+        // La recherche NetSoins ne se déclenche qu'à la validation : remplir le
+        // champ sans appuyer sur Entrée laisse la liste entière, et la ligne
+        // cherchée n'apparaît jamais.
         const search = L(page, S.liste.search).first();
+        let filtre = false;
         try {
           await search.waitFor({ timeout: 3000 });
+          await search.click();
           await search.fill(identifiant);
+          await search.press('Enter');
           await page.waitForTimeout(1200);
-          ctx.log('Recherche filtrée sur l’identifiant.');
+          filtre = true;
+          ctx.log(`Recherche lancée sur « ${identifiant} ».`);
         } catch {
           ctx.log('Pas de champ de recherche — repérage direct dans la liste.');
         }
 
-        // On clique la ligne portant l'identifiant, puis sa fiche.
-        const ligne = L(page, S.liste.resultat(identifiant)).last();
-        try {
-          await ligne.waitFor({ timeout: 8000 });
-        } catch {
-          throw new Error(`Intervenant « ${identifiant} » introuvable dans ${etabLabel(data.etablissement)} — vérifiez l'identifiant et l'établissement`);
+        // La liste éclate « NOM PRÉNOM » en deux colonnes : aucun élément ne
+        // porte la chaîne entière, le clic sur l'identifiant complet échoue
+        // donc toujours. On vise d'abord la ligne complète (au cas où), puis la
+        // ligne qui contient À LA FOIS le nom et le prénom, puis le prénom
+        // seul — comme relevé sur l'instance réelle.
+        const mots = identifiant.split(/\s+/).filter(Boolean);
+        const nom = mots[0];
+        const prenom = mots.length > 1 ? mots[mots.length - 1] : '';
+
+        const pistes = [{ quoi: 'identifiant complet', ou: L(page, S.liste.resultat(identifiant)), unique: false }];
+        // Les pistes partielles ne sont ouvertes QUE si la recherche a bien
+        // filtré : sur une liste entière, cliquer un simple prénom ouvrirait la
+        // fiche d'un homonyme — et réinitialiserait le mot de passe du mauvais
+        // intervenant. Elles exigent en plus UNE SEULE correspondance.
+        if (filtre && prenom) {
+          for (const rangee of ['tr', '[role="row"]', 'li']) {
+            pistes.push({
+              quoi: `ligne « ${nom} » + « ${prenom} »`,
+              ou: page.locator(rangee).filter({ hasText: nom }).filter({ hasText: prenom }),
+              unique: true,
+            });
+          }
+          pistes.push({ quoi: `prénom « ${prenom} »`, ou: L(page, S.liste.resultat(prenom)), unique: true });
         }
-        await ligne.click();
+
+        let ouverte = null;
+        let ambigu = 0;
+        for (const piste of pistes) {
+          try {
+            await piste.ou.first().waitFor({ timeout: filtre ? 4000 : 8000 });
+          } catch {
+            continue; // rien sous cette piste
+          }
+          if (piste.unique) {
+            const n = await piste.ou.count().catch(() => 0);
+            // Plusieurs candidats : on ne devine pas lequel est le bon.
+            if (n > 1) { ambigu = Math.max(ambigu, n); continue; }
+          }
+          await piste.ou.last().click();
+          ouverte = piste.quoi;
+          break;
+        }
+        if (!ouverte && ambigu > 1) {
+          throw new Error(`Plusieurs intervenants (${ambigu}) correspondent à « ${identifiant} » dans ${etabLabel(data.etablissement)} — impossible de choisir sans risque, précisez l'identifiant`);
+        }
+        if (!ouverte) {
+          throw new Error(`Intervenant « ${identifiant} » introuvable dans ${etabLabel(data.etablissement)} — vérifiez l'identifiant (format NOM PRÉNOM) et l'établissement`);
+        }
+        ctx.log(`Intervenant repéré par ${ouverte}.`);
         await L(page, S.liste.ficheIntervenant).first().click();
         ctx.log('Fiche intervenant ouverte.');
       },
@@ -1105,4 +1152,7 @@ module.exports = {
   STEPS_META,
   RESET_STEPS_META,
   chooseStrategy,
+  // Exposé pour les tests : permet de rejouer le repérage d'un intervenant
+  // dans la liste sans dérouler tout le scénario.
+  buildOuvrirFicheSteps,
 };
