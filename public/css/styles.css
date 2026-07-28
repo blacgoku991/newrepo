@@ -830,3 +830,42 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
 .chart-tip span { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
 .chart-tip i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 @media (hover: none) { .chart-tip { display: none; } }
+
+/* ============================================================================
+   ACCÈS REFUSÉ — la connexion a réussi, mais le compte n'est pas habilité.
+   Un moment désagréable : la page doit rassurer et donner la marche à suivre,
+   pas afficher un code d'erreur.
+   ============================================================================ */
+.carte-refus {
+  width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 38px 40px 30px; text-align: center;
+}
+.refus-logo { max-height: 38px; max-width: 190px; object-fit: contain; margin-bottom: 26px; }
+.refus-logo-txt { font-family: var(--font-display); font-weight: 650; font-size: 1.05rem; color: var(--ink); display: block; margin-bottom: 26px; }
+.refus-pictogramme {
+  width: 54px; height: 54px; margin: 0 auto 20px; border-radius: 15px; display: grid; place-items: center;
+  background: var(--warn-soft); color: var(--warn);
+}
+.refus-pictogramme svg { width: 25px; height: 25px; }
+.carte-refus h1 { font-size: 1.32rem; line-height: 1.32; color: #fff; }
+.refus-sous { color: var(--muted); font-size: .95rem; margin-top: 12px; }
+.refus-identite {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 13px 16px; margin-top: 24px;
+}
+.refus-identite[hidden] { display: none; }
+.refus-identite .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); flex: none; }
+.refus-identite .v { font-family: var(--mono); font-size: .92rem; color: var(--gold-bright); overflow-wrap: anywhere; text-align: right; }
+.refus-marche { text-align: left; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+.refus-marche h2 { font-size: .95rem; color: var(--ink); margin-bottom: 10px; }
+.refus-marche ol { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: .91rem; }
+.refus-marche li { margin-bottom: 7px; }
+.refus-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+.refus-pied { margin-top: 24px; font-size: .8rem; color: var(--faint); }
+@media (max-width: 560px) {
+  .carte-refus { padding: 28px 22px 24px; }
+  .refus-identite { flex-direction: column; align-items: stretch; gap: 6px; }
+  .refus-identite .v { text-align: left; }
+  .refus-actions .btn { width: 100%; justify-content: center; }
+}

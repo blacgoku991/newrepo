@@ -86,7 +86,11 @@ app.use(security.csrfOriginCheck(ALLOWED_ORIGINS));
 app.use((req, res, next) => {
   if (!sso.required()) return next();
   const p = req.path;
-  if (p.startsWith('/auth/sso/') || p === '/connexion' || p === '/connexion.html') return next();
+  // La page de refus doit rester joignable SANS session : sinon la porte SSO
+  // la protège, redirige vers la connexion, qui refuse à nouveau — et
+  // l'utilisateur tourne en rond sans jamais lire pourquoi il est refusé.
+  if (p.startsWith('/auth/sso/') || p === '/connexion' || p === '/connexion.html'
+      || p === '/acces-refuse.html') return next();
   if (p === '/login.html' || p === '/admin' || p === '/admin.html' || p.startsWith('/artifacts')) return next();
   // `/api/marque` ne livre que le nom de la société et la mention de l'éditeur :
   // aucune donnée personnelle, et la page de connexion en a besoin pour s'habiller.

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Accès non autorisé</title>
+  <link rel="stylesheet" href="/css/fonts.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="auth center">
+  <main class="carte-refus">
+    <img class="refus-logo" src="/img/societe" alt="" data-marque="logo"
+         data-fallback="Portail comptes" data-fallback-cls="refus-logo-txt" />
+
+    <div class="refus-pictogramme" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    </div>
+
+    <h1>Votre compte n'a pas accès à ce portail</h1>
+    <p class="refus-sous" id="refus-message">
+      Votre connexion Microsoft 365 a bien été reconnue, mais votre compte ne
+      figure pas parmi les personnes habilitées à déposer des demandes.
+    </p>
+
+    <div class="refus-identite" id="refus-identite" hidden>
+      <span class="k">Compte utilisé</span>
+      <span class="v" id="refus-compte"></span>
+    </div>
+
+    <div class="refus-marche">
+      <h2>Que faire ?</h2>
+      <ol>
+        <li>Vérifiez que vous vous êtes connecté avec <strong>votre compte professionnel</strong>, et non un compte personnel.</li>
+        <li>Si l'accès vous est nécessaire, demandez votre habilitation à <strong>l'administrateur du portail</strong> de votre organisation.</li>
+        <li>Précisez-lui le compte affiché ci-dessus : il lui suffira pour vous ouvrir l'accès.</li>
+      </ol>
+    </div>
+
+    <div class="refus-actions">
+      <button type="button" class="btn btn-primary" id="refus-changer">Essayer avec un autre compte</button>
+      <a class="btn btn-ghost" href="/suivi.html">Suivre une demande existante</a>
+    </div>
+
+    <p class="refus-pied" id="refus-pied"></p>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/acces-refuse.js"></script>
+</body>
+</html>

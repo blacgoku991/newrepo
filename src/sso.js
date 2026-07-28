@@ -186,6 +186,16 @@ async function callbackRoute(req, res) {
     // fait ; en cas de panne, la connexion aboutit quand même.
     Object.assign(claims, await graph.attributsDe(String(payload.oid || email)));
 
+    // Habilitation : c'est ICI qu'on tranche, pas au moment du dépôt. Laisser
+    // entrer quelqu'un qui ne pourra rien faire, puis le refuser trois écrans
+    // plus loin, est la pire des façons de dire non.
+    const habilitation = require('./habilitation');
+    if (!habilitation.verifie(claims)) {
+      db.audit(`${name} <${email}>`, 'connexion_sso_refusee', '',
+        `non habilité (mode ${habilitation.mode()})`, clientIp(req));
+      return res.redirect(`/acces-refuse.html?motif=ferme&compte=${encodeURIComponent(email)}`);
+    }
+
     const token = b64url(crypto.randomBytes(32));
     const expires = new Date(Date.now() + SESSION_TTL_H * 3600 * 1000)
       .toISOString().slice(0, 19).replace('T', ' ');
@@ -199,14 +209,10 @@ async function callbackRoute(req, res) {
     );
     res.redirect(pending.next || '/');
   } catch (err) {
+    // Le détail technique part au journal, pas à l'écran : il n'aide en rien
+    // l'utilisateur et renseigne un attaquant sur notre configuration.
     db.audit('inconnu', 'echec_connexion_sso', '', String(err.message), clientIp(req));
-    res
-      .status(401)
-      .send(
-        `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:40px">` +
-          `<h2>Connexion Microsoft 365 refusée</h2><p>${String(err.message).replace(/</g, '&lt;')}</p>` +
-          `<p><a href="/connexion">Réessayer</a></p></body>`
-      );
+    res.redirect('/acces-refuse.html?motif=echec');
   }
 }
 
