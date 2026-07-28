@@ -16,13 +16,24 @@
     <h1>Espace administration</h1>
     <p class="sub">Connectez-vous pour accéder au tableau de bord.</p>
     <div class="alert alert-err" id="err" style="display:none;margin-bottom:15px"></div>
-    <div class="field">
-      <label for="username">Identifiant</label>
-      <input type="text" id="username" autocomplete="username" required autofocus />
+    <div id="etape-mdp">
+      <div class="field">
+        <label for="username">Identifiant</label>
+        <input type="text" id="username" autocomplete="username" required autofocus />
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" autocomplete="current-password" required />
+      </div>
     </div>
-    <div class="field">
-      <label for="password">Mot de passe</label>
-      <input type="password" id="password" autocomplete="current-password" required />
+    <!-- Second facteur : affiché seulement si le compte est protégé. -->
+    <div id="etape-code" hidden>
+      <div class="field">
+        <label for="code">Code de vérification</label>
+        <input type="text" id="code" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="11" placeholder="123 456" class="champ-code" />
+        <p class="aide">Ouvrez votre application d'authentification. Vous pouvez aussi saisir l'un de vos codes de secours.</p>
+      </div>
     </div>
     <button type="submit" class="btn btn-primary btn-block" id="login-btn" style="margin-top:8px">Se connecter</button>
     <p class="foot">Algonis — accès réservé au personnel autorisé.</p>

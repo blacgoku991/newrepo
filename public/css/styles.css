@@ -830,3 +830,18 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
 .chart-tip span { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
 .chart-tip i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 @media (hover: none) { .chart-tip { display: none; } }
+
+/* ============================================================================
+   DOUBLE AUTHENTIFICATION
+   ============================================================================ */
+/* Clé secrète et nom de compte à recopier dans l'application du téléphone. */
+.cle-2fa { display: flex; align-items: center; gap: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 13px; }
+.cle-2fa .v { flex: 1; min-width: 0; font-size: .95rem; color: var(--gold-bright); font-weight: 650; overflow-wrap: anywhere; }
+.cle-2fa .v.mono { font-family: var(--mono); letter-spacing: .06em; }
+.cle-2fa button { flex: none; background: none; border: 1px solid var(--line-2); color: var(--muted); border-radius: 7px; padding: 6px 11px; font: inherit; font-size: .8rem; cursor: pointer; min-height: 34px; }
+.cle-2fa button:hover { color: #fff; border-color: var(--faint); }
+/* Champ de code : chiffres espacés, lisibles d'un coup d'œil. */
+.champ-code { font-family: var(--mono); font-size: 1.25rem; letter-spacing: .28em; text-align: center; }
+.aide { font-size: .82rem; color: var(--muted); margin-top: 7px; }
+/* Les codes de secours restent lisibles sur téléphone. */
+@media (max-width: 480px) { .cle-2fa { flex-direction: column; align-items: stretch; gap: 8px; } .cle-2fa button { width: 100%; } }
