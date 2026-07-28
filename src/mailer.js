@@ -52,7 +52,18 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, typ
   lines.push(`Référence      : ${reference}`);
   lines.push('');
 
-  if (credentialLink) {
+  if (credentialLink && isIdentite) {
+    // Correction d'identité : l'identifiant a changé, le mot de passe non. Il
+    // passe quand même par le lien à usage unique — un identifiant de connexion
+    // n'a pas à circuler en clair dans une boîte mail.
+    lines.push('Récupérez votre nouvel identifiant de connexion ici :');
+    lines.push('');
+    lines.push(`    ${credentialLink.url}`);
+    lines.push('');
+    lines.push(`⚠ Ce lien ne peut être consulté qu'UNE SEULE fois et expire dans ${credentialLink.ttlDays} jours.`);
+    lines.push('  Votre mot de passe n\'a pas changé : continuez à utiliser celui que vous connaissez.');
+    lines.push('  Lien déjà utilisé ou expiré ? Contactez votre administrateur pour en recevoir un nouveau.');
+  } else if (credentialLink) {
     // AUCUN secret dans l'e-mail : lien sécurisé à usage unique.
     lines.push('Récupérez votre identifiant et votre mot de passe provisoire ici :');
     lines.push('');

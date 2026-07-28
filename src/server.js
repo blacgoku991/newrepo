@@ -488,6 +488,12 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
   const done = row.progress_done || 0;
   const appName = appEntry ? appEntry.config.name : row.app_id;
   const type = demarches.normalise(row.request_type);
+  // Il y a quelque chose à remettre dès qu'un lien actif existe : un mot de
+  // passe (création, réinitialisation) ou le seul nouvel identifiant de
+  // connexion (correction d'identité, qui laisse le mot de passe intact).
+  const lienActif =
+    row.status === 'terminee' && row.generated_login && db.credentialLinkForRequest(row.id)
+    && peutVoirDemande(req, row, { motDePasse: true });
   res.json({
     reference: row.reference,
     app: appName,
@@ -498,12 +504,10 @@ app.get('/api/requests/:reference', security.rateLimit('suivi', 120, 10 * 60 * 1
     // La démarche pilote les intitulés du suivi : une réinitialisation ne
     // s'annonce pas comme une création de compte.
     demarche: { type, label: demarches.libelle(type), court: demarches.court(type), suivi: demarches.suivi(type, appName) },
-    // Identifiants à récupérer : seulement si un mot de passe a été remis
-    // (création, réinitialisation). Une correction d'identité n'en produit pas.
-    credentials: Boolean(
-      row.status === 'terminee' && row.generated_login && db.credentialLinkForRequest(row.id)
-      && peutVoirDemande(req, row, { motDePasse: true })
-    ),
+    credentials: Boolean(lienActif),
+    // Sans mot de passe : le suivi annonce « le nouvel identifiant » plutôt que
+    // « les identifiants », pour ne rien promettre qui n'arrivera pas.
+    credentialsSansMotDePasse: Boolean(lienActif && !credentials.passwordForRequest(row.id)),
     progress: {
       done,
       total,
@@ -536,7 +540,7 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
   // un mot de passe qui n'est pas celui du compte.
   if (!db.credentialLinkForRequest(row.id)) {
     return res.status(409).json({
-      error: 'Cette démarche n\'a pas modifié le mot de passe : il n\'y a pas d\'identifiants à remettre.',
+      error: 'Aucun identifiant à remettre pour cette demande.',
     });
   }
   const ssoUser = sso.currentUser(req);
@@ -553,7 +557,15 @@ app.post('/api/requests/:reference/credentials-access', security.rateLimit('cred
   }
   // Régénère avec le MÊME mot de passe que celui posé par le robot (réinit =
   // provisoire aléatoire), sinon le mot de passe initial de l'application.
-  const pwd = credentials.passwordForRequest(row.id) || credentials.initialPasswordFor(row.app_id);
+  //
+  // Correction d'identité : le lien d'origine a été créé SANS mot de passe (il
+  // n'a pas changé), on régénère à l'identique. Retomber sur le mot de passe
+  // initial de l'application annoncerait au titulaire un mot de passe qui n'est
+  // pas le sien — c'est précisément ce qu'il ne faut pas faire.
+  const lienOrigine = db.credentialLinkForRequest(row.id);
+  const motDePasseInitial = credentials.passwordForRequest(row.id);
+  const sansMotDePasse = !!lienOrigine && !motDePasseInitial;
+  const pwd = sansMotDePasse ? '' : (motDePasseInitial || credentials.initialPasswordFor(row.app_id));
   const link = credentials.createLink(row.id, row.generated_login, pwd, req);
   const actor = ssoUser ? `${ssoUser.name} <${ssoUser.email}>` : row.demandeur || 'suivi';
   db.audit(actor, 'lien_identifiants_regenere', row.reference, row.generated_login, sso.clientIp(req));

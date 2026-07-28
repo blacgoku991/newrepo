@@ -229,6 +229,12 @@
       </div>`;
   }
 
+  // Une correction d'identité ne remet que le nouvel identifiant de connexion :
+  // le mot de passe du titulaire n'a pas bougé, on ne le lui promet donc pas.
+  function libelleCreds(req) {
+    return req.credentialsSansMotDePasse ? 'Récupérer le nouvel identifiant' : 'Récupérer les identifiants';
+  }
+
   function render(req) {
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -241,12 +247,12 @@
       ${progressBarHtml(req)}
       ${timelineHtml(req)}
       ${
-        // Le bouton n'a de sens que si un mot de passe a été remis (création,
-        // réinitialisation). Une correction d'identité ou un transfert ne
-        // produit aucun identifiant à récupérer.
+        // Le bouton apparaît dès qu'il y a quelque chose à remettre : un mot de
+        // passe (création, réinitialisation) ou un NOUVEL IDENTIFIANT de
+        // connexion (correction d'identité, qui ne touche pas au mot de passe).
         req.status === 'terminee' && req.credentials
           ? `<div style="margin-top:6px;padding-top:18px;border-top:1px solid var(--line)">
-               <button class="btn btn-primary" id="get-creds">${icon('check')} Récupérer les identifiants</button>
+               <button class="btn btn-primary" id="get-creds">${icon('check')} ${libelleCreds(req)}</button>
                <p style="color:var(--muted);font-size:0.83rem;margin-top:10px">Affichage sécurisé, une seule fois — réservé au demandeur ou au bénéficiaire.</p>
                <p id="creds-err" style="color:var(--danger);font-size:0.86rem;margin-top:8px"></p>
              </div>`
@@ -269,7 +275,7 @@
         } catch (err) {
           document.getElementById('creds-err').textContent = err.message;
           credsBtn.disabled = false;
-          credsBtn.textContent = 'Récupérer les identifiants';
+          credsBtn.textContent = libelleCreds(req);
         }
       });
     }

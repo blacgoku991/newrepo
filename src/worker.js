@@ -198,19 +198,29 @@ async function processOne(request) {
       // bougé. Générer un lien reviendrait à annoncer au titulaire un mot de
       // passe qui n'est pas le sien — on s'en abstient.
       let credentialLink = null;
-      if (result.account && result.account.login && result.account.credentials !== false) {
+      // Une correction d'identité ne change pas le mot de passe, mais elle
+      // change l'IDENTIFIANT de connexion : le titulaire doit le recevoir, par
+      // le même canal sécurisé que le reste. On crée alors un lien SANS mot de
+      // passe — annoncer un mot de passe qui n'est pas le sien serait pire que
+      // ne rien envoyer.
+      const sansMotDePasse = result.account && result.account.credentials === false;
+      if (result.account && result.account.login) {
         try {
           const credentials = require('./credentials');
           // Le robot peut imposer un mot de passe précis (ex. réinitialisation :
           // provisoire aléatoire, car BlueKanGo refuse un mot de passe déjà
           // utilisé). Sinon, mot de passe initial par défaut de l'application.
-          const password = result.account.password || credentials.initialPasswordFor(request.app_id);
+          const password = sansMotDePasse
+            ? ''
+            : result.account.password || credentials.initialPasswordFor(request.app_id);
           credentialLink = credentials.createLink(
             request.id,
             result.account.login,
             password
           );
-          log(`Lien de récupération des identifiants généré (valide ${credentialLink.ttlDays} jours)`);
+          log(sansMotDePasse
+            ? `Lien de remise du nouvel identifiant généré (valide ${credentialLink.ttlDays} jours, mot de passe inchangé)`
+            : `Lien de récupération des identifiants généré (valide ${credentialLink.ttlDays} jours)`);
         } catch (linkErr) {
           log(`Génération du lien d'identifiants impossible : ${linkErr.message}`);
         }

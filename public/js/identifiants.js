@@ -21,17 +21,23 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       });
-      sub.innerHTML = `Compte <strong>${escapeHtml(data.app)}</strong> — référence <strong>${escapeHtml(data.reference)}</strong>. Conservez ces informations en lieu sûr&nbsp;: cette page ne pourra pas être rouverte.`;
+      sub.innerHTML = `Compte <strong>${escapeHtml(data.app)}</strong> — référence <strong>${escapeHtml(data.reference)}</strong>. `
+        + `Conservez ${data.password ? 'ces informations' : 'cet identifiant'} en lieu sûr&nbsp;: cette page ne pourra pas être rouverte.`;
       const row = (label, value) => `
         <div class="cred-row">
           <span class="k">${label}</span>
           <span class="v">${escapeHtml(value)}</span>
           <button type="button" data-copy="${escapeHtml(value)}">Copier</button>
         </div>`;
+      // Une correction d'identité change l'identifiant de connexion sans
+      // toucher au mot de passe : on remet le nouvel identifiant et on le dit,
+      // plutôt que d'afficher un mot de passe qui ne serait pas le sien.
       zone.innerHTML =
         row('Identifiant', data.login) +
         (data.password ? row('Mot de passe', data.password) : '') +
-        `<div class="cred-warning">⚠ Ce mot de passe est <strong>provisoire</strong> : il vous sera demandé de le changer lors de votre première connexion à l'application.</div>`;
+        (data.password
+          ? `<div class="cred-warning">⚠ Ce mot de passe est <strong>provisoire</strong> : il vous sera demandé de le changer lors de votre première connexion à l'application.</div>`
+          : `<div class="cred-warning">Votre <strong>mot de passe n'a pas changé</strong> : continuez à utiliser celui que vous connaissez déjà. Seul l'identifiant de connexion ci-dessus a été modifié.</div>`);
       for (const b of zone.querySelectorAll('[data-copy]')) {
         b.addEventListener('click', async () => {
           try {
