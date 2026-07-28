@@ -109,12 +109,19 @@ module.exports = {
     // attribut `value` — on cible par cet identifiant, jamais par le libellé.
     etablissementOpen: '#change_id_etablissement',
     etablissementOption: (value) => `.filter_choose_line[value="${value}"]`,
-    search: 'input[type="search"]',
-    // Le champ de recherche se valide par le bouton (loupe) placé juste après
-    // lui dans la barre d'outils. Ce bouton n'a AUCUN libellé accessible : on
-    // le repère par sa position relative au champ, puis, s'il n'en est pas
-    // frère, par la barre d'outils elle-même.
-    searchSubmit: 'input[type="search"] ~ button',
+    // ATTENTION : la page porte DEUX champs de recherche. Celui du bandeau
+    // NETParamètres, tout en haut, cherche dans toute l'application ; celui de
+    // la liste des intervenants, sous les onglets, est le seul qui filtre la
+    // liste. On reste donc cantonné au panneau de la liste (`#content_ajax`) —
+    // sans ce cadrage, c'est le champ du bandeau qui est rempli.
+    search: '#content_ajax input[type="search"]',
+    // Repli si le panneau change d'identifiant : le champ de la liste vient
+    // APRÈS celui du bandeau dans la page, d'où le dernier et non le premier.
+    searchAlt: 'input[type="search"]',
+    // Le champ se valide par le bouton (loupe) placé juste après lui. Ce bouton
+    // n'a AUCUN libellé accessible : on le repère par sa position relative au
+    // champ, puis, s'il n'en est pas frère, dans la barre d'outils de la liste.
+    searchSubmit: '#content_ajax input[type="search"] ~ button',
     searchSubmitAlt: '#content_ajax button',
     resultat: (texte) => `text=${JSON.stringify(texte)}`,
     ficheIntervenant: 'text="Fiche intervenant"',

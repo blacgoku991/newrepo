@@ -711,10 +711,27 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
         // champ sans valider laisse la liste entière, et la ligne cherchée
         // n'apparaît jamais. La validation passe par le bouton (loupe) accolé
         // au champ ; Entrée n'est qu'un repli si ce bouton reste introuvable.
-        const search = L(page, S.liste.search).first();
+        // Le champ visé est celui de la LISTE, pas celui du bandeau de
+        // NETParamètres qui cherche dans toute l'application : remplir ce
+        // dernier ne filtre rien. En dernier recours on prend le DERNIER champ
+        // de la page, celui du bandeau venant toujours en premier.
+        let search = null;
+        let ouSaisi = '';
+        for (const [voie, sel, quel] of [
+          ['le champ de la liste', S.liste.search, 'first'],
+          ['le dernier champ de la page', S.liste.searchAlt, 'last'],
+        ]) {
+          const champ = L(page, sel)[quel]();
+          try {
+            await champ.waitFor({ state: 'visible', timeout: 3000 });
+            search = champ;
+            ouSaisi = voie;
+            break;
+          } catch { /* voie suivante */ }
+        }
         let filtre = false;
         try {
-          await search.waitFor({ timeout: 3000 });
+          if (!search) throw new Error('aucun champ de recherche');
           await search.click();
           await search.fill(identifiant);
 
@@ -734,9 +751,9 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
           }
           await page.waitForTimeout(1200);
           filtre = true;
-          ctx.log(`Recherche lancée sur « ${identifiant} » (validée par ${valide}).`);
+          ctx.log(`Recherche lancée sur « ${identifiant} » dans ${ouSaisi} (validée par ${valide}).`);
         } catch {
-          ctx.log('Pas de champ de recherche — repérage direct dans la liste.');
+          ctx.log('Pas de champ de recherche dans la liste — repérage direct.');
         }
 
         // La liste éclate « NOM PRÉNOM » en deux colonnes : aucun élément ne
