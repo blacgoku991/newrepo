@@ -238,6 +238,12 @@ module.exports = {
     db.prepare(`UPDATE operateurs SET password_hash = ? WHERE id = ?`).run(passwordHash, id);
   },
 
+  /** Supprime un opérateur (ses sessions partent avec, par cascade). */
+  supprimerOperateur(id) {
+    db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(id);
+    db.prepare(`DELETE FROM operateurs WHERE id = ?`).run(id);
+  },
+
   /** Ferme les sessions d'un opérateur — un changement de mot de passe doit couper l'existant. */
   fermerSessionsOperateur(userId) {
     return db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(userId).changes;

@@ -5,7 +5,8 @@
  *
  *   node superadmin/reset-operateur.js --liste
  *   node superadmin/reset-operateur.js --user achraf --mdp "MonMotDePasse"
- *   node superadmin/reset-operateur.js --user achraf          (tire au hasard)
+ *   node superadmin/reset-operateur.js --user achraf            (tire au hasard)
+ *   node superadmin/reset-operateur.js --user ancien --supprimer
  *
  * Le mot de passe du premier opérateur n'est affiché QU'UNE FOIS, au démarrage
  * initial. Sans cet outil, l'oublier signifierait perdre l'accès au panel — et
@@ -47,12 +48,32 @@ if (process.argv.includes('--liste')) {
 }
 
 const utilisateur = argument('user');
+
+// Suppression d'un opérateur — utile quand un compte d'amorçage a servi et
+// que son mot de passe a circulé.
+if (utilisateur && process.argv.includes('--supprimer')) {
+  const cible = db.operateur(utilisateur);
+  if (!cible) {
+    console.error(`\nAucun opérateur « ${utilisateur} ».\n`);
+    process.exit(1);
+  }
+  // Ne jamais laisser le panel sans personne pour y entrer.
+  if (db.compterOperateurs() <= 1) {
+    console.error(`\n« ${utilisateur} » est le dernier opérateur : créez-en un autre avant de le supprimer.\n`);
+    process.exit(1);
+  }
+  db.supprimerOperateur(cible.id);
+  console.log(`\n✓ Opérateur « ${utilisateur} » supprimé, ses sessions fermées.\n`);
+  process.exit(0);
+}
+
 if (!utilisateur) {
   console.log(`
 Réinitialiser l'accès au panel Smartfixx
 
   node superadmin/reset-operateur.js --liste
   node superadmin/reset-operateur.js --user <nom> [--mdp <mot de passe>]
+  node superadmin/reset-operateur.js --user <nom> --supprimer
 
 Sans --mdp, un mot de passe est tiré au hasard et affiché une fois.
 `);
