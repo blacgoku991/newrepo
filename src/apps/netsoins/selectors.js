@@ -110,6 +110,12 @@ module.exports = {
     etablissementOpen: '#change_id_etablissement',
     etablissementOption: (value) => `.filter_choose_line[value="${value}"]`,
     search: 'input[type="search"]',
+    // Le champ de recherche se valide par le bouton (loupe) placé juste après
+    // lui dans la barre d'outils. Ce bouton n'a AUCUN libellé accessible : on
+    // le repère par sa position relative au champ, puis, s'il n'en est pas
+    // frère, par la barre d'outils elle-même.
+    searchSubmit: 'input[type="search"] ~ button',
+    searchSubmitAlt: '#content_ajax button',
     resultat: (texte) => `text=${JSON.stringify(texte)}`,
     ficheIntervenant: 'text="Fiche intervenant"',
   },

@@ -708,18 +708,33 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
       label: `Recherche de l'intervenant « ${identifiant} »`,
       run: async (page) => {
         // La recherche NetSoins ne se déclenche qu'à la validation : remplir le
-        // champ sans appuyer sur Entrée laisse la liste entière, et la ligne
-        // cherchée n'apparaît jamais.
+        // champ sans valider laisse la liste entière, et la ligne cherchée
+        // n'apparaît jamais. La validation passe par le bouton (loupe) accolé
+        // au champ ; Entrée n'est qu'un repli si ce bouton reste introuvable.
         const search = L(page, S.liste.search).first();
         let filtre = false;
         try {
           await search.waitFor({ timeout: 3000 });
           await search.click();
           await search.fill(identifiant);
-          await search.press('Enter');
+
+          let valide = '';
+          for (const [voie, sel] of [['bouton de recherche', S.liste.searchSubmit], ['bouton de la barre d’outils', S.liste.searchSubmitAlt]]) {
+            const bouton = L(page, sel).last();
+            try {
+              await bouton.waitFor({ state: 'visible', timeout: 2000 });
+              await bouton.click();
+              valide = voie;
+              break;
+            } catch { /* voie suivante */ }
+          }
+          if (!valide) {
+            await search.press('Enter');
+            valide = 'touche Entrée';
+          }
           await page.waitForTimeout(1200);
           filtre = true;
-          ctx.log(`Recherche lancée sur « ${identifiant} ».`);
+          ctx.log(`Recherche lancée sur « ${identifiant} » (validée par ${valide}).`);
         } catch {
           ctx.log('Pas de champ de recherche — repérage direct dans la liste.');
         }
