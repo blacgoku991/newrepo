@@ -869,3 +869,9 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
   .refus-identite .v { text-align: left; }
   .refus-actions .btn { width: 100%; justify-content: center; }
 }
+
+/* Identifiants des applications métiers, saisis dans les réglages. */
+.ident-app { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.ident-app:last-child { border-bottom: none; padding-bottom: 0; }
+.ident-app:first-child { padding-top: 0; }
+.ident-tete { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }

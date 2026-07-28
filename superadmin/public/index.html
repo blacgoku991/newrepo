@@ -46,10 +46,13 @@
     <section class="vue" id="vue-cle">
       <div class="carte bloc">
         <h2>Clé de signature</h2>
-        <p class="aide">Cette clé publique doit être embarquée dans le produit livré aux clients (constante <code>CLE_PUBLIQUE</code> de <code>src/licence.js</code>). Sans elle, aucune licence émise ici ne sera acceptée.</p>
-        <div class="champ-copie"><code id="cle-publique">…</code><button class="btn" id="copier-cle" type="button">Copier</button></div>
-        <p class="aide">Empreinte à comparer avec celle affichée chez un client : <b id="cle-empreinte">…</b></p>
-        <p class="alerte attention" style="margin-top:14px">La clé <b>privée</b> reste sur ce serveur, hors du dépôt. Sauvegardez-la ailleurs : sans elle, plus aucune licence ne peut être émise ni renouvelée.</p>
+        <p class="aide">Tout est hébergé ici : rien n'est remis aux clients, qui ne reçoivent qu'un lien. Cette clé signe les licences, et les portails que ce serveur démarre la reçoivent automatiquement — vous n'avez rien à recopier nulle part.</p>
+        <p class="alerte attention"><b>Sauvegardez la clé privée hors de ce serveur.</b> Elle vit dans <code>~/.smartfixx/cle-privee.pem</code>. Sans elle, plus aucune licence ne peut être émise ni renouvelée, pour aucun client — c'est le seul élément irremplaçable de l'installation.</p>
+        <details style="margin-top:16px">
+          <summary style="cursor:pointer;color:var(--sourdine);font-size:.88rem">Clé publique correspondante</summary>
+          <p class="aide" style="margin-top:10px">Utile seulement si un client devait un jour héberger le portail lui-même. Empreinte : <b id="cle-empreinte">…</b></p>
+          <div class="champ-copie"><code id="cle-publique">…</code><button class="btn" id="copier-cle" type="button">Copier</button></div>
+        </details>
       </div>
     </section>
   </main>

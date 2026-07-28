@@ -24,6 +24,7 @@ const worker = require('./worker');
 const security = require('./security');
 const licence = require('./licence');
 const marque = require('./marque');
+const secretsApps = require('./secretsApps');
 const comptesProteges = require('./comptesProteges');
 
 const app = express();
@@ -108,6 +109,13 @@ app.use((req, res, next) => {
   return res.redirect(`/connexion?next=${encodeURIComponent(req.originalUrl || '/')}`);
 });
 
+// Identifiants des applications métiers saisis dans les réglages : ils sont
+// posés dans l'environnement AVANT que le worker ne lance le moindre robot.
+{
+  const n = secretsApps.appliquer();
+  if (n) console.log(`[reglages] ${n} identifiant(s) d'application chargé(s) depuis les réglages.`);
+}
+
 // Compte administrateur initial + purge des sessions expirées au démarrage.
 auth.ensureSeedAdmin();
 db.purgeExpiredSessions();
@@ -156,6 +164,10 @@ app.get('/api/sso/me', (req, res) => {
  * défaut, et la bloquer enfermerait l'administrateur dehors.
  */
 const PAGES_NAV = {
+  // La racine sert index.html : sans elle dans cette table, l'onglet
+  // « Applications » avait beau être masqué, l'adresse d'accueil affichait
+  // quand même cette page — et le visiteur ne voyait jamais l'espace référent.
+  '/': 'apps',
   '/index.html': 'apps',
   '/demarches.html': 'demarches',
   '/espace.html': 'espace', '/espace': 'espace',
@@ -1167,6 +1179,37 @@ app.post('/api/admin/exports', auth.requireApi, security.rateLimit('export', 60,
     sso.clientIp(req)
   );
   res.json({ ok: true });
+});
+
+/**
+ * Identifiants des applications métiers.
+ *
+ * Lecture : on dit ce qui est renseigné, jamais les mots de passe — un écran
+ * d'administration reste ouvert sur un poste.
+ */
+app.get('/api/admin/apps/:appId/identifiants', auth.requireApi, (req, res) => {
+  const entry = registry.get(req.params.appId);
+  if (!entry) return res.status(404).json({ error: 'Application inconnue' });
+  res.json({ app: entry.config.name, ...secretsApps.etat(entry.config.id) });
+});
+
+app.put('/api/admin/apps/:appId/identifiants', auth.requireApi, (req, res) => {
+  const entry = registry.get(req.params.appId);
+  if (!entry) return res.status(404).json({ error: 'Application inconnue' });
+  const corps = req.body && typeof req.body === 'object' ? req.body : {};
+  // Liste fermée de champs : sans elle, une requête forgée écrirait n'importe
+  // quelle variable d'environnement du processus.
+  const entrees = {};
+  for (const champ of Object.keys(secretsApps.CHAMPS)) {
+    if (champ in corps) entrees[champ] = String(corps[champ] ?? '').slice(0, 300);
+  }
+  const { modifies } = secretsApps.definir(entry.config.id, entrees, auth.currentSession(req).username);
+  if (modifies.length) {
+    // Le journal retient QUOI a changé, jamais la valeur.
+    db.audit(auth.currentSession(req).username, 'identifiants_application',
+      entry.config.name, modifies.join(', '), sso.clientIp(req));
+  }
+  res.json({ ok: true, modifies, ...secretsApps.etat(entry.config.id) });
 });
 
 app.get('/api/admin/accounts', auth.requireApi, (req, res) => {

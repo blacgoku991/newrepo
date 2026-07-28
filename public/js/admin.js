@@ -1312,6 +1312,8 @@
     el('settings-body').innerHTML = `
       ${secAlerts.length ? `<div class="alert alert-err" style="margin-bottom:18px"><b>Sécurité :</b><ul style="margin:6px 0 0 18px">${secAlerts.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>` : ''}
       ${licenceCardHtml(s.licence || {})}
+      <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Connexion aux applications</h3><span class="hint">compte utilisé par le robot</span></div>
+        <div class="cb" id="ident-apps"><div class="loading">Chargement…</div></div></div>
       <div class="card" style="margin-bottom:18px"><div class="ch"><h3>Navigation du site public</h3><span class="hint">onglets visibles dans le menu</span></div><div class="cb">
         <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px">Décochez un onglet pour le masquer du menu du site public (l'accès direct par l'URL reste possible). « Administration » est masqué par défaut. « Mon espace » n'apparaît de toute façon que pour les référents.</p>
         <div style="display:flex;flex-direction:column;gap:10px">
@@ -1381,6 +1383,10 @@
       }
     });
 
+    // Identifiants des applications métiers : chargés après le rendu des
+    // réglages, chaque application étant interrogée séparément.
+    dessinerIdentifiants(s.apps || []);
+
     const navSave = el('nav-save');
     if (navSave) navSave.addEventListener('click', async () => {
       const cfg = {};
@@ -1388,5 +1394,65 @@
       try { await fetchJson('/api/admin/site-nav', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }); toast('Navigation mise à jour'); }
       catch (e) { toast(e.message, true); }
     });
+  }
+
+  // ========================================================================
+  // Identifiants des applications métiers
+  //
+  // Le compte de service appartient au client : il doit pouvoir le saisir et
+  // le changer sans nous appeler. Les mots de passe ne redescendent jamais du
+  // serveur — un champ laissé vide signifie « inchangé », pas « effacé ».
+  // ========================================================================
+  async function dessinerIdentifiants(apps) {
+    const hote = el('ident-apps');
+    if (!hote) return;
+    if (!apps.length) { hote.innerHTML = '<p class="hint">Aucune application active.</p>'; return; }
+    const etats = [];
+    for (const a of apps) {
+      try { etats.push(await fetchJson(`/api/admin/apps/${encodeURIComponent(a.id)}/identifiants`)); }
+      catch { /* application indisponible : on n'affiche pas de bloc vide */ }
+    }
+    if (!etats.length) { hote.innerHTML = '<p class="hint">Aucune application active.</p>'; return; }
+    hote.innerHTML = etats.map((e) => `
+      <div class="ident-app" data-app="${escapeHtml(e.appId)}">
+        <div class="ident-tete">
+          <b>${escapeHtml(e.app)}</b>
+          ${e.complet ? '<span class="badge st-terminee">Configurée</span>' : '<span class="badge st-en_attente">À renseigner</span>'}
+        </div>
+        <div class="form-grid">
+          ${Object.entries(e.champs).map(([cle, c]) => `
+            <label class="full">${escapeHtml(c.libelle)}
+              <input class="inp" data-champ="${escapeHtml(cle)}"
+                     type="${c.secret ? 'password' : 'text'}"
+                     autocomplete="${c.secret ? 'new-password' : 'off'}"
+                     value="${escapeHtml(c.valeur)}"
+                     placeholder="${c.secret ? (c.renseigne ? 'inchangé — retapez pour modifier' : 'non renseigné') : escapeHtml(c.exemple || '')}" />
+            </label>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+          <button class="btn btn-primary btn-sm" data-enregistrer="${escapeHtml(e.appId)}" type="button">Enregistrer</button>
+        </div>
+      </div>`).join('');
+
+    for (const b of hote.querySelectorAll('[data-enregistrer]')) {
+      b.addEventListener('click', async () => {
+        const bloc = b.closest('.ident-app');
+        const corps = {};
+        for (const champ of bloc.querySelectorAll('[data-champ]')) {
+          // Un mot de passe laissé vide n'est pas envoyé : il reste tel quel.
+          if (champ.type === 'password' && !champ.value) continue;
+          corps[champ.dataset.champ] = champ.value;
+        }
+        b.disabled = true;
+        try {
+          const out = await fetchJson(`/api/admin/apps/${encodeURIComponent(b.dataset.enregistrer)}/identifiants`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps),
+          });
+          toast(out.modifies.length ? `Enregistré : ${out.modifies.join(', ')}` : 'Aucun changement');
+          loadSettings();
+        } catch (e) { toast(e.message, true); }
+        b.disabled = false;
+      });
+    }
   }
 })();
