@@ -49,11 +49,13 @@ const GROUPES = [
       { cle: 'clientId', env: 'M365_CLIENT_ID', libelle: 'Identifiant de l’application' },
       { cle: 'clientSecret', env: 'M365_CLIENT_SECRET', libelle: 'Secret client', secret: true },
       {
-        cle: 'accesPortail', env: 'ACCES_PORTAIL', libelle: 'Qui peut entrer', defaut: 'tenant',
+        // Liste blanche par défaut : le réglage le plus fermé. Ouvrir à toute
+        // l'organisation doit être un choix conscient, jamais un oubli.
+        cle: 'accesPortail', env: 'ACCES_PORTAIL', libelle: 'Qui peut entrer', defaut: 'liste',
         options: [
+          ['liste', 'Uniquement les personnes inscrites dans « Référents »'],
           ['tenant', 'Toute personne de l’organisation'],
           ['attribut', 'Selon un attribut du compte'],
-          ['liste', 'Uniquement les référents déclarés'],
         ],
       },
       { cle: 'accesAttribut', env: 'ACCES_ATTRIBUT', libelle: 'Attribut exigé (mode « attribut »)', exemple: 'extensionAttribute1=REFERENT' },

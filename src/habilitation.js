@@ -24,7 +24,11 @@ const db = require('./db');
 const sso = require('./sso');
 
 const MODES = ['tenant', 'attribut', 'liste'];
-const MODE_DEFAUT = 'tenant';
+// Liste blanche par défaut : le réglage le plus fermé. Ouvrir le portail à
+// toute une organisation doit être un choix conscient, jamais un oubli de
+// configuration. L'administrateur du portail, lui, garde son accès par mot de
+// passe : personne ne peut se retrouver enfermé dehors.
+const MODE_DEFAUT = 'liste';
 
 function mode() {
   const m = String(process.env.ACCES_PORTAIL || '').trim().toLowerCase();
@@ -170,4 +174,47 @@ function etat() {
   };
 }
 
-module.exports = { mode, regles, attributs, valeursDe, verifie, ouvertePour, etat, utilisable, MODES };
+/**
+ * Décision d'entrée, prise À LA CONNEXION.
+ *
+ * C'est le seul point où l'on tranche : laisser entrer quelqu'un qui ne pourra
+ * rien faire, puis le refuser trois écrans plus loin, est la pire des façons
+ * de dire non.
+ *
+ *  - `tenant`   : appartenir au tenant suffit (le jeton l'a déjà prouvé) ;
+ *  - `attribut` : les attributs du compte doivent correspondre ;
+ *  - `liste`    : le compte doit figurer parmi les référents déclarés — c'est
+ *                 la liste blanche, et une fiche désactivée vaut refus.
+ *
+ * Dans TOUS les modes, une fiche référent désactivée ferme la porte : c'est le
+ * geste par lequel on retire un accès, il doit primer.
+ *
+ * @returns {{ok:boolean, motif:string, detail:string}}
+ */
+function autoriseConnexion(claims, email) {
+  const db = require('./db');
+  const adresse = String(email || '').toLowerCase();
+  const fiche = adresse ? db.getReferentByEmail(adresse) : null;
+
+  if (fiche && !fiche.active) {
+    return { ok: false, motif: 'desactive', detail: 'fiche référent désactivée' };
+  }
+
+  const m = mode();
+  if (m === 'liste') {
+    return fiche
+      ? { ok: true, motif: '', detail: 'référent déclaré' }
+      : { ok: false, motif: 'ferme', detail: 'absent de la liste des référents' };
+  }
+  if (m === 'attribut') {
+    // Une fiche référent l'emporte : elle a été posée sciemment.
+    if (fiche) return { ok: true, motif: '', detail: 'référent déclaré' };
+    const r = verifie(claims);
+    return r.ok
+      ? { ok: true, motif: '', detail: r.detail }
+      : { ok: false, motif: 'ferme', detail: r.detail };
+  }
+  return { ok: true, motif: '', detail: 'membre du tenant' };
+}
+
+module.exports = { mode, regles, attributs, valeursDe, verifie, ouvertePour, etat, utilisable, autoriseConnexion, MODES };

@@ -190,10 +190,16 @@ async function callbackRoute(req, res) {
     // entrer quelqu'un qui ne pourra rien faire, puis le refuser trois écrans
     // plus loin, est la pire des façons de dire non.
     const habilitation = require('./habilitation');
-    if (!habilitation.verifie(claims)) {
+    // `verifie()` rend un OBJET : le tester directement serait toujours vrai et
+    // n'aurait jamais refusé personne. On passe par la décision complète, qui
+    // couvre aussi la liste blanche des référents.
+    const decision = habilitation.autoriseConnexion(claims, email);
+    if (!decision.ok) {
       db.audit(`${name} <${email}>`, 'connexion_sso_refusee', '',
-        `non habilité (mode ${habilitation.mode()})`, clientIp(req));
-      return res.redirect(`/acces-refuse.html?motif=ferme&compte=${encodeURIComponent(email)}`);
+        `${decision.detail} (mode ${habilitation.mode()})`, clientIp(req));
+      return res.redirect(
+        `/acces-refuse.html?motif=${encodeURIComponent(decision.motif)}&compte=${encodeURIComponent(email)}`
+      );
     }
 
     const token = b64url(crypto.randomBytes(32));
