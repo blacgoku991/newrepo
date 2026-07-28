@@ -106,12 +106,22 @@ vérification est hors ligne. Pour fermer réellement, archivez.
 Un enregistrement **générique** suffit. Vous n'aurez plus jamais à toucher au
 DNS en ajoutant une société :
 
-```
-*.smartfixx.fr.   IN  A   <adresse IP du serveur>
-saas.smartfixx.fr. IN A   <adresse IP du serveur>
-```
+| Type | Nom | Cible |
+|---|---|---|
+| A | `*` | adresse IP du serveur |
 
-`smartfixx.fr` lui-même n'est pas touché : votre site vitrine reste où il est.
+C'est tout. `saas`, `adef`, et toute société future sont couverts.
+
+⚠️ **`*.smartfixx.fr` ne couvre PAS `smartfixx.fr` lui-même.** C'est une bonne
+nouvelle : votre site vitrine reste intact tant que l'enregistrement racine
+n'est pas modifié. Les enregistrements `MX` (messagerie) ne sont pas non plus
+concernés.
+
+Un enregistrement explicite l'emporte toujours sur le générique : si `www` a
+déjà le sien, il continue de pointer où il pointait.
+
+Pour servir aussi le site vitrine depuis ce serveur, ajoutez alors `@` et `www`
+en `A` vers la même adresse, et un bloc nginx dédié.
 
 ### Certificat — une seule fois
 
@@ -120,10 +130,17 @@ Il exige la validation par DNS (`--dns-ovh`), la validation par HTTP ne sachant
 pas produire de certificat générique :
 
 ```bash
+# Site vitrine hébergé ailleurs (cas habituel) : le générique suffit.
 certbot certonly --dns-ovh \
-  --dns-ovh-credentials ~/.secrets/ovh.ini \
-  -d smartfixx.fr -d '*.smartfixx.fr'
+  --dns-ovh-credentials /root/.ovh.ini \
+  -d '*.smartfixx.fr'
+
+# Site vitrine servi par CE serveur : ajouter le domaine racine.
+#   ... -d 'smartfixx.fr' -d '*.smartfixx.fr'
 ```
+
+La validation par DNS pose un enregistrement `TXT` temporaire : elle
+fonctionne même si le domaine racine pointe vers un autre hébergeur.
 
 ### nginx — une seule fois
 

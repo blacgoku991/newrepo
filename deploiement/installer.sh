@@ -121,9 +121,19 @@ cat <<FIN
       # Créer les identifiants sur https://api.ovh.com/createToken/
       # Droits : GET/POST/PUT/DELETE sur /domain/zone/*
       nano /root/.ovh.ini && chmod 600 /root/.ovh.ini
+
+      # Si votre site vitrine reste hébergé ailleurs (cas habituel) :
       certbot certonly --dns-ovh --dns-ovh-credentials /root/.ovh.ini \\
-              -d '$DOMAINE' -d '*.$DOMAINE'
+              -d '*.$DOMAINE'
+
+      # S'il est servi par CE serveur, ajoutez le domaine racine :
+      #   ... -d '$DOMAINE' -d '*.$DOMAINE'
+
       bash $RACINE/deploiement/activer-tls.sh
+
+  Rappel DNS : « *.$DOMAINE » ne couvre PAS « $DOMAINE » lui-même.
+  Votre site vitrine reste donc intact tant que l'enregistrement
+  racine n'est pas modifié.
 
   Ensuite : https://saas.$DOMAINE
   ────────────────────────────────────────────────────────────────
