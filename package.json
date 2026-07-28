@@ -4,10 +4,10 @@
   "description": "Portail de demandes de création de comptes sur les applications métiers, avec automatisation Playwright",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "postinstall": "playwright install chromium || true",
-    "panel": "node superadmin/server.js"
+    "start": "node superadmin/index.js",
+    "portail": "node src/server.js",
+    "dev": "node --watch superadmin/index.js",
+    "postinstall": "playwright install chromium || true"
   },
   "engines": {
     "node": ">=20"

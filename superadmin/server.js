@@ -6,10 +6,9 @@
  * ⚠️ Ce panel n'a RIEN à voir avec l'administration d'un client. Il pilote
  * l'ensemble du parc : qui est client, jusqu'à quand, et sous quelle licence.
  *
- * Il écoute donc sur 127.0.0.1 par défaut : on y accède par tunnel SSH ou
- * derrière un reverse proxy authentifié, jamais directement depuis Internet.
- * Mettre SMARTFIXX_HOST=0.0.0.0 est un choix conscient, à ne faire qu'avec
- * TLS et une restriction d'adresses en amont.
+ * Ce module n'ouvre aucun port : il est monté par `superadmin/index.js`, le
+ * point d'entrée unique, qui écoute et aiguille selon le nom d'hôte —
+ * saas.smartfixx.fr mène ici, adef.smartfixx.fr mène à l'instance d'ADEF.
  *
  * Modèle d'hébergement : UNE INSTANCE PAR SOCIÉTÉ. Chaque cliente a son
  * processus et sa base ; aucune requête ne peut traverser d'une société à
@@ -23,10 +22,9 @@ const express = require('express');
 const db = require('./lib/db');
 const signature = require('./lib/signature');
 const logos = require('./lib/logos');
+const orchestrateur = require('./lib/orchestrateur');
 
 const app = express();
-const PORT = Number(process.env.SMARTFIXX_PORT || 4000);
-const HOST = process.env.SMARTFIXX_HOST || '127.0.0.1';
 const COOKIE = 'smartfixx_sid';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -190,26 +188,73 @@ app.get('/api/moi', exigeSession, (req, res) => {
 
 const texte = (v, max = 200) => String(v == null ? '' : v).trim().slice(0, max);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DOMAINE = (process.env.SMARTFIXX_DOMAINE || 'smartfixx.fr').toLowerCase();
+// Sous-domaines qui mèneraient au panel ou à un service : jamais attribuables.
+const SOUS_DOMAINES_RESERVES = new Set(['saas', 'panel', 'www', 'admin', 'api', 'mail', 'smtp', 'ftp', 'ns', 'localhost']);
+
+/** Valide un sous-domaine, ou le déduit du nom de la société. */
+function sousDomaineValide(saisi, nom) {
+  const valeur = db.slug(texte(saisi, 40) || nom);
+  if (!valeur) return { ok: false, erreur: 'Sous-domaine vide.' };
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(valeur)) {
+    return { ok: false, erreur: 'Sous-domaine invalide : lettres, chiffres et tirets uniquement.' };
+  }
+  if (SOUS_DOMAINES_RESERVES.has(valeur)) {
+    return { ok: false, erreur: `« ${valeur} » est réservé.` };
+  }
+  return { ok: true, valeur };
+}
 
 app.get('/api/societes', exigeSession, (req, res) => {
-  const societes = db.vue().map((s) => ({ ...s, logo: !!logos.trouver(s.id) }));
-  res.json({ societes, echeances: db.echeances(60), empreinteCle: signature.empreinte() });
+  const marche = orchestrateur.etat();
+  const societes = db.vue().map((s) => ({
+    ...s,
+    logo: !!logos.trouver(s.id),
+    instance: s.sousDomaine && marche[s.sousDomaine]
+      ? { enMarche: true, port: marche[s.sousDomaine].port, depuis: marche[s.sousDomaine].depuis }
+      : { enMarche: false },
+  }));
+  res.json({ societes, echeances: db.echeances(60), empreinteCle: signature.empreinte(), domaine: DOMAINE });
+});
+
+// --- Pilotage des instances --------------------------------------------------
+
+app.post('/api/societes/:id/instance/:action', exigeSession, async (req, res) => {
+  const s = db.societe(Number(req.params.id));
+  if (!s) return res.status(404).json({ error: 'Société introuvable' });
+  const action = String(req.params.action);
+  let r;
+  if (action === 'demarrer') r = orchestrateur.demarrer(s.id);
+  else if (action === 'arreter') r = orchestrateur.arreter(s.sous_domaine);
+  else if (action === 'redemarrer') r = await orchestrateur.redemarrer(s.id);
+  else return res.status(400).json({ error: 'Action inconnue' });
+
+  if (!r.ok) return res.status(409).json({ error: r.raison });
+  db.tracer(req.operateur.username, `instance_${action}`, s.nom, s.sous_domaine, ip(req));
+  res.json({ ok: true, ...r });
 });
 
 app.post('/api/societes', exigeSession, (req, res) => {
   const nom = texte(req.body?.nom, 120);
   if (!nom) return res.status(400).json({ error: 'Le nom de la société est obligatoire.' });
   if (db.societeParNom(nom)) return res.status(409).json({ error: 'Une société porte déjà ce nom.' });
+  const sd = sousDomaineValide(req.body?.sousDomaine, nom);
+  if (!sd.ok) return res.status(400).json({ error: sd.erreur });
+  if (db.societeParSousDomaine(sd.valeur)) {
+    return res.status(409).json({ error: `Le sous-domaine « ${sd.valeur} » est déjà pris.` });
+  }
   const id = db.creerSociete({
     nom,
     contactNom: texte(req.body?.contactNom, 120),
     contactEmail: texte(req.body?.contactEmail, 160),
     notes: texte(req.body?.notes, 1000),
-    instanceUrl: texte(req.body?.instanceUrl, 200),
-    instancePort: Number(req.body?.instancePort) || null,
+    sousDomaine: sd.valeur,
+    // L'adresse publique découle du sous-domaine : rien à saisir deux fois.
+    instanceUrl: `https://${sd.valeur}.${DOMAINE}`,
+    instancePort: null,
   });
-  db.tracer(req.operateur.username, 'societe_creee', nom, '', ip(req));
-  res.json({ ok: true, id });
+  db.tracer(req.operateur.username, 'societe_creee', nom, `${sd.valeur}.${DOMAINE}`, ip(req));
+  res.json({ ok: true, id, sousDomaine: sd.valeur });
 });
 
 app.put('/api/societes/:id', exigeSession, (req, res) => {
@@ -218,15 +263,22 @@ app.put('/api/societes/:id', exigeSession, (req, res) => {
   const nom = texte(req.body?.nom, 120) || s.nom;
   const autre = db.societeParNom(nom);
   if (autre && autre.id !== s.id) return res.status(409).json({ error: 'Une société porte déjà ce nom.' });
+  const sd = sousDomaineValide(req.body?.sousDomaine, nom);
+  if (!sd.ok) return res.status(400).json({ error: sd.erreur });
+  const occupant = db.societeParSousDomaine(sd.valeur);
+  if (occupant && occupant.id !== s.id) {
+    return res.status(409).json({ error: `Le sous-domaine « ${sd.valeur} » est déjà pris.` });
+  }
   db.majSociete(s.id, {
     nom,
     contactNom: texte(req.body?.contactNom, 120),
     contactEmail: texte(req.body?.contactEmail, 160),
     notes: texte(req.body?.notes, 1000),
-    instanceUrl: texte(req.body?.instanceUrl, 200),
-    instancePort: Number(req.body?.instancePort) || null,
+    sousDomaine: sd.valeur,
+    instanceUrl: `https://${sd.valeur}.${DOMAINE}`,
+    instancePort: s.instance_port,
   });
-  db.tracer(req.operateur.username, 'societe_modifiee', nom, '', ip(req));
+  db.tracer(req.operateur.username, 'societe_modifiee', nom, `${sd.valeur}.${DOMAINE}`, ip(req));
   res.json({ ok: true });
 });
 
@@ -235,6 +287,10 @@ app.post('/api/societes/:id/archiver', exigeSession, (req, res) => {
   if (!s) return res.status(404).json({ error: 'Société introuvable' });
   const archivee = !!req.body?.archivee;
   db.archiverSociete(s.id, archivee);
+  // Archiver doit COUPER l'accès, pas seulement griser une carte : c'est le
+  // seul geste qui ferme réellement le portail d'un client.
+  if (archivee) orchestrateur.arreter(s.sous_domaine);
+  else orchestrateur.demarrer(s.id);
   db.tracer(req.operateur.username, archivee ? 'societe_archivee' : 'societe_reactivee', s.nom, '', ip(req));
   res.json({ ok: true });
 });
@@ -297,7 +353,7 @@ app.get('/api/societes/:id/licences', exigeSession, (req, res) => {
  * anticipé doit laisser l'ancienne valable jusqu'à son terme, sinon on coupe le
  * client entre les deux. La révocation est un geste explicite.
  */
-app.post('/api/societes/:id/licences', exigeSession, (req, res) => {
+app.post('/api/societes/:id/licences', exigeSession, async (req, res) => {
   const s = db.societe(Number(req.params.id));
   if (!s) return res.status(404).json({ error: 'Société introuvable' });
 
@@ -322,7 +378,15 @@ app.post('/api/societes/:id/licences', exigeSession, (req, res) => {
   const motif = db.licences(s.id).length ? 'renouvellement' : 'creation';
   const id = db.ajouterLicence(s.id, { jeton, client: s.nom, debut, fin, grace, motif, par: req.operateur.username });
   db.tracer(req.operateur.username, 'licence_emise', s.nom, `${motif} — du ${debut} au ${fin}`, ip(req));
-  res.json({ ok: true, id, jeton, debut, fin, motif });
+  // La licence est posée dans l'instance au démarrage : on la (re)lance pour
+  // qu'elle en tienne compte tout de suite, sans intervention sur le serveur.
+  let instance = null;
+  try {
+    instance = await orchestrateur.redemarrer(s.id);
+  } catch (e) {
+    instance = { ok: false, raison: e.message };
+  }
+  res.json({ ok: true, id, jeton, debut, fin, motif, instance });
 });
 
 app.post('/api/licences/:id/revoquer', exigeSession, (req, res) => {
@@ -365,15 +429,9 @@ amorcerOperateur();
 db.purgerSessions();
 setInterval(() => { try { db.purgerSessions(); } catch { /* confort */ } }, 3600 * 1000).unref();
 
-if (require.main === module) {
-  app.listen(PORT, HOST, () => {
-    console.log(`Panel Smartfixx : http://${HOST}:${PORT}`);
-    console.log(`Registre : ${db.FICHIER}`);
-    console.log(`Empreinte de la clé de signature : ${signature.empreinte()}`);
-    if (HOST === '0.0.0.0') {
-      console.warn('[panel] ⚠ Écoute sur toutes les interfaces : à ne faire que derrière TLS et un filtrage d’adresses.');
-    }
-  });
-}
+console.log(`[panel] Registre : ${db.FICHIER}`);
+console.log(`[panel] Empreinte de la clé de signature : ${signature.empreinte()}`);
 
+// Le panel n'ouvre PAS de port : c'est `superadmin/index.js` qui écoute et
+// aiguille, pour qu'il n'y ait qu'un seul programme à lancer.
 module.exports = app;

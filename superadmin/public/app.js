@@ -51,6 +51,7 @@
   // ==========================================================================
   let parc = [];
   let echeances = [];
+  let domaine = 'smartfixx.fr';
 
   const toast = (msg, erreur) => {
     const t = el('toast');
@@ -79,11 +80,6 @@
     const d = new Date(String(iso || '').replace(' ', 'T') + 'Z');
     return Number.isNaN(d.getTime()) ? '—'
       : d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
-  const dansUnAn = () => {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() + 1);
-    return d.toISOString().slice(0, 10);
   };
 
   /** État d'une licence, en une étiquette. */
@@ -121,6 +117,7 @@
     catch (e) { el('liste').innerHTML = `<div class="alerte err">${echapper(e.message)}</div>`; return; }
     parc = d.societes;
     echeances = d.echeances;
+    domaine = d.domaine || domaine;
     dessinerKpis();
     dessinerListe();
   }
@@ -177,13 +174,22 @@
         </div>
         <dl class="infos">
           <dt>Licence</dt><dd>${s.licence ? `du ${dateFr(s.licence.debut)} au <b>${dateFr(s.licence.fin)}</b>` : '<span class="aide">aucune émise</span>'}</dd>
-          <dt>Instance</dt><dd>${s.instanceUrl ? `<a href="${echapper(s.instanceUrl)}" target="_blank" rel="noreferrer noopener">${echapper(s.instanceUrl)}</a>` : '<span class="aide">non renseignée</span>'}</dd>
+          <dt>Adresse</dt><dd>${s.sousDomaine
+            ? `<a href="https://${echapper(s.sousDomaine)}.${echapper(domaine)}" target="_blank" rel="noreferrer noopener">${echapper(s.sousDomaine)}.${echapper(domaine)}</a>`
+            : '<span class="aide">aucun sous-domaine</span>'}</dd>
+          <dt>Portail</dt><dd>${s.instance && s.instance.enMarche
+            ? `<span class="etiq ok">En marche</span>`
+            : `<span class="etiq neutre">Arrêté</span>`}</dd>
           <dt>Historique</dt><dd>${s.nbLicences} licence(s)</dd>
         </dl>
         <div class="actions">
           <button class="btn primaire" data-emettre="${s.id}" type="button">${s.licence ? 'Renouveler' : 'Émettre une licence'}</button>
           <button class="btn" data-historique="${s.id}" type="button">Historique</button>
           <button class="btn discret" data-modifier="${s.id}" type="button">Modifier</button>
+          ${s.instance && s.instance.enMarche
+            ? `<button class="btn discret" data-instance="arreter" data-sid="${s.id}" type="button">Arrêter</button>
+               <button class="btn discret" data-instance="redemarrer" data-sid="${s.id}" type="button">Redémarrer</button>`
+            : `<button class="btn discret" data-instance="demarrer" data-sid="${s.id}" type="button">Démarrer</button>`}
           <button class="btn discret" data-archiver="${s.id}" type="button">${s.archivee ? 'Réactiver' : 'Archiver'}</button>
         </div>
       </div>`;
@@ -193,6 +199,18 @@
     for (const b of el('liste').querySelectorAll('[data-historique]')) b.addEventListener('click', () => historique(Number(b.dataset.historique)));
     for (const b of el('liste').querySelectorAll('[data-modifier]')) b.addEventListener('click', () => fiche(Number(b.dataset.modifier)));
     for (const b of el('liste').querySelectorAll('[data-archiver]')) b.addEventListener('click', () => archiver(Number(b.dataset.archiver)));
+    for (const b of el('liste').querySelectorAll('[data-instance]')) {
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await poster(`/api/societes/${b.dataset.sid}/instance/${b.dataset.instance}`);
+          toast({ demarrer: 'Portail démarré', arreter: 'Portail arrêté', redemarrer: 'Portail redémarré' }[b.dataset.instance]);
+        } catch (e) { toast(e.message, true); }
+        // Le démarrage prend un instant : on laisse l'instance s'installer
+        // avant de relire l'état, sinon la carte annonce « arrêté » à tort.
+        setTimeout(charger, 1200);
+      });
+    }
   }
 
   el('recherche').addEventListener('input', dessinerListe);
@@ -204,13 +222,17 @@
     const s = id ? parc.find((x) => x.id === id) : null;
     ouvrir(`
       <h2>${s ? 'Modifier la société' : 'Nouvelle société'}</h2>
-      <p class="aide">Le nom saisi ici est celui qui apparaîtra dans la licence, sur le portail du client.</p>
+      <p class="aide">Le nom apparaîtra dans la licence et sur le portail du client. Le sous-domaine donne son adresse ; laissé vide, il est déduit du nom.</p>
       <div class="grille" style="margin-top:16px">
         <label class="pleine">Nom de la société<input type="text" id="f-nom" value="${echapper(s ? s.nom : '')}" /></label>
         <label>Contact<input type="text" id="f-contact" value="${echapper(s ? s.contactNom : '')}" /></label>
         <label>E-mail<input type="email" id="f-email" value="${echapper(s ? s.contactEmail : '')}" /></label>
-        <label>Adresse de l'instance<input type="text" id="f-url" placeholder="https://client.smartfixx.fr" value="${echapper(s ? s.instanceUrl : '')}" /></label>
-        <label>Port<input type="number" id="f-port" value="${s && s.instancePort ? s.instancePort : ''}" /></label>
+        <label class="pleine">Sous-domaine
+          <span class="champ-suffixe">
+            <input type="text" id="f-sd" placeholder="adef" value="${echapper(s ? s.sousDomaine : '')}" />
+            <span class="suffixe">.${echapper(domaine)}</span>
+          </span>
+        </label>
         <label class="pleine">Notes<textarea id="f-notes">${echapper(s ? s.notes : '')}</textarea></label>
       </div>
       ${s ? `<div class="bloc-logo">
@@ -239,8 +261,7 @@
         nom: el('f-nom').value.trim(),
         contactNom: el('f-contact').value.trim(),
         contactEmail: el('f-email').value.trim(),
-        instanceUrl: el('f-url').value.trim(),
-        instancePort: el('f-port').value,
+        sousDomaine: el('f-sd').value.trim(),
         notes: el('f-notes').value.trim(),
       };
       try {
@@ -341,7 +362,8 @@
           ...(grace === '' ? {} : { grace: Number(grace) }),
         });
         montrerJeton(s.nom, out);
-        charger();
+        if (out.instance && !out.instance.ok) toast(`Portail non démarré : ${out.instance.raison}`, true);
+        setTimeout(charger, 1200);
       } catch (ex) {
         el('l-err').textContent = ex.message;
         el('l-err').hidden = false;

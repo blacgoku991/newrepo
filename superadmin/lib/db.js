@@ -35,6 +35,8 @@ db.exec(`
     notes TEXT NOT NULL DEFAULT '',
     -- Instance dédiée à cette société (une par client : cloisonnement par
     -- construction). Renseignée à la mise en service.
+    -- Sous-domaine servi : adef → https://adef.smartfixx.fr
+    sous_domaine TEXT NOT NULL DEFAULT '',
     instance_url TEXT NOT NULL DEFAULT '',
     instance_port INTEGER,
     archivee INTEGER NOT NULL DEFAULT 0,
@@ -86,25 +88,54 @@ db.exec(`
   );
 `);
 
+// Migration des registres créés avant le routage par sous-domaine.
+const colonnes = db.prepare(`PRAGMA table_info(societes)`).all().map((c) => c.name);
+if (!colonnes.includes('sous_domaine')) {
+  db.exec(`ALTER TABLE societes ADD COLUMN sous_domaine TEXT NOT NULL DEFAULT ''`);
+}
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_societes_sd
+           ON societes(sous_domaine) WHERE sous_domaine <> ''`);
+
 const jourISO = (d) => new Date(d).toISOString().slice(0, 10);
+
+/**
+ * Sous-domaine à partir du nom : « ADEF Résidences » → « adef-residences ».
+ * Seuls les caractères d'un nom d'hôte sont conservés.
+ */
+function slug(nom) {
+  return String(nom || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
 
 module.exports = {
   FICHIER,
 
   // --- Sociétés --------------------------------------------------------------
 
-  creerSociete({ nom, contactNom, contactEmail, notes, instanceUrl, instancePort }) {
+  slug,
+
+  societeParSousDomaine(sd) {
+    return db.prepare(`SELECT * FROM societes WHERE sous_domaine = ? AND sous_domaine <> ''`).get(sd);
+  },
+
+  creerSociete({ nom, contactNom, contactEmail, notes, instanceUrl, instancePort, sousDomaine }) {
     const info = db
-      .prepare(`INSERT INTO societes (nom, contact_nom, contact_email, notes, instance_url, instance_port)
-                VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(nom, contactNom || '', contactEmail || '', notes || '', instanceUrl || '', instancePort || null);
+      .prepare(`INSERT INTO societes (nom, contact_nom, contact_email, notes, instance_url, instance_port, sous_domaine)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(nom, contactNom || '', contactEmail || '', notes || '', instanceUrl || '', instancePort || null, sousDomaine || '');
     return info.lastInsertRowid;
   },
 
-  majSociete(id, { nom, contactNom, contactEmail, notes, instanceUrl, instancePort }) {
+  majSociete(id, { nom, contactNom, contactEmail, notes, instanceUrl, instancePort, sousDomaine }) {
+    const actuelle = db.prepare(`SELECT sous_domaine FROM societes WHERE id = ?`).get(id) || {};
     db.prepare(`UPDATE societes SET nom = ?, contact_nom = ?, contact_email = ?, notes = ?,
-                       instance_url = ?, instance_port = ? WHERE id = ?`)
-      .run(nom, contactNom || '', contactEmail || '', notes || '', instanceUrl || '', instancePort || null, id);
+                       instance_url = ?, instance_port = ?, sous_domaine = ? WHERE id = ?`)
+      .run(nom, contactNom || '', contactEmail || '', notes || '', instanceUrl || '', instancePort || null,
+           sousDomaine === undefined ? actuelle.sous_domaine || '' : sousDomaine, id);
   },
 
   archiverSociete(id, archivee) {
@@ -141,6 +172,7 @@ module.exports = {
         contactNom: s.contact_nom,
         contactEmail: s.contact_email,
         notes: s.notes,
+        sousDomaine: s.sous_domaine,
         instanceUrl: s.instance_url,
         instancePort: s.instance_port,
         archivee: !!s.archivee,

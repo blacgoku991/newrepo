@@ -218,7 +218,10 @@ function etat() {
     };
   }
 
-  const jeton = db.getSetting('licence_jeton', null);
+  // En hébergement mutualisé, la licence est posée par l'orchestrateur au
+  // démarrage de l'instance : pas de copier-coller manuel dans les réglages.
+  // Le réglage en base reste prioritaire (client qui héberge lui-même).
+  const jeton = db.getSetting('licence_jeton', null) || process.env.LICENCE_JETON || null;
   if (!jeton) {
     return {
       ...base,

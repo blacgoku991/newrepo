@@ -208,3 +208,12 @@ table.donnees tr:last-child td { border-bottom: none; }
 .apercu img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
 .apercu .pastille { width: 100%; height: 100%; border-radius: 0; font-size: 1.5rem; }
 @media (max-width: 480px) { .bloc-logo { flex-direction: column; } }
+
+/* Sous-domaine : le suffixe fixe reste visible pendant la saisie. */
+.champ-suffixe { display: flex; align-items: stretch; }
+.champ-suffixe input { border-radius: 9px 0 0 9px; border-right: none; }
+.champ-suffixe .suffixe {
+  display: flex; align-items: center; padding: 0 13px; white-space: nowrap;
+  background: var(--fond); border: 1px solid var(--ligne-2); border-left: none;
+  border-radius: 0 9px 9px 0; color: var(--sourdine); font-size: .9rem;
+}
