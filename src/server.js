@@ -1115,7 +1115,10 @@ app.get('/api/admin/audit', auth.requireApi, (req, res) => {
  * L'export est produit par le navigateur à partir des lignes déjà affichées :
  * rien de neuf ne sort d'ici. Mais extraire des données nominatives doit
  * laisser une trace — qui, quand, quelle vue, combien de lignes, quels filtres.
- * Le journal ne contient donc AUCUNE donnée personnelle, seulement le geste.
+ *
+ * Aucune ligne exportée n'est recopiée dans le journal. Le terme de recherche,
+ * lui, y figure : il peut contenir un nom, et c'est justement ce qui rend la
+ * trace exploitable (« qui a extrait les données de qui »).
  */
 app.post('/api/admin/exports', auth.requireApi, security.rateLimit('export', 60, 10 * 60 * 1000), (req, res) => {
   const VUES = { demandes: 'Demandes', journal: "Journal d'activité" };
@@ -1127,7 +1130,9 @@ app.post('/api/admin/exports', auth.requireApi, security.rateLimit('export', 60,
   const f = req.body?.filtres && typeof req.body.filtres === 'object' ? req.body.filtres : {};
   const resume = Object.entries(f)
     .filter(([, v]) => v !== null && v !== undefined && v !== '' && typeof v !== 'object')
-    .map(([k, v]) => `${k} : ${String(v).slice(0, 80)}`)
+    // Les retours à la ligne sont retirés : sans cela, un filtre forgé pourrait
+    // se faire passer pour plusieurs entrées dans un journal exporté en texte.
+    .map(([k, v]) => `${k} : ${String(v).replace(/[\r\n\t]+/g, ' ').slice(0, 80)}`)
     .slice(0, 6)
     .join(' · ');
   const session = auth.currentSession(req);
