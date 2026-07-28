@@ -64,6 +64,87 @@ function dossierDe(sousDomaine) {
 }
 
 /**
+ * Gabarit du fichier de réglages d'une société.
+ *
+ * Il est écrit une seule fois, à la création de l'instance, et jamais réécrit :
+ * on n'écrase pas ce que l'exploitant a saisi.
+ *
+ * PORT, DATA_DIR, la licence et le nom de la société sont posés par
+ * l'orchestrateur : les mettre ici n'aurait aucun effet.
+ */
+const GABARIT_ENV = `# ---------------------------------------------------------------------------
+# Réglages de cette société.
+#
+# Ce fichier ne quitte jamais ce dossier : ces secrets ne transitent pas par le
+# panel et ne figurent pas dans son registre.
+#
+# Après toute modification : « Redémarrer » depuis le panel.
+# ---------------------------------------------------------------------------
+
+# --- Administrateur du portail de cette société ----------------------------
+# Compte local (https://<sous-domaine>/admin.html). Créé au premier démarrage.
+# Sans mot de passe ici, un aléatoire est tiré et affiché une seule fois dans
+# le journal du serveur.
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=
+ADMIN_DISPLAY_NAME=Administrateur
+
+# --- Connexion Microsoft 365 des référents ---------------------------------
+# Inscription à faire dans l'Entra ID DE LA SOCIÉTÉ (Applications > Nouvelle
+# inscription). L'URL de retour à y déclarer est exactement :
+#   https://<sous-domaine>.smartfixx.fr/auth/sso/callback
+M365_TENANT_ID=
+M365_CLIENT_ID=
+M365_CLIENT_SECRET=
+
+# Tant que ces trois valeurs sont vides, le portail reste OUVERT : à ne laisser
+# ainsi qu'en recette, jamais avec de vraies données.
+SSO_REQUIRED=true
+
+# Qui entre : tenant (toute l'organisation) | attribut | liste (référents déclarés)
+ACCES_PORTAIL=tenant
+# En mode « attribut », la règle à satisfaire. Ex. : extensionAttribute1=REFERENT
+ACCES_ATTRIBUT=
+
+# --- BlueKanGo -------------------------------------------------------------
+# Compte de service du robot. Il n'a pas à être un compte nominatif.
+BLUEKANGO_URL=
+BLUEKANGO_ADMIN_USER=
+BLUEKANGO_ADMIN_PASSWORD=
+# Mot de passe posé sur les comptes créés, à changer à la première connexion.
+BLUEKANGO_DEFAULT_PASSWORD=
+
+# --- NetSoins --------------------------------------------------------------
+NETSOINS_URL=
+NETSOINS_ADMIN_USER=
+NETSOINS_ADMIN_PASSWORD=
+NETSOINS_DEFAULT_PASSWORD=
+
+# Applications réellement proposées à cette société.
+APPS_ACTIVES=bluekango,netsoins
+
+# --- Envoi des e-mails d'identifiants --------------------------------------
+# Sans SMTP, les e-mails sont préparés et visibles dans l'admin, mais pas
+# envoyés : rien n'est perdu, tout est rattrapable.
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+
+# --- Robot -----------------------------------------------------------------
+# production : agit sur les vraies applications. demo : console intégrée.
+AUTOMATION_MODE=production
+# Demandes traitées en même temps. Une seule par application : les robots
+# partagent le même compte de service, deux sessions se gêneraient.
+WORKER_PARALLELE=3
+
+# --- Tableau de bord de valeur ---------------------------------------------
+# Coût horaire chargé servant à convertir le temps gagné en euros.
+TAUX_HORAIRE=28
+`;
+
+/**
  * Réglages propres à une société (identifiants BlueKanGo/NetSoins, SSO…).
  *
  * Ils vivent dans un fichier `.env` de son dossier, jamais dans le registre :
@@ -72,14 +153,7 @@ function dossierDe(sousDomaine) {
 function environnementDe(dossier) {
   const fichier = path.join(dossier, '.env');
   if (!fs.existsSync(fichier)) {
-    fs.writeFileSync(fichier,
-      '# Réglages propres à cette société : identifiants des applications\n' +
-      '# métiers, SSO Microsoft 365, SMTP. Ce fichier ne quitte jamais ce dossier.\n' +
-      '# Redémarrez l\'instance depuis le panel après modification.\n\n' +
-      '# BLUEKANGO_URL=\n# BLUEKANGO_ADMIN_USER=\n# BLUEKANGO_ADMIN_PASSWORD=\n' +
-      '# NETSOINS_URL=\n# NETSOINS_ADMIN_USER=\n# NETSOINS_ADMIN_PASSWORD=\n' +
-      '# M365_TENANT_ID=\n# M365_CLIENT_ID=\n# M365_CLIENT_SECRET=\n',
-      { mode: 0o600 });
+    fs.writeFileSync(fichier, GABARIT_ENV, { mode: 0o600 });
     return {};
   }
   const out = {};
