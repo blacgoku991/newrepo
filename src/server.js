@@ -1109,6 +1109,38 @@ app.get('/api/admin/audit', auth.requireApi, (req, res) => {
   res.json({ entries: db.listAudit(limit) });
 });
 
+/**
+ * Trace d'un export CSV.
+ *
+ * L'export est produit par le navigateur à partir des lignes déjà affichées :
+ * rien de neuf ne sort d'ici. Mais extraire des données nominatives doit
+ * laisser une trace — qui, quand, quelle vue, combien de lignes, quels filtres.
+ * Le journal ne contient donc AUCUNE donnée personnelle, seulement le geste.
+ */
+app.post('/api/admin/exports', auth.requireApi, security.rateLimit('export', 60, 10 * 60 * 1000), (req, res) => {
+  const VUES = { demandes: 'Demandes', journal: "Journal d'activité" };
+  const vue = String(req.body?.vue || '');
+  if (!VUES[vue]) return res.status(400).json({ error: 'Vue inconnue' });
+  const lignes = Math.max(0, Math.min(Number(req.body?.lignes) || 0, 1e6));
+  // Les filtres sont recopiés dans le journal : on borne leur longueur et on
+  // n'accepte que des valeurs simples, cette chaîne étant écrite telle quelle.
+  const f = req.body?.filtres && typeof req.body.filtres === 'object' ? req.body.filtres : {};
+  const resume = Object.entries(f)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '' && typeof v !== 'object')
+    .map(([k, v]) => `${k} : ${String(v).slice(0, 80)}`)
+    .slice(0, 6)
+    .join(' · ');
+  const session = auth.currentSession(req);
+  db.audit(
+    session ? session.username : 'admin',
+    'export_csv',
+    VUES[vue],
+    `${lignes} ligne(s)${resume ? ` — filtres ${resume}` : ' — sans filtre'}`,
+    sso.clientIp(req)
+  );
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/accounts', auth.requireApi, (req, res) => {
   const accounts = db.listCreatedAccounts(300).map((a) => {
     const appEntry = registry.get(a.app_id);

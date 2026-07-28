@@ -81,6 +81,8 @@
       for (const x of el('chips').querySelectorAll('.chip')) x.classList.remove('on');
       c.classList.add('on'); filters.status = c.dataset.status; renderRows();
     });
+    el('export-requests').addEventListener('click', exporterDemandes);
+    el('export-journal').addEventListener('click', exporterJournal);
     el('add-admin').addEventListener('click', addAdminModal);
     el('add-referent').addEventListener('click', () => referentModal(null));
     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
@@ -130,6 +132,97 @@
     else if (view === 'users') loadUsers();
     else if (view === 'settings') loadSettings();
     else if (view === 'journal') loadJournal();
+  }
+
+  // ========================================================================
+  // Export CSV
+  //
+  // L'export reprend EXACTEMENT les lignes affichées : mêmes filtres, même
+  // ordre. Rien n'est redemandé au serveur, donc l'export ne peut pas révéler
+  // plus que ce que l'écran montre déjà.
+  // ========================================================================
+
+  /**
+   * Prépare une cellule pour un tableur.
+   *
+   * Les noms, e-mails et messages proviennent d'un formulaire ouvert : une
+   * valeur commençant par « = », « + », « - » ou « @ » serait interprétée par
+   * Excel ou LibreOffice comme une FORMULE à l'ouverture du fichier. On la
+   * préfixe donc d'une apostrophe pour qu'elle reste du texte.
+   */
+  function csvCell(valeur) {
+    const s = valeur === null || valeur === undefined ? '' : String(valeur);
+    const formule = /^[=+\-@\t\r]/.test(s);
+    return `"${(formule ? `'${s}` : s).replace(/"/g, '""')}"`;
+  }
+
+  function horodatageFichier() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  }
+
+  /**
+   * Déclenche le téléchargement d'un CSV.
+   *
+   * Séparateur « ; » et BOM UTF-8 : c'est ce qu'attend Excel en configuration
+   * française, sinon les accents sortent illisibles et tout atterrit dans une
+   * seule colonne.
+   */
+  function telechargerCsv(nomFichier, entetes, lignes) {
+    const contenu = [entetes, ...lignes].map((l) => l.map(csvCell).join(';')).join('\r\n');
+    const blob = new Blob(['﻿' + contenu], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomFichier;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Laisse au navigateur le temps d'amorcer le téléchargement.
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  /** Trace l'export : qui a extrait quoi, et combien de lignes. */
+  async function tracerExport(vue, lignes, filtres) {
+    try {
+      await fetchJson('/api/admin/exports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vue, lignes, filtres }),
+      });
+    } catch { /* la trace ne doit jamais empêcher l'export */ }
+  }
+
+  function exporterDemandes() {
+    const vis = requests.filter(matches);
+    if (!vis.length) return toast('Aucune ligne à exporter avec ces filtres.', true);
+    const entetes = ['Référence', 'Application', 'Démarche', 'Statut', 'Bénéficiaire', 'E-mail',
+      'Identifiant créé', 'Demandeur', 'Compte Microsoft', 'Établissement', 'Déposée le',
+      'Prise en charge le', 'Terminée le', 'Durée du robot (s)', 'Tentatives', 'Résultat'];
+    const lignes = vis.map((r) => [
+      r.reference, r.app, demarcheLabel(r.type), STATUS_LABELS[r.status] || r.status, who(r.payload),
+      r.payload?.email || '', r.login || '', r.demandeur || '', r.ssoEmail || '',
+      r.payload?.etablissement || '', r.createdAt, r.startedAt || '', r.finishedAt || '',
+      dureeRobot(r) ?? '', r.attempts ?? '', r.message || '',
+    ]);
+    telechargerCsv(`demandes-${horodatageFichier()}.csv`, entetes, lignes);
+    toast(`${lignes.length} demande${lignes.length > 1 ? 's' : ''} exportée${lignes.length > 1 ? 's' : ''}.`);
+    tracerExport('demandes', lignes.length, {
+      recherche: filters.text || '', statut: filters.status || '', application: filters.app || '',
+    });
+  }
+
+  function exporterJournal() {
+    const lignesVues = journalFiltre();
+    if (!lignesVues.length) return toast('Aucune ligne à exporter avec ces filtres.', true);
+    const entetes = ['Date', 'Acteur', 'Action', 'Cible', 'Détails', 'IP'];
+    const lignes = lignesVues.map((e) => [
+      e.created_at, e.admin, AUDIT_LABELS[e.action] || e.action, e.target || '', e.details || '', e.ip || '',
+    ]);
+    telechargerCsv(`journal-${horodatageFichier()}.csv`, entetes, lignes);
+    toast(`${lignes.length} ligne${lignes.length > 1 ? 's' : ''} exportée${lignes.length > 1 ? 's' : ''}.`);
+    tracerExport('journal', lignes.length, { recherche: el('journal-search').value.trim() });
   }
 
   // ========================================================================
@@ -184,6 +277,7 @@
     depot_transfert_etab: 'Transfert d’établissement déposé',
     transfert_etab: 'Compte transféré',
     admin_consultation_identifiants: 'Identifiants consultés (admin)',
+    export_csv: 'Export CSV',
   };
   let journalEntries = [];
   async function loadJournal() {
@@ -193,11 +287,15 @@
     el('journal-search').oninput = renderJournal;
     renderJournal();
   }
-  function renderJournal() {
+  /** Lignes du journal réellement affichées — partagé avec l'export CSV. */
+  function journalFiltre() {
     const q = el('journal-search').value.trim().toLowerCase();
-    const rows = journalEntries.filter((e) =>
+    return journalEntries.filter((e) =>
       !q || `${e.admin} ${AUDIT_LABELS[e.action] || e.action} ${e.target} ${e.details} ${e.ip}`.toLowerCase().includes(q)
     );
+  }
+  function renderJournal() {
+    const rows = journalFiltre();
     el('journal-rows').innerHTML = rows.length ? rows.map((e) => `<tr>
       <td style="white-space:nowrap">${formatDate(e.created_at)}</td>
       <td><b>${escapeHtml(e.admin)}</b></td>

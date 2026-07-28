@@ -75,6 +75,7 @@
               <button class="chip" data-status="terminee">Terminées</button>
               <button class="chip" data-status="echec">Échecs</button>
             </div>
+            <button class="btn btn-ghost tb-export" id="export-requests" type="button" title="Exporter les lignes affichées au format CSV">Exporter</button>
           </div>
           <div class="tablecard"><table class="data"><thead><tr><th>Référence</th><th>Application</th><th>Bénéficiaire</th><th>Demandeur</th><th>Déposée le</th><th>Robot</th><th>Statut</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="8" class="loading">Chargement…</td></tr></tbody></table></div>
         </section>
@@ -85,7 +86,10 @@
         </section>
 
         <section class="view" id="view-journal">
-          <div class="toolbar"><label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input type="text" id="journal-search" placeholder="Acteur, action, référence, IP…" /></label></div>
+          <div class="toolbar">
+            <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input type="text" id="journal-search" placeholder="Acteur, action, référence, IP…" /></label>
+            <button class="btn btn-ghost tb-export" id="export-journal" type="button" title="Exporter les lignes affichées au format CSV">Exporter</button>
+          </div>
           <div class="tablecard"><table class="data"><thead><tr><th>Date</th><th>Acteur</th><th>Action</th><th>Cible</th><th>Détails</th><th>IP</th></tr></thead><tbody id="journal-rows"><tr><td colspan="6" class="loading">Chargement…</td></tr></tbody></table></div>
         </section>
 

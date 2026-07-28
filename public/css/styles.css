@@ -500,6 +500,11 @@ body.admin { background: var(--bg); font-size: 15px; }
 
 /* Toolbar + table */
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+/* Bouton d'export : poussé à droite de la barre, et pleine largeur une fois la
+   barre repliée sur petit écran (sinon il se retrouve seul sur sa ligne, à
+   moitié coupé). */
+.tb-export { margin-left: auto; white-space: nowrap; min-height: 42px; }
+@media (max-width: 640px) { .tb-export { margin-left: 0; width: 100%; justify-content: center; } }
 .search { flex: 1; min-width: 220px; position: relative; }
 .search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--faint); }
 .search input { width: 100%; font: inherit; font-size: .92rem; padding: 10px 12px 10px 36px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); color: var(--ink); min-height: 42px; }
