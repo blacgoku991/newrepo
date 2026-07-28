@@ -53,15 +53,20 @@ ok "utilisateur « $UTILISATEUR »"
 
 # --- 4. Code -----------------------------------------------------------------
 info "Code du projet"
+# Git refuse d'opérer en root sur un dépôt appartenant à quelqu'un d'autre
+# (« dubious ownership »). On travaille donc SOUS le compte de service : sans
+# cela, une deuxième exécution du script ne mettrait rien à jour.
 if [[ -d "$RACINE/.git" ]]; then
-  git -C "$RACINE" fetch --quiet origin "$BRANCHE"
-  git -C "$RACINE" reset --hard --quiet "origin/$BRANCHE"
+  chown -R "$UTILISATEUR:$UTILISATEUR" "$RACINE"
+  sudo -u "$UTILISATEUR" git -C "$RACINE" fetch --quiet origin "$BRANCHE"
+  sudo -u "$UTILISATEUR" git -C "$RACINE" reset --hard --quiet "origin/$BRANCHE"
 else
   rm -rf "$RACINE"
-  git clone --quiet --branch "$BRANCHE" "$DEPOT" "$RACINE"
+  install -d -o "$UTILISATEUR" -g "$UTILISATEUR" "$RACINE"
+  sudo -u "$UTILISATEUR" git clone --quiet --branch "$BRANCHE" "$DEPOT" "$RACINE"
 fi
-chown -R "$UTILISATEUR:$UTILISATEUR" "$RACINE"
-ok "$RACINE ($(git -C "$RACINE" rev-parse --short HEAD))"
+VERSION="$(sudo -u "$UTILISATEUR" git -C "$RACINE" rev-parse --short HEAD)"
+ok "$RACINE ($VERSION)"
 
 # --- 5. Dépendances et navigateur -------------------------------------------
 info "Dépendances Node et Chromium"
@@ -87,11 +92,33 @@ install -m 0644 "$RACINE/deploiement/nginx-smartfixx.conf" "/etc/nginx/sites-ava
 sed -i "s|__DOMAINE__|$DOMAINE|g" "/etc/nginx/sites-available/smartfixx"
 ln -sf /etc/nginx/sites-available/smartfixx /etc/nginx/sites-enabled/smartfixx
 rm -f /etc/nginx/sites-enabled/default
-# Avant le certificat, on sert en clair pour ne pas laisser nginx refuser de
-# démarrer sur un fichier de certificat absent.
+# Avant d'avoir le certificat, on sert en clair : nginx refuserait de démarrer
+# sur un fichier de certificat absent. On écrit alors une configuration
+# PROVISOIRE dédiée, plutôt que de charcuter la définitive à coups de sed —
+# c'est ce qui produisait deux blocs en écoute sur le port 80 et le message
+# « conflicting server name ».
 if [[ ! -d "/etc/letsencrypt/live/$DOMAINE" ]]; then
-  sed -i 's|^\( *\)listen 443 ssl http2;|\1listen 80;|; /ssl_certificate/d; /ssl_protocols/d; /ssl_prefer/d; /return 301 https/d' \
-      "/etc/nginx/sites-available/smartfixx"
+  cat > /etc/nginx/sites-available/smartfixx <<PROVISOIRE
+# Configuration PROVISOIRE, en clair, le temps d'obtenir le certificat.
+# « activer-tls.sh » la remplace par la version HTTPS définitive.
+server {
+    listen 80;
+    server_name saas.$DOMAINE *.$DOMAINE;
+
+    client_max_body_size 2m;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+PROVISOIRE
 fi
 nginx -t >/dev/null && systemctl reload nginx
 ok "site servi"
