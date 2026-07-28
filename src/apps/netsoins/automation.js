@@ -733,7 +733,23 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
         try {
           if (!search) throw new Error('aucun champ de recherche');
           await search.click();
-          await search.fill(identifiant);
+          await search.fill(identifiant).catch(() => {});
+
+          // `fill()` pose la valeur d'un coup ; certains champs ne réagissent
+          // qu'à de VRAIES frappes clavier et restent vides. On relit donc ce
+          // qui est réellement dans le champ, et on retape lettre par lettre si
+          // besoin — sinon la recherche partirait à vide et listerait tout le
+          // monde.
+          let saisi = await search.inputValue().catch(() => '');
+          if (saisi !== identifiant) {
+            await search.fill('').catch(() => {});
+            await search.pressSequentially(identifiant, { delay: 60 });
+            saisi = await search.inputValue().catch(() => '');
+            ctx.log(`Saisie reprise en frappes clavier (le champ n'avait pas retenu la valeur).`);
+          }
+          if (saisi !== identifiant) {
+            throw new Error(`Le champ de recherche de la liste n'a pas accepté « ${identifiant} » (il contient « ${saisi} ») — impossible de filtrer sans risque de tomber sur le mauvais intervenant`);
+          }
 
           let valide = '';
           for (const [voie, sel] of [['bouton de recherche', S.liste.searchSubmit], ['bouton de la barre d’outils', S.liste.searchSubmitAlt]]) {
