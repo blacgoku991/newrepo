@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smartfixx — Panel</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body class="centre">
+  <form class="carte connexion" id="form">
+    <div class="marque">Smartfixx</div>
+    <h1>Panel des licences</h1>
+    <p class="sous">Administration du parc clients.</p>
+    <div class="alerte err" id="err" hidden></div>
+    <label>Identifiant<input type="text" id="u" autocomplete="username" autofocus required /></label>
+    <label>Mot de passe<input type="password" id="p" autocomplete="current-password" required /></label>
+    <button type="submit" class="btn primaire large" id="btn">Se connecter</button>
+  </form>
+  <script src="/app.js"></script>
+</body>
+</html>

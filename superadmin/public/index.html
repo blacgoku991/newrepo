@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smartfixx — Panel des licences</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="bandeau">
+    <div class="marque">Smartfixx</div>
+    <nav class="onglets">
+      <button class="onglet actif" data-vue="parc" type="button">Parc clients</button>
+      <button class="onglet" data-vue="journal" type="button">Journal</button>
+      <button class="onglet" data-vue="cle" type="button">Clé de signature</button>
+    </nav>
+    <div class="droite">
+      <span class="qui" id="qui"></span>
+      <button class="btn discret" id="deconnexion" type="button">Quitter</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <!-- Parc clients -->
+    <section class="vue active" id="vue-parc">
+      <div class="kpis" id="kpis"></div>
+      <div class="alerte attention" id="alerte-echeances" hidden></div>
+      <div class="barre">
+        <input type="search" id="recherche" placeholder="Rechercher une société, un contact…" />
+        <label class="case"><input type="checkbox" id="voir-archivees" /> Afficher les archivées</label>
+        <button class="btn primaire" id="nouvelle" type="button">Nouvelle société</button>
+      </div>
+      <div id="liste"></div>
+    </section>
+
+    <!-- Journal -->
+    <section class="vue" id="vue-journal">
+      <div class="barre"><input type="search" id="recherche-journal" placeholder="Acteur, action, société…" /></div>
+      <div class="tableau"><table class="donnees">
+        <thead><tr><th>Date</th><th>Opérateur</th><th>Action</th><th>Société</th><th>Détails</th><th>IP</th></tr></thead>
+        <tbody id="journal-lignes"><tr><td colspan="6" class="vide">Chargement…</td></tr></tbody>
+      </table></div>
+    </section>
+
+    <!-- Clé -->
+    <section class="vue" id="vue-cle">
+      <div class="carte bloc">
+        <h2>Clé de signature</h2>
+        <p class="aide">Cette clé publique doit être embarquée dans le produit livré aux clients (constante <code>CLE_PUBLIQUE</code> de <code>src/licence.js</code>). Sans elle, aucune licence émise ici ne sera acceptée.</p>
+        <div class="champ-copie"><code id="cle-publique">…</code><button class="btn" id="copier-cle" type="button">Copier</button></div>
+        <p class="aide">Empreinte à comparer avec celle affichée chez un client : <b id="cle-empreinte">…</b></p>
+        <p class="alerte attention" style="margin-top:14px">La clé <b>privée</b> reste sur ce serveur, hors du dépôt. Sauvegardez-la ailleurs : sans elle, plus aucune licence ne peut être émise ni renouvelée.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="fond" id="fond" hidden><div class="modale" id="modale"></div></div>
+  <div class="toast" id="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>
