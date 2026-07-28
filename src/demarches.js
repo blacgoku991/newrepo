@@ -328,28 +328,54 @@ function resoudre(type, data) {
 }
 
 /**
- * Temps qu'une démarche prendrait À LA MAIN, en minutes : ouvrir l'application,
- * retrouver la personne, effectuer l'opération, prévenir l'intéressé.
+ * Temps qu'une démarche prendrait À LA MAIN, en minutes.
  *
- * Sert au tableau de bord de valeur. Ce sont des ordres de grandeur observés,
- * volontairement prudents — mieux vaut sous-estimer le gain que le gonfler.
- * Ajustables sans toucher au code : TEMPS_MANUEL_CREATION=15 dans le .env.
+ * ⚠️ Ce barème mesure le temps du SERVICE INFORMATIQUE, pas celui du référent.
+ * Le référent, lui, rédige aujourd'hui un ticket et remplira demain un
+ * formulaire : son temps ne change quasiment pas, et le compter comme gagné
+ * gonflerait le tableau de bord.
+ *
+ * Chaque valeur couvre donc : prendre connaissance de la demande, vérifier
+ * l'établissement et la fonction, effectuer l'opération dans l'application,
+ * clôturer le ticket.
+ *
+ * Chiffres relevés sur l'instance ADEF : la création elle-même dure 2 à 3
+ * minutes sur BlueKanGo (un peu plus sur NetSoins, davantage d'onglets), à quoi
+ * s'ajoute environ 3 minutes de gestion du ticket. Volontairement prudents :
+ * mieux vaut sous-estimer le gain que le gonfler devant un comité.
+ *
+ * Ajustables sans toucher au code, par démarche ou par application :
+ *   TEMPS_MANUEL_CREATION=7
+ *   TEMPS_MANUEL_NETSOINS_CREATION=6.5
  */
 const MINUTES_MANUELLES = {
-  creation: 12,
-  reset_mdp: 6,
-  ajout_etab: 8,
-  transfert_etab: 10,
-  maj_identite: 7,
+  creation: 6,
+  reset_mdp: 4,
+  ajout_etab: 5,
+  transfert_etab: 6,
+  maj_identite: 5,
 };
 
-function minutesManuelles(type) {
-  // Toujours sur la clé du registre : `identite` est un alias de
-  // `maj_identite`, et compter l'un pour l'autre fausserait le tableau de bord.
-  const cle = normalise(type);
-  const surcharge = Number(process.env[`TEMPS_MANUEL_${String(cle).toUpperCase()}`]);
-  if (Number.isFinite(surcharge) && surcharge >= 0) return surcharge;
-  return MINUTES_MANUELLES[cle] ?? 8;
+/** Démarche inconnue : on ne lui prête surtout pas le tarif d'une création. */
+const MINUTES_PAR_DEFAUT = 5;
+
+function minutesManuelles(type, appId) {
+  // `normalise` ramène tout type non reconnu sur « creation » — le plus cher.
+  // L'appliquer ici gonflerait le tableau de bord au moindre type inattendu :
+  // on ne s'en sert donc que si la démarche existe réellement au registre.
+  if (!get(type)) return MINUTES_PAR_DEFAUT;
+  const cle = String(normalise(type)).toUpperCase();
+  const lire = (nom) => {
+    const v = Number(process.env[nom]);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  // Le plus précis l'emporte : une application donnée, puis la démarche seule.
+  // NetSoins demande plus de saisie que BlueKanGo pour la même création.
+  const parApp = appId ? lire(`TEMPS_MANUEL_${String(appId).toUpperCase()}_${cle}`) : null;
+  if (parApp !== null) return parApp;
+  const parType = lire(`TEMPS_MANUEL_${cle}`);
+  if (parType !== null) return parType;
+  return MINUTES_MANUELLES[normalise(type)] ?? 5;
 }
 
 module.exports = {

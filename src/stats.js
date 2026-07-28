@@ -73,7 +73,9 @@ function valeur(rows) {
     // registre : sans cela, la même démarche compterait deux fois sous deux
     // libellés, dont l'un serait affiché en brut.
     const type = demarches.normalise(r.request_type || 'creation');
-    const minutes = demarches.minutesManuelles(type);
+    // Le coût manuel dépend aussi de l'application : la même création demande
+    // plus de saisie sur NetSoins (plusieurs onglets) que sur BlueKanGo.
+    const minutes = demarches.minutesManuelles(type, r.app_id);
     parType.set(type, (parType.get(type) || 0) + minutes);
 
     const fin = Date.parse((r.finished_at || r.created_at || '').replace(' ', 'T') + 'Z');
