@@ -23,6 +23,7 @@ const worker = require('./worker');
 
 const security = require('./security');
 const licence = require('./licence');
+const marque = require('./marque');
 const comptesProteges = require('./comptesProteges');
 
 const app = express();
@@ -87,7 +88,9 @@ app.use((req, res, next) => {
   const p = req.path;
   if (p.startsWith('/auth/sso/') || p === '/connexion' || p === '/connexion.html') return next();
   if (p === '/login.html' || p === '/admin' || p === '/admin.html' || p.startsWith('/artifacts')) return next();
-  if (p.startsWith('/api/auth/') || p.startsWith('/api/admin/') || p === '/api/sso/me') return next();
+  // `/api/marque` ne livre que le nom de la société et la mention de l'éditeur :
+  // aucune donnée personnelle, et la page de connexion en a besoin pour s'habiller.
+  if (p.startsWith('/api/auth/') || p.startsWith('/api/admin/') || p === '/api/sso/me' || p === '/api/marque') return next();
   if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/img/') || p.startsWith('/vendor/') || p === '/favicon.ico') return next();
   if (p.startsWith('/demo')) {
     const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
@@ -245,6 +248,22 @@ app.use(
 
 // Logo d'une application : sert le .png réel s'il a été téléchargé
 // (scripts/telecharger-logos.js), sinon le .svg de substitution.
+/**
+ * Marque de l'instance : nom de la société servie et mention de l'éditeur.
+ * Servie AVANT la connexion — la page de connexion porte déjà les couleurs du
+ * client, qui doit reconnaître sa maison avant de saisir quoi que ce soit.
+ */
+app.get('/api/marque', (req, res) => res.json(marque.etat()));
+
+/** Logo de la société cliente, déposé hors du dépôt (voir `SOCIETE_LOGO_DIR`). */
+app.get('/img/societe', (req, res) => {
+  const l = marque.logo();
+  if (!l) return res.status(404).end();
+  res.setHeader('Content-Type', l.type);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(l.fichier);
+});
+
 app.get('/img/:name', (req, res, next) => {
   const name = String(req.params.name).replace(/[^a-z0-9_-]/gi, '');
   const fs = require('fs');

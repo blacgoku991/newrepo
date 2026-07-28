@@ -92,6 +92,37 @@ function formatDate(iso) {
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+/* ---------------------------------------------------------------------------
+ * Marque de l'instance — marque blanche.
+ *
+ * Chaque instance sert UNE société : c'est son nom qui s'affiche, l'éditeur
+ * n'est qu'une mention. Le nom vient de la licence signée, côté serveur.
+ * Chargé une seule fois par page ; en cas d'échec, un libellé neutre évite
+ * qu'une panne réseau vide l'en-tête.
+ * ------------------------------------------------------------------------- */
+let MARQUE = { societe: 'Portail comptes', logo: false, editeur: 'Smartfixx',
+               editeurUrl: 'https://smartfixx.fr', mention: 'propulsé par Smartfixx' };
+const marqueCourante = () => MARQUE;
+
+async function chargerMarque() {
+  try {
+    const r = await fetch('/api/marque', { credentials: 'same-origin' });
+    if (r.ok) MARQUE = { ...MARQUE, ...(await r.json()) };
+  } catch { /* on garde le libellé neutre */ }
+}
+
+/** Applique la marque aux éléments qui la portent (en-tête des pages). */
+function appliquerMarque() {
+  for (const e of document.querySelectorAll('[data-marque="societe"]')) e.textContent = MARQUE.societe;
+  for (const img of document.querySelectorAll('img[data-marque="logo"]')) {
+    // `dataset` est en lecture seule : on écrit la propriété, pas l'objet.
+    img.dataset.fallback = MARQUE.societe;
+    if (MARQUE.logo) { img.src = '/img/societe'; img.alt = MARQUE.societe; }
+    else handleTextFallback(img);   // aucun logo déposé : le nom s'affiche
+  }
+  if (document.title.includes('%SOCIETE%')) document.title = document.title.replace('%SOCIETE%', MARQUE.societe);
+}
+
 /* Pied de page commun : logos éditeurs, plan du portail, mentions légales.
  * Injecté dans tout élément <footer id="site-footer"> présent sur la page.
  * Les logos officiels sont chargés depuis les sites des éditeurs ; en cas
@@ -100,16 +131,18 @@ function renderFooter() {
   const host = document.getElementById('site-footer');
   if (!host) return;
   const year = new Date().getFullYear();
+  const M = marqueCourante();
   // Repli texte géré par écouteur (aucun gestionnaire inline : CSP stricte).
   const logoImg = (src, name, cls) =>
-    `<img${cls ? ` class="${cls}"` : ''} src="${escapeHtml(src)}" alt="${escapeHtml(name)}" loading="lazy" data-fallback="${escapeHtml(name)}" data-fallback-cls="${name === 'Algonis' ? 'ft-logo-txt' : 'ed-txt'}" />`;
+    `<img${cls ? ` class="${cls}"` : ''} src="${escapeHtml(src)}" alt="${escapeHtml(name)}" loading="lazy" data-fallback="${escapeHtml(name)}" data-fallback-cls="${cls === 'ft-logo' ? 'ft-logo-txt' : 'ed-txt'}" />`;
   host.className = 'site-footer';
   host.innerHTML = `
     <div class="ft-inner">
       <div class="ft-top">
         <div class="ft-brand">
-          <span class="ft-secret" id="ft-secret" role="button" tabindex="0" title="Algonis" aria-label="Algonis">${logoImg('/img/algonis', 'Algonis', 'ft-logo')}</span>
-          <p>Portail interne d'ADEF Résidences pour la création automatisée des comptes sur les applications métiers, avec suivi et remise sécurisée des identifiants.</p>
+          <span class="ft-secret" id="ft-secret" role="button" tabindex="0" title="${escapeHtml(M.societe)}" aria-label="${escapeHtml(M.societe)}">${
+            M.logo ? logoImg('/img/societe', M.societe, 'ft-logo') : `<span class="ft-logo-txt">${escapeHtml(M.societe)}</span>`}</span>
+          <p>Portail interne de ${escapeHtml(M.societe)} pour la création automatisée des comptes sur les applications métiers, avec suivi et remise sécurisée des identifiants.</p>
         </div>
         <div>
           <span class="ft-h">Le portail</span>
@@ -129,7 +162,7 @@ function renderFooter() {
         </div>
       </div>
       <div class="ft-bottom">
-        <span>© ${year} Algonis · ADEF Résidences — Tous droits réservés.</span>
+        <span>© ${year} ${escapeHtml(M.societe)} — Tous droits réservés. <a class="ft-editeur" href="${escapeHtml(M.editeurUrl)}" target="_blank" rel="noreferrer noopener">${escapeHtml(M.mention)}</a></span>
         <span class="ft-legal">
           <a href="/mentions-legales.html">Mentions légales</a>
           <a href="/mentions-legales.html#confidentialite">Confidentialité</a>
@@ -204,7 +237,12 @@ function sweepFailedImages() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // La marque conditionne l'en-tête ET le pied de page : on l'attend avant de
+  // dessiner, plutôt que d'afficher un nom puis de le remplacer sous les yeux
+  // de l'utilisateur.
+  await chargerMarque();
+  appliquerMarque();
   renderFooter();
   sweepFailedImages();
 });
