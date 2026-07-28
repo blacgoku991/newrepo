@@ -32,14 +32,24 @@
 const crypto = require('node:crypto');
 const db = require('./db');
 
+const GABARIT = 'REMPLACER_PAR_VOTRE_CLE_PUBLIQUE';
+
 /**
- * Clé publique de l'éditeur (DER SPKI, base64). À REMPLACER par la vôtre avant
- * toute distribution : l’outil `licence-keygen.js` de l’éditeur l’affiche prête à
- * coller. Tant que la valeur ci-dessous est le gabarit, le portail fonctionne
- * sans limitation (« licence non configurée ») — pratique en développement,
- * mais à ne jamais laisser chez un client.
+ * Clé publique de l'éditeur (DER SPKI, base64), qui vérifie les licences.
+ *
+ * Elle vient de `LICENCE_CLE_PUBLIQUE` (variable d'environnement, posée par
+ * l'orchestrateur ou le `.env`), et à défaut de la constante ci-dessous.
+ *
+ * Passer par l'environnement évite d'avoir à modifier ce fichier versionné :
+ * une clé écrite en dur ici entre en conflit à chaque mise à jour du code.
+ * La constante reste utile pour une version compilée livrée à un client qui
+ * héberge lui-même.
+ *
+ * Tant qu'aucune clé n'est posée, le portail fonctionne sans limitation
+ * (« licence non configurée ») — pratique en développement, à ne jamais
+ * laisser chez un client.
  */
-const CLE_PUBLIQUE = 'REMPLACER_PAR_VOTRE_CLE_PUBLIQUE';
+const CLE_PUBLIQUE = process.env.LICENCE_CLE_PUBLIQUE || GABARIT;
 
 const PREFIXE = 'ALG1';
 // AUCUNE tolérance : à la date de fin, le portail passe en mode limité le jour
@@ -69,7 +79,7 @@ const b64urlDecode = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/
 
 /** Vrai si aucune clé publique n'a été posée (mode développement). */
 function configuree() {
-  return CLE_PUBLIQUE !== 'REMPLACER_PAR_VOTRE_CLE_PUBLIQUE' && CLE_PUBLIQUE.length > 20;
+  return CLE_PUBLIQUE !== GABARIT && CLE_PUBLIQUE.length > 20;
 }
 
 function clePublique() {

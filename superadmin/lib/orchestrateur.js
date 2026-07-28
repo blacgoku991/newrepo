@@ -22,6 +22,7 @@ const os = require('os');
 const { fork } = require('child_process');
 
 const db = require('./db');
+const signature = require('./signature');
 
 const RACINE = path.join(__dirname, '..', '..');
 const DOSSIER = process.env.SMARTFIXX_DIR || path.join(os.homedir(), '.smartfixx');
@@ -123,6 +124,10 @@ function demarrer(societeId) {
       // routage de ce processus, jamais depuis l'extérieur.
       HOST: '127.0.0.1',
       LICENCE_JETON: licence,
+      // La clé qui vérifie la licence est celle de CE panel : plus besoin de
+      // la recopier dans le code, et une instance ne peut pas accepter une
+      // licence signée par quelqu'un d'autre.
+      LICENCE_CLE_PUBLIQUE: signature.clePubliqueB64(),
       SOCIETE_NOM: s.nom,
       SOCIETE_LOGO_DIR: path.join(dossier, 'marque'),
       EDITEUR_NOM: process.env.EDITEUR_NOM || 'Smartfixx',
