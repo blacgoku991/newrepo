@@ -238,11 +238,11 @@
     const q = el('acc-search').value.trim().toLowerCase();
     const rows = accountsData.filter((a) => !q || `${a.login} ${a.prenom} ${a.nom} ${a.reference}`.toLowerCase().includes(q));
     el('accounts-rows').innerHTML = rows.length ? rows.map((a) => `<tr>
-      <td><span class="ref">${escapeHtml(a.login)}</span></td>
-      <td>${escapeHtml(`${a.prenom} ${a.nom}`.trim() || '—')}</td>
-      <td>${escapeHtml(a.app)}</td>
-      <td>${escapeHtml(a.reference || '—')}</td>
-      <td>${formatDate(a.createdAt)}</td>
+      <td data-label="Identifiant"><span class="ref">${escapeHtml(a.login)}</span></td>
+      <td data-label="Bénéficiaire">${escapeHtml(`${a.prenom} ${a.nom}`.trim() || '—')}</td>
+      <td data-label="Application">${escapeHtml(a.app)}</td>
+      <td data-label="Référence">${escapeHtml(a.reference || '—')}</td>
+      <td data-label="Créé le">${formatDate(a.createdAt)}</td>
     </tr>`).join('') : '<tr><td colspan="5" class="loading">Aucun compte créé pour le moment.</td></tr>';
   }
 
@@ -297,12 +297,12 @@
   function renderJournal() {
     const rows = journalFiltre();
     el('journal-rows').innerHTML = rows.length ? rows.map((e) => `<tr>
-      <td style="white-space:nowrap">${formatDate(e.created_at)}</td>
-      <td><b>${escapeHtml(e.admin)}</b></td>
-      <td>${escapeHtml(AUDIT_LABELS[e.action] || e.action)}</td>
-      <td>${escapeHtml(e.target || '—')}</td>
-      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(e.details || '')}">${escapeHtml(e.details || '—')}</td>
-      <td style="color:var(--muted);font-size:.82rem">${escapeHtml(e.ip || '—')}</td>
+      <td data-label="Date" style="white-space:nowrap">${formatDate(e.created_at)}</td>
+      <td data-label="Acteur"><b>${escapeHtml(e.admin)}</b></td>
+      <td data-label="Action">${escapeHtml(AUDIT_LABELS[e.action] || e.action)}</td>
+      <td data-label="Cible">${escapeHtml(e.target || '—')}</td>
+      <td data-label="Détails" class="cell-detail" title="${escapeHtml(e.details || '')}">${escapeHtml(e.details || '—')}</td>
+      <td data-label="IP" style="color:var(--muted);font-size:.82rem">${escapeHtml(e.ip || '—')}</td>
     </tr>`).join('') : '<tr><td colspan="6" class="loading">Aucune activité correspondante.</td></tr>';
   }
 
@@ -509,16 +509,16 @@
     const vis = requests.filter(matches);
     if (!vis.length) { el('rows').innerHTML = `<tr><td colspan="8" class="loading">${requests.length ? 'Aucune demande ne correspond aux filtres.' : 'Aucune demande.'}</td></tr>`; return; }
     el('rows').innerHTML = vis.map((r) => `<tr>
-      <td><span class="ref">${escapeHtml(r.reference)}</span></td>
-      <td>${escapeHtml(r.app)} ${typeBadge(r.type)}</td>
-      <td><span class="who">${escapeHtml(who(r.payload))}<small>${escapeHtml(r.payload?.email || '')}</small></span></td>
-      <td>${escapeHtml(r.demandeur || '—')}</td>
-      <td>${formatDate(r.createdAt)}</td>
-      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${(() => {
+      <td data-label="Référence"><span class="ref">${escapeHtml(r.reference)}</span></td>
+      <td data-label="Application">${escapeHtml(r.app)} ${typeBadge(r.type)}</td>
+      <td data-label="Bénéficiaire"><span class="who">${escapeHtml(who(r.payload))}<small>${escapeHtml(r.payload?.email || '')}</small></span></td>
+      <td data-label="Demandeur">${escapeHtml(r.demandeur || '—')}</td>
+      <td data-label="Déposée le">${formatDate(r.createdAt)}</td>
+      <td data-label="Robot" style="white-space:nowrap;font-variant-numeric:tabular-nums">${(() => {
     const s = dureeRobot(r);
     return s === null ? '<span style="color:var(--faint)">—</span>' : delaiCourt(s);
   })()}</td>
-      <td>${statusBadge(r.status)}</td>
+      <td data-label="Statut">${statusBadge(r.status)}</td>
       <td style="text-align:right;white-space:nowrap">${r.status === 'echec' ? `<button class="btn btn-ghost btn-sm" data-retry="${r.id}">Relancer</button> ` : ''}<button class="btn btn-ghost btn-sm" data-detail="${r.id}">Détail</button></td>
     </tr>`).join('');
     for (const b of el('rows').querySelectorAll('[data-detail]')) b.addEventListener('click', () => openModal(Number(b.dataset.detail)));
@@ -958,10 +958,10 @@
     let data;
     try { data = await fetchJson('/api/admin/users'); } catch (e) { el('users-rows').innerHTML = `<tr><td colspan="5" class="loading">${escapeHtml(e.message)}</td></tr>`; return; }
     el('users-rows').innerHTML = data.users.map((u) => `<tr>
-      <td><b>${escapeHtml(u.username)}</b>${u.username === data.me ? ' <span style="color:var(--muted);font-size:.8rem">(vous)</span>' : ''}</td>
-      <td>${escapeHtml(u.display_name || '—')}</td>
-      <td>${u.last_login ? formatDate(u.last_login) : '—'}</td>
-      <td>${u.disabled ? '<span class="badge st-echec">Désactivé</span>' : '<span class="badge st-terminee">Actif</span>'}</td>
+      <td data-label="Identifiant"><b>${escapeHtml(u.username)}</b>${u.username === data.me ? ' <span style="color:var(--muted);font-size:.8rem">(vous)</span>' : ''}</td>
+      <td data-label="Nom">${escapeHtml(u.display_name || '—')}</td>
+      <td data-label="Dernière connexion">${u.last_login ? formatDate(u.last_login) : '—'}</td>
+      <td data-label="État">${u.disabled ? '<span class="badge st-echec">Désactivé</span>' : '<span class="badge st-terminee">Actif</span>'}</td>
       <td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" data-pw="${u.id}">Mot de passe</button> <button class="btn btn-ghost btn-sm" data-dis="${u.id}" data-cur="${u.disabled ? 1 : 0}">${u.disabled ? 'Réactiver' : 'Désactiver'}</button></td>
     </tr>`).join('');
     for (const b of el('users-rows').querySelectorAll('[data-pw]')) b.addEventListener('click', () => changePwModal(b.dataset.pw));
@@ -1065,10 +1065,10 @@
                 .join(' ')
             : '<span style="color:var(--faint)">Aucun</span>';
           return `<tr>
-            <td><b>${escapeHtml(name)}</b></td>
-            <td><span class="ref">${escapeHtml(r.email)}</span></td>
-            <td style="max-width:360px">${etabs}</td>
-            <td>${r.active ? '<span class="badge st-terminee">Actif</span>' : '<span class="badge st-echec">Inactif</span>'}</td>
+            <td data-label="Référent"><b>${escapeHtml(name)}</b></td>
+            <td data-label="E-mail"><span class="ref">${escapeHtml(r.email)}</span></td>
+            <td data-label="Établissements" style="max-width:360px">${etabs}</td>
+            <td data-label="État">${r.active ? '<span class="badge st-terminee">Actif</span>' : '<span class="badge st-echec">Inactif</span>'}</td>
             <td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" data-edit="${r.id}">Modifier</button> <button class="btn btn-ghost btn-sm" data-del="${r.id}">Supprimer</button></td>
           </tr>`;
         }).join('')

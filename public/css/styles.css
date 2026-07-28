@@ -480,6 +480,11 @@ body.admin { background: var(--bg); font-size: 15px; }
 .cols { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; margin-bottom: 18px; }
 .cols.even { grid-template-columns: 1fr 1fr; }
 @media (max-width: 1000px) { .cols, .cols.even { grid-template-columns: 1fr; } }
+/* Un élément de grille vaut par défaut au moins la largeur de son contenu :
+   un e-mail long ou un graphique y suffisait à pousser la carte hors de
+   l'écran. `min-width: 0` autorise la colonne à rétrécir ; le contenu qui ne
+   peut pas se couper (tableaux) défile dans son propre cadre. */
+.cols > *, .kpis > *, .card, .card .cb, .card .ch, .card .ch > * { min-width: 0; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-xs); }
 .card .ch { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .card .ch h3 { font-size: 1rem; color: #fff; }
@@ -518,6 +523,9 @@ select.inp:focus, input.inp:focus, textarea.inp:focus { outline: none; border-co
 .chip.on { background: var(--gold); color: var(--gold-ink); border-color: var(--gold); }
 
 .tablecard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-xs); overflow-x: auto; }
+/* Journal : le détail est tronqué sur grand écran (l'intitulé complet reste en
+   infobulle), et se déplie entièrement sur téléphone. */
+.cell-detail { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.data { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 760px; }
 table.data th { text-align: left; padding: 12px 16px; background: var(--surface-2); font-size: .73rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--line); font-weight: 650; }
 table.data td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; color: var(--ink-2); }
@@ -734,6 +742,14 @@ body.auth.center { display: grid; place-items: center; padding: 24px; }
   /* Cellule sans intitulé (colonne d'actions) : on laisse toute la largeur. */
   table.data td:not([data-label])::before { content: none; }
   table.data td:not([data-label]) { justify-content: flex-end; padding-top: 10px; }
+  /* Une valeur longue (e-mail, message d'erreur) doit revenir à la ligne au
+     lieu d'élargir la fiche au-delà de l'écran. */
+  table.data td { min-width: 0; overflow-wrap: anywhere; }
+  table.data td > * { min-width: 0; }
+  table.data .who { display: block; }
+  table.data .who small { display: block; font-weight: 400; }
+  /* Sur téléphone le détail se lit en entier : plus de troncature. */
+  .cell-detail { max-width: none !important; white-space: normal !important; overflow: visible !important; }
   .acc-row-actions { justify-content: flex-end; width: 100%; }
   .acc-row-actions .btn { min-height: 40px; }
   .acc-row-actions .btn span { display: inline; }
