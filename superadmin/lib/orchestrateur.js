@@ -262,6 +262,12 @@ function demarrer(societeId) {
       SOCIETE_LOGO_DIR: path.join(dossier, 'marque'),
       EDITEUR_NOM: process.env.EDITEUR_NOM || 'Smartfixx',
       PUBLIC_BASE_URL: s.instance_url || '',
+      // L'instance est TOUJOURS derrière ce processus : sans cela, elle voyait
+      // toutes les requêtes venir de 127.0.0.1. Tous les visiteurs partageaient
+      // alors le même compteur de limitation — une seule personne pouvait
+      // bloquer la connexion de tout le monde — et le journal d'activité
+      // n'enregistrait plus aucune adresse utile.
+      TRUST_PROXY: 'true',
     },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });

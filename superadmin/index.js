@@ -30,6 +30,18 @@ const HOST = process.env.SMARTFIXX_HOST || '127.0.0.1';
 // Domaine racine : tout ce qui est <quelque chose>.smartfixx.fr est une société,
 // le reste est le panel.
 const DOMAINE = (process.env.SMARTFIXX_DOMAINE || 'smartfixx.fr').toLowerCase();
+// En production, nginx est devant, sur la même machine : c'est lui qui établit
+// l'adresse du visiteur. En le mettant à `false` (accès direct), on ne croit
+// plus un mot des en-têtes `X-Forwarded-*` ni de `X-Real-IP`, que n'importe qui
+// peut écrire.
+const DERRIERE_PROXY = !/^(0|false|no)$/i.test(String(process.env.SMARTFIXX_DERRIERE_PROXY || 'true'));
+// Et même alors, on ne les croit que venant du proxy lui-même. Ce processus
+// n'écoute qu'en local, donc seul nginx peut l'atteindre — mais une écoute
+// ouverte par erreur ne doit pas suffire à se choisir une adresse.
+const PROXIES = new Set(
+  (process.env.SMARTFIXX_PROXY_ADRESSES || '127.0.0.1,::1,::ffff:127.0.0.1')
+    .split(',').map((v) => v.trim()).filter(Boolean)
+);
 // Hôtes qui mènent au panel plutôt qu'à une société.
 const HOTES_PANEL = new Set(
   (process.env.SMARTFIXX_HOTES_PANEL || `saas.${DOMAINE},panel.${DOMAINE},localhost,127.0.0.1`)
@@ -66,14 +78,47 @@ font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px}
 </head><body><div class="b"><h1>${echapper(titre)}</h1><p>${echapper(message)}</p></div></body></html>`);
 }
 
+const ADRESSE = /^[0-9a-fA-F:.]{3,45}$/;
+
+/**
+ * Adresse réelle du visiteur.
+ *
+ * On lit `X-Real-IP`, et JAMAIS `X-Forwarded-For`. La différence est décisive :
+ * nginx REMPLACE `X-Real-IP` par l'adresse du pair, tandis qu'il AJOUTE à la
+ * suite de `X-Forwarded-For` ce que le visiteur avait déjà écrit. Interpréter
+ * cette chaîne revient à choisir entre des valeurs dont certaines viennent de
+ * l'attaquant — et se tromper de position, c'est lui laisser une adresse
+ * différente à chaque requête, donc plus aucune limitation de débit et un
+ * journal d'activité signé par ses soins.
+ *
+ * Voir `deploiement/nginx-smartfixx.conf` : `proxy_set_header X-Real-IP
+ * $remote_addr`.
+ */
+function ipClient(req) {
+  const pair = req.socket.remoteAddress || '';
+  if (DERRIERE_PROXY && PROXIES.has(pair)) {
+    const reelle = String(req.headers['x-real-ip'] || '').trim();
+    if (ADRESSE.test(reelle)) return reelle;
+  }
+  return pair;
+}
+
 /**
  * Relaie la requête vers l'instance d'une société.
  *
  * Les en-têtes d'origine sont transmis pour que l'instance sache sur quel hôte
  * elle est servie et si la connexion est chiffrée — sans quoi ses liens et ses
  * cookies seraient faux.
+ *
+ * `X-Forwarded-For` est REMPLACÉ, pas complété : l'instance ne doit recevoir
+ * qu'une seule adresse, celle que nous avons établie. En y accolant la chaîne
+ * envoyée par le visiteur, la première valeur — celle que lisent les
+ * limitateurs de débit — restait la sienne : il lui suffisait de la faire
+ * varier pour rendre toute limitation inopérante, et pour signer le journal
+ * d'activité d'une adresse choisie.
  */
 function relayer(req, res, port, h) {
+  const ip = ipClient(req);
   const options = {
     host: '127.0.0.1',
     port,
@@ -83,9 +128,11 @@ function relayer(req, res, port, h) {
       ...req.headers,
       host: h,
       'x-forwarded-host': h,
-      'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http',
-      'x-forwarded-for': (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'] + ', ' : '')
-        + (req.socket.remoteAddress || ''),
+      // Idem pour le protocole : il vient de notre nginx, pas du visiteur.
+      'x-forwarded-proto': (DERRIERE_PROXY && req.headers['x-forwarded-proto'] === 'https')
+        || req.socket.encrypted ? 'https' : 'http',
+      'x-forwarded-for': ip,
+      'x-real-ip': ip,
     },
   };
   const relais = http.request(options, (reponse) => {

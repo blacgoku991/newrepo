@@ -760,7 +760,7 @@ app.post('/api/auth/login', security.rateLimit('login', 10, 15 * 60 * 1000), (re
   }
   db.audit(result.user.username, 'connexion_admin', '', '', sso.clientIp(req));
   security.clearRateLimit('login', req);
-  auth.setSessionCookie(res, result.token);
+  auth.setSessionCookie(res, result.token, req);
   // Le jeton est aussi renvoyé pour un frontend cross-domaine, qui pourra le
   // stocker et l'envoyer via l'en-tête « Authorization: Bearer <token> ».
   res.json({

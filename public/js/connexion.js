@@ -4,9 +4,12 @@
 
 (function () {
   // Conserve la page demandée à l'origine pour y revenir après connexion.
-  // Uniquement un chemin local (anti open-redirect).
+  // Uniquement un chemin local. L'antislash est exclu : les navigateurs le
+  // lisent comme une barre oblique, si bien que « /\evil.fr » passait pour un
+  // chemin local avant d'être compris comme un autre site. Le serveur applique
+  // la même règle — celle-ci évite seulement d'envoyer une cible inutile.
   const next = new URLSearchParams(location.search).get('next');
-  if (next && next.startsWith('/') && !next.startsWith('//')) {
+  if (next && /^\/(?!\/)[^\\]*$/.test(next)) {
     const btn = document.getElementById('ms-btn');
     btn.href = '/auth/sso/login?next=' + encodeURIComponent(next);
   }

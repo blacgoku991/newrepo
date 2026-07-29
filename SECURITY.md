@@ -111,9 +111,9 @@ métier ne répond. Ce que « être habilité » signifie ensuite se règle :
 
 | Valeur | Qui entre | Portée |
 |---|---|---|
-| `tenant` (défaut) | toute personne du tenant Microsoft 365 | tous les établissements |
+| `liste` (défaut) | les référents déclarés dans le panneau | leurs établissements |
 | `attribut` | les comptes dont le jeton porte l'attribut de `ACCES_ATTRIBUT` | tous les établissements |
-| `liste` | les référents déclarés dans le panneau | leurs établissements |
+| `tenant` | toute personne du tenant Microsoft 365 | tous les établissements |
 
 Les attributs interrogeables sont ceux du jeton, plus — si
 `M365_GRAPH_ATTRIBUTS=true` — ceux lus via Microsoft Graph juste après la
@@ -143,3 +143,92 @@ Deux réglages d'exploitation en découlent :
   plus du compte d'administration du robot (déjà protégé d'office) ;
 - durée de conservation des captures d'écran des robots (`data/artifacts/`) :
   à décider, aucune purge automatique aujourd'hui.
+
+---
+
+## Audit du 29 juillet 2026
+
+Passe complète sur l'hébergement SaaS (front door, orchestrateur, panel,
+portails) après l'ajout de la supervision et des sauvegardes. Analyse statique
+avec des règles écrites pour ce dépôt — le registre public de Semgrep est
+inaccessible depuis cet environnement (refus de la politique de sortie) —, puis
+revue manuelle et tentatives d'attaque rejouables
+(`scratchpad/audit-2026.js`, section 11 de `scratchpad/saas-complet.js`).
+
+### Cinq défauts réels, tous corrigés
+
+**1. Cookies de session sans `Secure` en hébergement.** Le drapeau dépendait de
+`COOKIE_SECURE` / `ADMIN_COOKIE_SECURE`, variables que l'orchestrateur ne posait
+pas. Sur `https://<client>.smartfixx.fr`, la session Microsoft 365 d'un référent
+et celle d'un administrateur partaient donc **sans `Secure`** : un seul lien
+`http://` suivi depuis ce navigateur suffisait à les émettre en clair. Le
+drapeau est désormais déduit de la requête (`req.secure` ou
+`X-Forwarded-Proto: https`), comme le faisait déjà le panel.
+
+**2. Redirection ouverte sur la porte SSO.** Le paramètre `?next=` était
+accepté dès lors qu'il commençait par une barre oblique sans être suivi d'une
+seconde. Or les navigateurs lisent l'antislash comme une barre oblique :
+`/\evil.fr` passait le contrôle et valait `//evil.fr`, donc un autre site. Le
+lien partait de notre domaine, la victime s'authentifiait réellement, et
+atterrissait ailleurs — le montage type d'un hameçonnage. La cible est
+maintenant réduite par `cibleLocale()`, qui n'accepte qu'un chemin sans schéma,
+sans hôte, sans antislash et sans caractère de contrôle.
+
+**3. `X-Forwarded-For` interprété à l'envers.** La porte d'entrée transmettait
+aux portails la chaîne envoyée par le visiteur **suivie** de l'adresse réelle,
+et les portails en lisaient la première valeur — c'est-à-dire celle écrite par
+le visiteur. En la faisant varier à chaque requête, on échappait à toute
+limitation de débit (force brute sur la connexion administrateur, sur les liens
+d'identifiants) et l'on signait le journal d'activité de l'adresse de son
+choix. Désormais : la porte d'entrée lit `X-Real-IP` — que nginx *remplace*, là
+où il *ajoute* à `X-Forwarded-For` — et **réécrit** les deux en-têtes avant de
+relayer ; les portails ne les croient que venant de la boucle locale, et
+seulement si la valeur a la forme d'une adresse.
+
+**4. Toutes les requêtes vues comme locales.** Corollaire du précédent :
+`TRUST_PROXY` n'étant pas transmis aux portails, ils voyaient chaque visiteur
+arriver de `127.0.0.1`. Tout le monde partageait donc un seul compteur de
+limitation — une personne pouvait bloquer la connexion de tous les autres — et
+le journal ne retenait plus aucune adresse exploitable. L'orchestrateur pose
+maintenant `TRUST_PROXY=true`.
+
+**5. Le mot de passe généré au démarrage, lisible depuis le panel.** Un portail
+sans `ADMIN_PASSWORD` en crée un et l'annonce sur sa sortie standard. Le journal
+d'instance ajouté ce jour-là le retenait tel quel : un mot de passe « affiché
+une seule fois » redevenait consultable à volonté. Les lignes retenues sont
+maintenant expurgées (jetons isolés, adresses e-mail, longs numéros, valeurs
+suivant « mot de passe : »).
+
+### Deux durcissements sans faille avérée
+
+- **Références de demande** tirées de `Math.random()`, remplacées par
+  `crypto.randomBytes` sur un alphabet sans caractères confondables (`I`, `O`,
+  `0`, `1`). La référence n'est pas le seul verrou — l'habilitation est vérifiée
+  derrière — mais une clé de recherche se doit d'être imprévisible.
+- **Plus aucune requête vers un tiers.** Les polices venaient de Google Fonts et
+  les logos des éditeurs de `app.bluekango.com` et `adef.netsoins.com` : chaque
+  page ouverte signalait la visite d'un salarié à trois sociétés extérieures,
+  sans base légale, et l'adresse NetSoins était celle d'un client pour tous les
+  autres. Tout est servi par le portail, et la CSP n'autorise plus aucune
+  origine externe.
+
+### Vérifié sans rien trouver
+
+Injections SQL (requêtes paramétrées partout ; les seules interpolations sont
+des littéraux internes et des séries de `?`), traversée de répertoire
+(sauvegardes, logos, `/img/:name`, archives), injection de commande
+(`tar` lancé sans shell, arguments séparés), XSS (CSP stricte sans script en
+ligne, `escapeHtml()` sur tout contenu dynamique), CSRF (contrôle d'origine),
+hachage et comparaison des mots de passe (scrypt + `timingSafeEqual`),
+téléversement de logo (format reconnu aux octets, SVG refusé, nom reconstruit),
+cloisonnement entre sociétés (8 familles d'attaque), et fermeture par défaut du
+portail (liste blanche).
+
+### Reste ouvert
+
+- **Captures d'écran des robots** (`data/artifacts/` de chaque instance) :
+  toujours sans durée de conservation ni purge. Elles contiennent des données de
+  santé. C'est le premier point à traiter avant un vrai client.
+- Les sauvegardes doivent être **recopiées hors du serveur** : la copie
+  quotidienne existe, son transfert vers un stockage distant reste à mettre en
+  place côté système.

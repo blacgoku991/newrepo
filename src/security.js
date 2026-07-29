@@ -67,12 +67,33 @@ setInterval(() => {
  */
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 
+/**
+ * Adresses depuis lesquelles l'en-tête est cru, quand TRUST_PROXY est actif.
+ *
+ * Faire confiance à `X-Forwarded-For` sans regarder QUI l'envoie, c'est faire
+ * confiance à tout le monde : il suffirait d'atteindre le port de l'instance
+ * autrement que par le proxy pour se choisir une adresse à chaque requête, et
+ * la limitation de débit ne limiterait plus rien. En hébergement, le proxy est
+ * sur la même machine ; on ne croit donc l'en-tête que s'il vient de la boucle
+ * locale — ou d'une adresse explicitement déclarée.
+ */
+const PROXIES = new Set(
+  (process.env.TRUST_PROXY_FROM || '127.0.0.1,::1,::ffff:127.0.0.1')
+    .split(',').map((v) => v.trim()).filter(Boolean)
+);
+
 function clientIp(req) {
-  if (TRUST_PROXY) {
+  const pair = req.socket?.remoteAddress || 'inconnu';
+  if (TRUST_PROXY && PROXIES.has(pair)) {
+    // Le proxy qui nous précède REMPLACE cet en-tête par la seule adresse qu'il
+    // a établie ; il ne complète pas ce que le visiteur a envoyé. La première
+    // valeur est donc la bonne — et il n'y en a qu'une.
     const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    if (fwd) return fwd;
+    // Une valeur qui n'a pas la forme d'une adresse ne sert qu'à polluer les
+    // compteurs et le journal : on la jette.
+    if (/^[0-9a-fA-F:.]{3,45}$/.test(fwd)) return fwd;
   }
-  return req.socket?.remoteAddress || 'inconnu';
+  return pair;
 }
 
 /**

@@ -82,6 +82,28 @@ function currentUser(req) {
     : null;
 }
 
+/**
+ * Réduit une cible de retour à un chemin de CE portail, ou à l'accueil.
+ *
+ * Il ne suffit pas d'écarter `//evil.fr` : les navigateurs traitent l'antislash
+ * comme une barre oblique dans une URL, si bien que `/\evil.fr` — qui passait
+ * le contrôle « commence par une seule barre » — était compris comme
+ * `//evil.fr`, donc comme un autre site. Une redirection ouverte sur la page de
+ * connexion est exactement ce qu'il faut à un hameçonnage : le lien part de
+ * notre domaine, la victime s'authentifie vraiment, et atterrit ailleurs.
+ *
+ * On n'accepte donc qu'un chemin absolu dont le premier caractère suivant est
+ * une lettre, un chiffre ou une fin de chaîne.
+ */
+function cibleLocale(valeur) {
+  const brut = String(valeur == null ? '' : valeur);
+  if (brut === '/' || brut === '') return '/';
+  // Ni schéma, ni hôte, ni antislash, ni caractère de contrôle nulle part.
+  if (!/^\/[A-Za-z0-9._~\-/?&=%#+,;:@!$'()*[\]]*$/.test(brut)) return '/';
+  if (brut.startsWith('//')) return '/';
+  return brut.slice(0, 500);
+}
+
 // --- Routes ---------------------------------------------------------------
 
 /** GET /auth/sso/login — redirige vers la page de connexion Microsoft. */
@@ -95,9 +117,7 @@ function loginRoute(req, res) {
   const nonce = b64url(crypto.randomBytes(24));
   const verifier = b64url(crypto.randomBytes(48));
   const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
-  // Cible de retour : uniquement un chemin local (jamais une URL externe).
-  const next = String(req.query.next || '/');
-  pendingStates.set(state, { nonce, verifier, next: next.startsWith('/') && !next.startsWith('//') ? next : '/', at: Date.now() });
+  pendingStates.set(state, { nonce, verifier, next: cibleLocale(req.query.next), at: Date.now() });
 
   const url = new URL(`${authority()}/oauth2/v2.0/authorize`);
   url.searchParams.set('client_id', process.env.M365_CLIENT_ID);
@@ -208,7 +228,12 @@ async function callbackRoute(req, res) {
     db.createSsoSession(token, email, name, String(payload.oid || ''), expires, givenName, familyName, claims);
     db.audit(`${name} <${email}>`, 'connexion_sso', '', '', clientIp(req));
 
-    const secure = String(process.env.COOKIE_SECURE || 'false') === 'true';
+    // `Secure` dès que la connexion est chiffrée, même si le chiffrement
+    // s'arrête au reverse proxy. Il dépendait d'une variable d'environnement
+    // que l'hébergement ne posait pas : la session Microsoft 365 d'un référent
+    // partait donc sans ce drapeau sur un site pourtant en HTTPS.
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+      || String(process.env.COOKIE_SECURE || 'false') === 'true';
     res.setHeader(
       'Set-Cookie',
       `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_H * 3600}${secure ? '; Secure' : ''}`
@@ -260,4 +285,7 @@ module.exports = {
   logoutRoute,
   requirePage,
   requireApi,
+  // Exporté pour être vérifié directement : c'est la seule barrière entre un
+  // paramètre `next` et une redirection hors du portail.
+  cibleLocale,
 };

@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -281,10 +282,22 @@ if (!ssoCols.includes('claims')) {
 // Une demande interrompue en plein traitement (crash / redémarrage) repart en file d'attente.
 db.prepare(`UPDATE requests SET status = 'en_attente' WHERE status = 'en_cours'`).run();
 
+/**
+ * Référence d'une demande : PREFIXE-AAMMJJ-XXXX.
+ *
+ * La partie aléatoire vient de `crypto`, pas de `Math.random()` : la référence
+ * sert de clé de recherche sur la page de suivi, et un générateur dont on peut
+ * deviner la suite à partir de quelques tirages laisserait énumérer les
+ * demandes du jour. Ce n'est pas le seul verrou — l'habilitation est vérifiée
+ * derrière — mais une clé se doit d'être imprévisible.
+ */
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans I, O, 0, 1 : lisible au téléphone
 function generateReference(prefix) {
   const now = new Date();
   const ymd = now.toISOString().slice(2, 10).replace(/-/g, '');
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const octets = crypto.randomBytes(4);
+  let rand = '';
+  for (const o of octets) rand += ALPHABET[o % ALPHABET.length];
   return `${prefix}-${ymd}-${rand}`;
 }
 

@@ -101,13 +101,25 @@ function currentSession(req) {
   return db.getSession(token) || null;
 }
 
-function setSessionCookie(res, token) {
+/**
+ * `Secure` dès que la connexion est chiffrée — y compris lorsque le chiffrement
+ * s'arrête au reverse proxy, ce qui est le cas de tout portail hébergé.
+ *
+ * Ce drapeau dépendait d'une variable d'environnement qu'il fallait penser à
+ * poser : en hébergement SaaS personne ne la posait, et le cookie de session
+ * d'un administrateur partait sans `Secure` sur un site pourtant en HTTPS —
+ * donc récupérable au premier lien http:// suivi depuis ce navigateur.
+ */
+const enHttps = (req) => !!(req && (req.secure || req.headers['x-forwarded-proto'] === 'https'))
+  || process.env.ADMIN_COOKIE_SECURE === 'true';
+
+function setSessionCookie(res, token, req) {
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
-  // Pour un frontend cross-domaine, mettre ADMIN_COOKIE_SAMESITE=None et
-  // ADMIN_COOKIE_SECURE=true (nécessite HTTPS) — sinon le cookie n'est pas
-  // envoyé entre deux domaines. Sinon, préférer le jeton Bearer.
+  // Pour un frontend cross-domaine, mettre ADMIN_COOKIE_SAMESITE=None
+  // (nécessite HTTPS) — sinon le cookie n'est pas envoyé entre deux domaines.
+  // Sinon, préférer le jeton Bearer.
   const sameSite = process.env.ADMIN_COOKIE_SAMESITE || 'Lax';
-  const secure = process.env.ADMIN_COOKIE_SECURE === 'true' ? '; Secure' : '';
+  const secure = enHttps(req) ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
     `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=${sameSite}${secure}; Max-Age=${maxAge}`
