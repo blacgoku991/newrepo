@@ -19,7 +19,9 @@ mises en place et la checklist de mise en production.
   `state` et `nonce` aléatoires à usage unique (10 min), vérification de
   l'audience, de l'émetteur, de l'expiration et du nonce du jeton. L'échange du
   code se fait exclusivement côté serveur, en TLS direct avec Microsoft.
-  Le paramètre `next` n'accepte qu'un chemin local (anti open-redirect).
+  Le paramètre `next` n'accepte qu'un chemin local (anti open-redirect) : ni
+  schéma, ni hôte, ni antislash — que les navigateurs lisent comme une barre
+  oblique —, ni caractère de contrôle.
 
 ### Anti brute-force & anti-abus (rate limiting par IP)
 - Connexion admin : 10 tentatives / 15 min (compteur remis à zéro en cas de succès).
@@ -73,7 +75,10 @@ mises en place et la checklist de mise en production.
    (nginx/Caddy/IIS) — un bandeau d'alerte s'affiche dans Réglages sinon.
 2. `ADMIN_PASSWORD` fort dès le premier démarrage, puis rotation régulière.
    Ne jamais laisser « admin/admin » (alerte affichée dans Réglages).
-3. `ADMIN_COOKIE_SECURE=true` et `COOKIE_SECURE=true` (cookies réservés à HTTPS).
+3. Rien à faire pour les cookies : le drapeau `Secure` est posé dès que la
+   requête arrive en HTTPS, y compris quand le chiffrement s'arrête au reverse
+   proxy (`X-Forwarded-Proto`). `ADMIN_COOKIE_SECURE` / `COOKIE_SECURE` ne
+   servent plus qu'à le forcer dans un montage particulier.
 4. **Activer le SSO Microsoft 365** (`M365_*`) pour restreindre le site public
    au personnel ADEF ; garder `SSO_REQUIRED=true`.
 5. `ALLOWED_ORIGINS` : laisser vide sauf frontend externe réellement utilisé.
