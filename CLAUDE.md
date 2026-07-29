@@ -3,8 +3,8 @@
 Portail interne de création automatisée de comptes sur les applications métiers
 (BlueKanGo, NetSoins, ULIS…) : formulaire par application → robot Playwright →
 compte créé + e-mail d'identifiants. Panel admin complet (stats, éditeurs de
-formulaires et de scénarios, journal). Voir `SECURITY.md` pour la sécurité et
-`docs/API.md` pour l'API.
+formulaires et de scénarios, journal). Voir `SECURITY.md` pour la sécurité,
+`docs/RGPD.md` pour la conformité et `docs/API.md` pour l'API.
 
 ## Règles de travail (à appliquer sur TOUTE demande)
 
@@ -52,6 +52,11 @@ mots de passe jamais stockés ni journalisés.
   lettres supplémentaires du prénom en cas de collision).
 - Statuts de demande : `en_attente | en_cours | terminee | echec`.
 - Champs `robotFields` non masquables ; mode démo fonctionnel sans `.env`.
+- Durées de conservation : une seule source, `src/retention.js`. La page de
+  mentions légales et l'administration les affichent depuis là — ne jamais
+  recopier une durée à la main dans un texte.
+- Aucune ressource chargée depuis un site tiers (polices et logos auto-hébergés,
+  CSP sans origine externe).
 - Push : branche `claude/account-creation-platform-6xubq7` sur `origin`,
   et `main` sur `hub` + `hub2`.
 

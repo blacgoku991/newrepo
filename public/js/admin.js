@@ -58,6 +58,8 @@
     users: { ic: 'users', label: 'Comptes admin', h1: 'Comptes administrateurs', sub: 'Accès à cet espace' },
     settings: { ic: 'lock', label: 'Réglages', h1: 'Réglages', sub: 'Mode d’exécution, e-mail, configuration' },
     journal: { ic: 'list', label: "Journal d'activité", h1: "Journal d'activité", sub: 'Toutes les modifications faites dans l\'admin' },
+    rgpd: { ic: 'shield', label: 'Données personnelles', h1: 'Données personnelles',
+            sub: 'Droits des personnes et durées de conservation' },
   };
 
   function setup() {
@@ -131,6 +133,7 @@
     else if (view === 'referents') loadReferents();
     else if (view === 'users') loadUsers();
     else if (view === 'settings') loadSettings();
+    else if (view === 'rgpd') loadRgpd();
     else if (view === 'journal') loadJournal();
   }
 
@@ -1296,6 +1299,205 @@
         ${l.empreinteCle ? `<p style="font-size:.82rem;color:var(--muted);margin-top:4px">Clé de l'éditeur : <span class="ref" style="font-size:.8rem">${escapeHtml(l.empreinteCle)}</span> — doit correspondre à celle de votre poste.</p>` : ''}
         ${saisie}
       </div></div>`;
+  }
+
+  /* ------------------------------------------------------------------------
+     Données personnelles — droits des personnes et durées de conservation.
+
+     Une demande d'accès ou d'effacement doit se traiter en quelques minutes,
+     sinon elle ne se traite pas : c'est l'écran qui rend le droit praticable.
+     ------------------------------------------------------------------------ */
+  async function loadRgpd() {
+    let conservation = { categories: [] };
+    try { conservation = await fetchJson('/api/admin/conservation'); } catch { /* affiché vide */ }
+    el('rgpd-body').innerHTML = `
+      <div class="card" style="margin-bottom:18px">
+        <div class="ch"><h3>Retrouver une personne</h3><span class="hint">droit d'accès, article 15</span></div>
+        <p style="color:var(--muted);font-size:.88rem;margin:0 0 14px">
+          Nom, prénom, adresse e-mail ou identifiant. La recherche parcourt les demandes,
+          les comptes créés et les référents.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <input class="inp" id="rgpd-q" placeholder="ex : Dupont" style="max-width:340px" />
+          <button class="btn btn-primary" id="rgpd-chercher">Rechercher</button>
+        </div>
+        <div id="rgpd-resultats" style="margin-top:16px"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="ch"><h3>Mentions légales</h3><span class="hint">affichées sur la page publique</span></div>
+        <p style="color:var(--muted);font-size:.88rem;margin:0 0 4px">
+          Ces informations alimentent la page « Mentions légales » du portail. Tant qu'elles ne sont
+          pas renseignées, la page affiche « à compléter » — ce que verront vos salariés.</p>
+        <div id="conformite-manque"></div>
+        <div class="form-grid" id="conformite-champs" style="margin-top:14px"></div>
+        <div style="margin-top:14px"><button class="btn btn-primary" id="conformite-ok">Enregistrer</button></div>
+      </div>
+
+      <div class="card">
+        <div class="ch"><h3>Durées de conservation</h3><span class="hint">appliquées automatiquement</span></div>
+        <p style="color:var(--muted);font-size:.88rem;margin:0 0 14px">
+          Ce que le portail conserve, pourquoi, et pour combien de temps. La purge passe au démarrage
+          puis toutes les six heures ; rien n'est à lancer à la main.</p>
+        <div class="tablecard"><table class="data">
+          <thead><tr><th>Catégorie</th><th>Contenu</th><th>Finalité</th><th>Durée</th></tr></thead>
+          <tbody>${conservation.categories.map((c) => `<tr>
+            <td data-label="Catégorie"><b>${escapeHtml(c.libelle)}</b></td>
+            <td data-label="Contenu">${escapeHtml(c.contenu)}</td>
+            <td data-label="Finalité">${escapeHtml(c.finalite)}</td>
+            <td data-label="Durée"><b>${c.jours === 0 ? 'immédiat' : c.jours < 60 ? `${c.jours} jour${c.jours > 1 ? 's' : ''}` : `${Math.round(c.jours / 30)} mois`}</b></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+
+    const chercher = async () => {
+      const q = el('rgpd-q').value.trim();
+      const zone = el('rgpd-resultats');
+      if (q.length < 2) { zone.innerHTML = '<p class="hint">Saisissez au moins deux caractères.</p>'; return; }
+      zone.innerHTML = '<div class="loading">Recherche…</div>';
+      try {
+        const d = await fetchJson(`/api/admin/personnes?q=${encodeURIComponent(q)}`);
+        if (!d.personnes.length) { zone.innerHTML = '<p class="hint">Aucune personne trouvée.</p>'; return; }
+        zone.innerHTML = `<div class="tablecard"><table class="data">
+          <thead><tr><th>Personne</th><th>E-mail</th><th>Ce qui la concerne</th><th></th></tr></thead>
+          <tbody>${d.personnes.map((p) => `<tr>
+            <td data-label="Personne"><b>${escapeHtml(`${p.nom} ${p.prenom}`.trim() || '—')}</b></td>
+            <td data-label="E-mail">${escapeHtml(p.email || '—')}</td>
+            <td data-label="Ce qui la concerne">${escapeHtml(Object.entries(p.compte)
+              .map(([k, n]) => `${n} ${k}`).join(', '))}</td>
+            <td><button class="btn btn-ghost btn-sm" data-dossier="${escapeHtml(p.cle)}">Ouvrir le dossier</button></td>
+          </tr>`).join('')}</tbody></table></div>`;
+        for (const b of zone.querySelectorAll('[data-dossier]')) {
+          b.addEventListener('click', () => ouvrirDossier(b.dataset.dossier));
+        }
+      } catch (e) { zone.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; }
+    };
+    el('rgpd-chercher').addEventListener('click', chercher);
+    el('rgpd-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') chercher(); });
+
+    dessinerConformite(await fetchJson('/api/conformite').catch(() => null));
+  }
+
+  function dessinerConformite(c) {
+    if (!c) return;
+    el('conformite-manque').innerHTML = c.complet
+      ? '<div class="alert alert-ok" style="margin-top:12px">Toutes les mentions sont renseignées.</div>'
+      : `<div class="alert alert-warn" style="margin-top:12px">Il manque : ${escapeHtml(c.manquants.join(', '))}.</div>`;
+    el('conformite-champs').innerHTML = c.champs.map((ch) => `
+      <label class="${ch.long ? 'full' : ''}">${escapeHtml(ch.libelle)}
+        ${ch.long
+          ? `<textarea class="inp" id="cf-${escapeHtml(ch.cle)}" rows="2">${escapeHtml(ch.valeur || '')}</textarea>`
+          : `<input class="inp" id="cf-${escapeHtml(ch.cle)}" value="${escapeHtml(ch.valeur || '')}" placeholder="${escapeHtml(ch.exemple || '')}" />`}
+        ${ch.aide ? `<span class="hint">${escapeHtml(ch.aide)}</span>` : ''}
+      </label>`).join('');
+    el('conformite-ok').addEventListener('click', async () => {
+      const corps = {};
+      for (const ch of c.champs) corps[ch.cle] = el('cf-' + ch.cle).value;
+      try {
+        const r = await fetchJson('/api/admin/conformite', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps),
+        });
+        toast(r.modifies.length ? `Mentions légales enregistrées (${r.modifies.length} champ(s))` : 'Aucun changement');
+        dessinerConformite(r);
+      } catch (e) { toast(e.message, true); }
+    });
+  }
+
+  async function ouvrirDossier(cle) {
+    let d;
+    try { d = await fetchJson(`/api/admin/personnes/dossier?cle=${encodeURIComponent(cle)}`); }
+    catch (e) { return toast(e.message, true); }
+    const nom = `${d.identite.nom} ${d.identite.prenom}`.trim();
+    modal.classList.add('wide');
+    backdrop.classList.add('show');
+    modal.innerHTML = `
+      <h3>${escapeHtml(nom || d.identite.email)}</h3>
+      <p class="hint" style="margin-top:4px">${escapeHtml(d.identite.email || 'aucune adresse connue')}</p>
+
+      <div style="margin-top:18px;max-height:46vh;overflow:auto">
+        <h4 style="font-size:.9rem;margin-bottom:8px">Demandes (${d.demandes.length})</h4>
+        ${d.demandes.length ? `<table class="data"><tbody>${d.demandes.map((x) => `<tr>
+            <td><span class="ref">${escapeHtml(x.reference)}</span></td>
+            <td>${escapeHtml(demarcheLabel(x.demarche))}</td>
+            <td>${escapeHtml(x.application)}</td>
+            <td>${escapeHtml(x.identifiantCree || '—')}</td>
+            <td>${formatDate(x.depose)}</td></tr>`).join('')}</tbody></table>`
+          : '<p class="hint">Aucune.</p>'}
+
+        <h4 style="font-size:.9rem;margin:18px 0 8px">Comptes créés (${d.comptes.length})</h4>
+        ${d.comptes.length ? `<table class="data"><tbody>${d.comptes.map((c) => `<tr>
+            <td>${escapeHtml(c.application)}</td><td><b>${escapeHtml(c.identifiant)}</b></td>
+            <td>${formatDate(c.cree)}</td></tr>`).join('')}</tbody></table>`
+          : '<p class="hint">Aucun.</p>'}
+
+        <h4 style="font-size:.9rem;margin:18px 0 8px">Habilitation</h4>
+        ${d.referent
+          ? `<p style="font-size:.9rem">Référent ${d.referent.actif ? 'actif' : 'désactivé'} depuis le ${formatDate(d.referent.declareLe)}, sur ${d.referent.etablissements.length} établissement(s).</p>`
+          : '<p class="hint">Cette personne n’est pas référente.</p>'}
+
+        <h4 style="font-size:.9rem;margin:18px 0 8px">Journal (${d.journal.length} entrée(s))</h4>
+        ${d.journal.length ? `<table class="data"><tbody>${d.journal.slice(0, 40).map((e) => `<tr>
+            <td>${formatDate(e.date)}</td><td>${escapeHtml(e.action)}</td>
+            <td>${escapeHtml(e.details || '—')}</td></tr>`).join('')}</tbody></table>`
+          : '<p class="hint">Aucune.</p>'}
+
+        <p class="hint" style="margin-top:16px">${escapeHtml(d.note)}</p>
+      </div>
+
+      <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="dos-fermer">Fermer</button>
+        <button class="btn btn-ghost" id="dos-export">Exporter (JSON)</button>
+        <button class="btn btn-danger" id="dos-effacer">Effacer ces données</button>
+      </div>`;
+    el('dos-fermer').addEventListener('click', closeModal);
+    el('dos-export').addEventListener('click', () => {
+      // Copie remise à la personne : elle sort du navigateur de l'administrateur,
+      // jamais par un lien qu'il faudrait ensuite penser à révoquer.
+      const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `donnees-${(nom || 'personne').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    });
+    el('dos-effacer').addEventListener('click', () => confirmerEffacement(cle, nom));
+  }
+
+  function confirmerEffacement(cle, nom) {
+    modal.classList.remove('wide');
+    backdrop.classList.add('show');
+    modal.innerHTML = `
+      <h3>Effacer les données de ${escapeHtml(nom)}</h3>
+      <div class="alert alert-error" style="margin-top:14px">
+        Les demandes, les comptes du registre et les e-mails la concernant seront supprimés.
+        C'est <b>irréversible</b>.
+      </div>
+      <p class="hint" style="margin-top:12px">
+        Le journal d'activité n'est pas supprimé mais <b>anonymisé</b> : savoir qu'un accès a eu lieu,
+        quand et depuis quelle adresse reste nécessaire à la sécurité du portail — c'est la réserve
+        prévue à l'article 17.3 du RGPD. L'identité disparaît, l'événement reste.
+      </p>
+      <div class="form-grid" style="margin-top:16px">
+        <label class="full">Motif de la demande<input class="inp" id="eff-motif" placeholder="ex : demande d'effacement du 29/07/2026" /></label>
+        <label class="full">Retapez « ${escapeHtml(nom)} » pour confirmer<input class="inp" id="eff-nom" autocomplete="off" /></label>
+      </div>
+      <div class="form-nav" style="justify-content:flex-end;border:none;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="eff-annuler">Annuler</button>
+        <button class="btn btn-danger" id="eff-ok">Effacer définitivement</button>
+      </div>`;
+    el('eff-annuler').addEventListener('click', closeModal);
+    el('eff-ok').addEventListener('click', async () => {
+      const b = el('eff-ok');
+      b.disabled = true;
+      try {
+        const r = await fetchJson('/api/admin/personnes', {
+          method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cle, confirmation: el('eff-nom').value, motif: el('eff-motif').value }),
+        });
+        closeModal();
+        toast(`Effacé : ${r.bilan.demandes} demande(s), ${r.bilan.comptes} compte(s), `
+          + `${r.bilan.journal} entrée(s) anonymisée(s)`);
+      } catch (e) { toast(e.message, true); b.disabled = false; }
+    });
   }
 
   async function loadSettings() {

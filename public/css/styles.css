@@ -131,6 +131,25 @@ a:hover { text-decoration: underline; }
 }
 
 /* --------------------------------------------------------------------------
+   Information cookies — un bandeau discret, affiché une seule fois. Ce n'est
+   pas une demande de consentement : il n'y a rien à refuser.
+   -------------------------------------------------------------------------- */
+.info-cookies {
+  position: fixed; left: 18px; right: 18px; bottom: 18px; z-index: 60;
+  max-width: 720px; margin: 0 auto;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg); padding: 14px 18px;
+}
+.info-cookies p { margin: 0; flex: 1; min-width: 240px; font-size: .86rem; color: var(--muted); line-height: 1.55; }
+.info-cookies p strong { color: var(--text); }
+.info-cookies a { color: var(--gold-bright); }
+@media (max-width: 520px) {
+  .info-cookies { left: 12px; right: 12px; bottom: 12px; padding: 14px; }
+  .info-cookies .btn { width: 100%; }
+}
+
+/* --------------------------------------------------------------------------
    Héros scindé
    -------------------------------------------------------------------------- */
 .hero { background: var(--bg-deep); color: var(--ink-2); border-bottom: 1px solid var(--line); }
@@ -395,6 +414,7 @@ a.app-card:hover .go svg { transform: translateX(3px); }
 .alert { border-radius: var(--radius-sm); padding: 13px 16px; font-size: .92rem; }
 .alert-err,.alert-error { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger-line); }
 .alert-warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+.alert-ok { background: var(--ok-soft); color: var(--ok); border: 1px solid var(--ok-line); }
 .alert a { color: inherit; text-decoration: underline; font-weight: 650; }
 .spinner { width: 15px; height: 15px; border: 2.5px solid rgba(36,26,3,.35); border-top-color: var(--gold-ink); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
 .btn-ghost .spinner, .spinner.dark { border-color: rgba(255,255,255,.2); border-top-color: var(--gold-bright); }

@@ -25,6 +25,9 @@ const security = require('./security');
 const licence = require('./licence');
 const marque = require('./marque');
 const secretsApps = require('./secretsApps');
+const personnes = require('./personnes');
+const conformite = require('./conformite');
+const retention = require('./retention');
 const comptesProteges = require('./comptesProteges');
 
 const app = express();
@@ -92,6 +95,9 @@ app.use((req, res, next) => {
   // l'utilisateur tourne en rond sans jamais lire pourquoi il est refusé.
   if (p.startsWith('/auth/sso/') || p === '/connexion' || p === '/connexion.html'
       || p === '/acces-refuse.html') return next();
+  // Les mentions légales ne contiennent aucune donnée personnelle, et un avis
+  // légal qu'il faut s'authentifier pour lire n'en est pas un.
+  if (p === '/mentions-legales.html' || p === '/api/conformite') return next();
   if (p === '/login.html' || p === '/admin' || p === '/admin.html' || p.startsWith('/artifacts')) return next();
   // `/api/marque` ne livre que le nom de la société et la mention de l'éditeur :
   // aucune donnée personnelle, et la page de connexion en a besoin pour s'habiller.
@@ -115,6 +121,11 @@ app.use((req, res, next) => {
   const n = secretsApps.appliquer();
   if (n) console.log(`[reglages] ${n} identifiant(s) d'application chargé(s) depuis les réglages.`);
 }
+
+// Durées de conservation : purge au démarrage, puis toutes les six heures.
+// Les captures d'écran des robots partent au bout d'un jour — elles montrent
+// des écrans d'application de santé, et ne servent qu'au diagnostic immédiat.
+retention.programmer();
 
 // Compte administrateur initial + purge des sessions expirées au démarrage.
 auth.ensureSeedAdmin();
@@ -1251,6 +1262,61 @@ function normalizeEtabs(list) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Droits des personnes (RGPD) — réservé à l'administrateur de la société, qui
+// est le responsable de traitement.
+// ---------------------------------------------------------------------------
+
+app.get('/api/admin/personnes', auth.requireApi, (req, res) => {
+  const terme = String(req.query.q || '').trim();
+  if (terme.length < 2) return res.json({ personnes: [], message: 'Saisissez au moins deux caractères.' });
+  res.json({ personnes: personnes.chercher(terme) });
+});
+
+app.get('/api/admin/personnes/dossier', auth.requireApi, (req, res) => {
+  const d = personnes.dossier(String(req.query.cle || ''));
+  if (!d) return res.status(404).json({ error: 'Aucune donnée pour cette personne.' });
+  // La consultation d'un dossier complet est elle-même un accès à des données
+  // personnelles : elle se trace, comme le reste.
+  db.audit(req.admin.username, 'rgpd_consultation',
+    `${d.identite.nom} ${d.identite.prenom}`.trim(), `${d.demandes.length} demande(s)`, sso.clientIp(req));
+  res.json(d);
+});
+
+app.delete('/api/admin/personnes', auth.requireApi, (req, res) => {
+  const cle = String(req.body?.cle || '');
+  const confirmation = String(req.body?.confirmation || '');
+  const d = personnes.dossier(cle);
+  if (!d) return res.status(404).json({ error: 'Aucune donnée pour cette personne.' });
+  // Le nom retapé : effacer sur un clic malheureux ne se rattrape pas.
+  const attendu = `${d.identite.nom} ${d.identite.prenom}`.trim();
+  if (confirmation.trim().toLowerCase() !== attendu.toLowerCase()) {
+    return res.status(400).json({ error: `Retapez « ${attendu} » pour confirmer.` });
+  }
+  const bilan = personnes.effacer(cle, req.admin.username, String(req.body?.motif || '').slice(0, 300));
+  res.json({ ok: true, bilan });
+});
+
+/**
+ * Mentions légales : informations de l'organisation, cookies déposés, durées
+ * de conservation réellement appliquées. Servi sans session.
+ */
+app.get('/api/conformite', (req, res) => res.json(conformite.etat()));
+
+app.put('/api/admin/conformite', auth.requireApi, (req, res) => {
+  const corps = req.body && typeof req.body === 'object' ? req.body : {};
+  const { modifies } = conformite.definir(corps, req.admin.username);
+  if (modifies.length) {
+    db.audit(req.admin.username, 'mentions_legales', '', modifies.join(', '), sso.clientIp(req));
+  }
+  res.json({ ok: true, modifies, ...conformite.etat() });
+});
+
+/** Durées de conservation appliquées — affichées à l'administration. */
+app.get('/api/admin/conservation', auth.requireApi, (req, res) => {
+  res.json({ categories: retention.registre() });
+});
 
 app.get('/api/admin/referents', auth.requireApi, (req, res) => {
   const apps = registry

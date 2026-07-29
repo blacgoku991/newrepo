@@ -755,6 +755,74 @@ const api = {
     return db.prepare(`SELECT * FROM audit_log ORDER BY id DESC LIMIT ?`).all(limit);
   },
 
+  /**
+   * Entrées du journal qui mentionnent une personne (droit d'accès).
+   * On cherche sur l'adresse et sur le couple nom/prénom, car le journal porte
+   * tantôt « Nom <adresse> », tantôt la seule référence de la demande.
+   */
+  auditPour({ email, nom, prenom }) {
+    const criteres = [];
+    const valeurs = [];
+    if (email) { criteres.push(`(admin LIKE ? OR target LIKE ? OR details LIKE ?)`); valeurs.push(`%${email}%`, `%${email}%`, `%${email}%`); }
+    if (nom) { criteres.push(`(admin LIKE ? OR target LIKE ?)`); valeurs.push(`%${nom}%`, `%${nom}%`); }
+    if (!criteres.length) return [];
+    return db.prepare(
+      `SELECT * FROM audit_log WHERE ${criteres.join(' OR ')} ORDER BY id DESC LIMIT 500`
+    ).all(...valeurs);
+  },
+
+  /**
+   * Efface une personne (droit à l'effacement).
+   *
+   * Le journal d'activité n'est PAS supprimé mais ANONYMISÉ : savoir qu'un
+   * accès a eu lieu, quand et depuis quelle adresse reste nécessaire à la
+   * sécurité du système — c'est la réserve prévue à l'article 17.3. Ce qui
+   * disparaît, c'est l'identité ; ce qui reste, c'est l'événement.
+   */
+  effacerPersonne({ references, comptes, referentEmail, identite }) {
+    const bilan = { demandes: 0, comptes: 0, liens: 0, emails: 0, referent: 0, journal: 0 };
+    const tout = db.transaction(() => {
+      for (const ref of references || []) {
+        const ligne = db.prepare(`SELECT id FROM requests WHERE reference = ?`).get(String(ref));
+        if (!ligne) continue;
+        bilan.liens += db.prepare(`DELETE FROM credential_links WHERE request_id = ?`).run(ligne.id).changes;
+        bilan.emails += db.prepare(`DELETE FROM outbox WHERE request_id = ?`).run(ligne.id).changes;
+        bilan.demandes += db.prepare(`DELETE FROM requests WHERE id = ?`).run(ligne.id).changes;
+      }
+      for (const c of comptes || []) {
+        bilan.comptes += db.prepare(`DELETE FROM created_accounts WHERE app_id = ? AND login = ?`)
+          .run(c.appId, c.login).changes;
+      }
+      if (referentEmail) {
+        const r = db.prepare(`SELECT id FROM referents WHERE email = ?`).get(referentEmail);
+        if (r) {
+          db.prepare(`DELETE FROM referent_etablissements WHERE referent_id = ?`).run(r.id);
+          db.prepare(`DELETE FROM sso_sessions WHERE lower(email) = lower(?)`).run(referentEmail);
+          bilan.referent += db.prepare(`DELETE FROM referents WHERE id = ?`).run(r.id).changes;
+        }
+      }
+      const anonyme = '[personne effacée]';
+      const remplacer = (colonne, motif) => {
+        bilan.journal += db.prepare(
+          `UPDATE audit_log SET ${colonne} = ? WHERE ${colonne} LIKE ?`
+        ).run(anonyme, motif).changes;
+      };
+      // Les deux ordres : le journal porte tantôt « Marie DUPONT », tantôt
+      // « DUPONT Marie » selon qu'il vient du SSO ou d'un formulaire.
+      const formes = [identite.email];
+      if (identite.nom && identite.prenom) {
+        formes.push(`${identite.nom} ${identite.prenom}`, `${identite.prenom} ${identite.nom}`);
+      }
+      for (const valeur of formes) {
+        if (!valeur) continue;
+        remplacer('admin', `%${valeur}%`);
+        remplacer('target', `%${valeur}%`);
+      }
+    });
+    tout();
+    return bilan;
+  },
+
   // --- Sessions SSO Microsoft 365 -------------------------------------------
 
   createSsoSession(token, email, name, oid, expiresAt, givenName = '', familyName = '', claims = {}) {
@@ -790,6 +858,64 @@ const api = {
 
   purgeExpiredSsoSessions() {
     db.prepare(`DELETE FROM sso_sessions WHERE expires_at <= datetime('now')`).run();
+  },
+
+  // --- Durées de conservation (voir src/retention.js) -----------------------
+
+  /**
+   * Oublie les captures d'écran de ces demandes.
+   * Le dossier vient d'être effacé sur le disque ; laisser la liste en base
+   * ferait proposer à l'administration des liens vers des images disparues.
+   */
+  forgetArtifacts(references) {
+    if (!references || !references.length) return 0;
+    const vider = db.prepare(`UPDATE requests SET artifacts = '[]' WHERE reference = ?`);
+    const tout = db.transaction((liste) => {
+      let n = 0;
+      for (const ref of liste) n += vider.run(String(ref)).changes;
+      return n;
+    });
+    return tout(references);
+  },
+
+  /**
+   * Efface ce qui a dépassé sa durée de conservation.
+   *
+   * Une demande n'est purgée que TERMINÉE : une demande encore en file, si
+   * ancienne soit-elle, attend d'être traitée — l'effacer ferait disparaître le
+   * travail sans que personne ne l'ait décidé. Ses dépendances (lien
+   * d'identifiants, e-mail) partent avec elle, sans quoi il resterait en base
+   * un mot de passe chiffré rattaché à plus rien.
+   */
+  purgeRetention({ demandes, journal, comptes, emails, liens }) {
+    const j = (n) => `-${Math.max(0, Number(n) || 0)} days`;
+    const resultat = { demandes: 0, journal: 0, comptes: 0, emails: 0, liens: 0 };
+    const tout = db.transaction(() => {
+      const echues = db.prepare(
+        `SELECT id FROM requests
+          WHERE status IN ('terminee', 'echec')
+            AND COALESCE(finished_at, created_at) <= datetime('now', ?)`
+      ).all(j(demandes)).map((r) => r.id);
+      for (const id of echues) {
+        db.prepare(`DELETE FROM credential_links WHERE request_id = ?`).run(id);
+        db.prepare(`DELETE FROM outbox WHERE request_id = ?`).run(id);
+        resultat.demandes += db.prepare(`DELETE FROM requests WHERE id = ?`).run(id).changes;
+      }
+      resultat.liens += db.prepare(
+        `DELETE FROM credential_links WHERE created_at <= datetime('now', ?)`
+      ).run(j(liens)).changes;
+      resultat.emails += db.prepare(
+        `DELETE FROM outbox WHERE created_at <= datetime('now', ?)`
+      ).run(j(emails)).changes;
+      resultat.journal += db.prepare(
+        `DELETE FROM audit_log WHERE created_at <= datetime('now', ?)`
+      ).run(j(journal)).changes;
+      resultat.comptes += db.prepare(
+        `DELETE FROM created_accounts WHERE created_at <= datetime('now', ?)`
+      ).run(j(comptes)).changes;
+    });
+    tout();
+    return resultat;
   },
 
   // --- Liens de récupération d'identifiants ---------------------------------

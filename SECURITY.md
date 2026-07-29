@@ -147,7 +147,7 @@ Deux réglages d'exploitation en découlent :
 - `<APP>_PROTECTED_LOGINS` : comptes techniques du client à sanctuariser, en
   plus du compte d'administration du robot (déjà protégé d'office) ;
 - durée de conservation des captures d'écran des robots (`data/artifacts/`) :
-  à décider, aucune purge automatique aujourd'hui.
+  **1 jour**, purgé automatiquement (`RETENTION_CAPTURES_JOURS`).
 
 ---
 
@@ -231,9 +231,25 @@ portail (liste blanche).
 
 ### Reste ouvert
 
-- **Captures d'écran des robots** (`data/artifacts/` de chaque instance) :
-  toujours sans durée de conservation ni purge. Elles contiennent des données de
-  santé. C'est le premier point à traiter avant un vrai client.
 - Les sauvegardes doivent être **recopiées hors du serveur** : la copie
   quotidienne existe, son transfert vers un stockage distant reste à mettre en
   place côté système.
+
+---
+
+## Conservation et données personnelles
+
+Voir `docs/RGPD.md` — fiche de registre, durées de conservation, mesures
+techniques, droits des personnes, procédure de violation.
+
+Les captures d'écran des robots, longtemps citées ici comme le premier risque du
+projet, sont **purgées au bout d'un jour** : elles photographient des écrans
+d'application de santé et ne servent qu'au diagnostic immédiat d'un échec. La
+purge passe au démarrage puis toutes les six heures, efface le dossier entier
+(une référence seule en dit déjà trop) et vide la liste des captures de la
+demande pour ne pas laisser de liens morts.
+
+Les autres durées — demandes, journal, registre des comptes, e-mails, liens —
+sont déclarées dans `src/retention.js` et affichées telles quelles sur la page de
+mentions légales et dans l'administration : **ce qui est annoncé est ce qui est
+appliqué**, il n'y a pas deux sources.

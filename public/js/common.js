@@ -317,6 +317,47 @@ function renderFilRetour() {
 }
 document.addEventListener('DOMContentLoaded', renderFilRetour);
 
+/* ---------------------------------------------------------------------------
+   Information sur les cookies.
+
+   Ce portail ne dépose que des cookies strictement nécessaires : pas de mesure
+   d'audience, pas de publicité, aucun traceur tiers. Dans ce cas, le
+   consentement n'est PAS requis — et un bandeau « Accepter / Refuser » serait
+   trompeur, puisqu'il n'y a rien à refuser sans empêcher la connexion.
+   L'information, elle, reste due : on l'affiche une fois, sobrement.
+
+   L'accusé de lecture est gardé dans `localStorage`, pas dans un cookie : poser
+   un cookie pour dire qu'on informe sur les cookies serait absurde.
+   --------------------------------------------------------------------------- */
+
+const CLE_COOKIES_VU = 'portail.cookies.info';
+
+function renderInfoCookies() {
+  // Ni sur la page qui explique les cookies, ni sur les écrans d'authentification :
+  // le bandeau y masquerait le seul bouton utile.
+  const p = location.pathname;
+  if (p.startsWith('/mentions-legales') || p.startsWith('/connexion') || p === '/login.html'
+      || p.startsWith('/identifiants/') || p.startsWith('/acces-refuse')) return;
+  let vu = null;
+  try { vu = localStorage.getItem(CLE_COOKIES_VU); } catch { vu = 'impossible'; }
+  if (vu) return;
+
+  const barre = document.createElement('div');
+  barre.className = 'info-cookies';
+  barre.setAttribute('role', 'note');
+  barre.innerHTML = `
+    <p>Ce portail dépose uniquement les cookies <strong>nécessaires à votre connexion</strong>.
+      Aucune mesure d’audience, aucun traceur, aucune ressource chargée depuis un autre site.
+      <a href="/mentions-legales.html#cookies">En savoir plus</a></p>
+    <button type="button" class="btn btn-primary btn-sm" data-role="cookies-ok">J’ai compris</button>`;
+  document.body.appendChild(barre);
+  barre.querySelector('[data-role="cookies-ok"]').addEventListener('click', () => {
+    try { localStorage.setItem(CLE_COOKIES_VU, new Date().toISOString()); } catch { /* mode privé */ }
+    barre.remove();
+  });
+}
+document.addEventListener('DOMContentLoaded', renderInfoCookies);
+
 /* Appels API stricts : toute erreur serveur remonte telle quelle (jamais de faux succès). */
 async function fetchJson(url, options) {
   const res = await fetch(url, options);
