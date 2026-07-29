@@ -21,9 +21,9 @@ module.exports = {
   icon: 'shield',
   color: '#2563eb',
   order: 1,
-  // Logo officiel de l'éditeur (repli sur le SVG local /img/bluekango si le
-  // chargement échoue). Le domaine est autorisé dans la CSP (img-src).
-  logo: 'https://app.bluekango.com/BMS_EARLY/images/bkg_logo.png',
+  // Logo servi par le portail, jamais depuis le site de l'éditeur : chaque
+  // page consultée le lui signalait, avec l'adresse IP du poste.
+  logo: '/img/bluekango',
   logoFallback: '/img/bluekango',
   referencePrefix: 'BKG',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.

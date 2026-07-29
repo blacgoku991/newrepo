@@ -114,6 +114,7 @@ async function chargerMarque() {
 /** Applique la marque aux éléments qui la portent (en-tête des pages). */
 function appliquerMarque() {
   for (const e of document.querySelectorAll('[data-marque="societe"]')) e.textContent = MARQUE.societe;
+  for (const e of document.querySelectorAll('[data-marque="mention"]')) e.textContent = `${MARQUE.societe} — ${MARQUE.mention}`;
   for (const img of document.querySelectorAll('img[data-marque="logo"]')) {
     // `dataset` est en lecture seule : on écrit la propriété, pas l'objet.
     img.dataset.fallback = MARQUE.societe;
@@ -156,8 +157,12 @@ function renderFooter() {
         <div>
           <span class="ft-h">Applications gérées</span>
           <div class="ft-logos">
-            <span class="ed">${logoImg('https://app.bluekango.com/BMS_EARLY/images/bkg_logo.png', 'BlueKanGo')}</span>
-            <span class="ed">${logoImg('https://adef.netsoins.com/images/orisha_socialcare_teranga.png', 'NetSoins')}</span>
+            <!-- Logos servis PAR LE PORTAIL, jamais depuis les sites des éditeurs :
+                 chaque page consultée les prévenait de la visite, et l'adresse
+                 NetSoins était en dur sur un seul client — tous les autres
+                 auraient sonné chez lui. -->
+            <span class="ed">${logoImg('/img/bluekango', 'BlueKanGo')}</span>
+            <span class="ed">${logoImg('/img/netsoins', 'NetSoins')}</span>
           </div>
         </div>
       </div>
@@ -267,6 +272,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (key === 'espace') link.hidden = !(me && me.referent);
   }
 });
+
+/* ---------------------------------------------------------------------------
+   Fil de retour — présent sur toutes les pages qui ne sont pas l'accueil.
+
+   Une page sans issue est une impasse : la remise des identifiants, par
+   exemple, s'ouvrait sans le moindre lien pour revenir. On pose donc partout
+   deux repères constants : revenir à l'écran précédent, et rentrer à l'accueil.
+
+   Le retour n'utilise JAMAIS `document.referrer` comme destination : une page
+   extérieure pourrait ainsi renvoyer l'utilisateur où elle veut depuis notre
+   propre bouton. On revient dans l'historique du navigateur — qui reste sous
+   son contrôle — et, à défaut, sur une adresse du portail écrite dans la page.
+   --------------------------------------------------------------------------- */
+
+const FLECHE_RETOUR =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>';
+const MAISON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>';
+
+/** Vrai si l'écran précédent appartient bien à ce portail. */
+function retourInterne() {
+  if (history.length <= 1) return false;
+  const ref = document.referrer;
+  if (!ref) return false;              // ouverture directe : rien où revenir
+  try { return new URL(ref).origin === location.origin; } catch { return false; }
+}
+
+function renderFilRetour() {
+  for (const hote of document.querySelectorAll('[data-fil-retour]')) {
+    const repli = hote.dataset.filRetour || '/';       // toujours une URL du portail
+    const libelle = hote.dataset.filLibelle || 'Retour';
+    // `add` et non une réécriture de `className` : la page peut avoir posé
+    // « flottant » pour un écran centré sans en-tête.
+    hote.classList.add('fil-retour');
+    hote.innerHTML =
+      `<button type="button" class="fil-btn" data-role="retour">${FLECHE_RETOUR}<span>${escapeHtml(libelle)}</span></button>`
+      + `<a class="fil-btn" href="/">${MAISON}<span>Accueil</span></a>`;
+    hote.querySelector('[data-role="retour"]').addEventListener('click', () => {
+      if (retourInterne()) history.back();
+      else location.href = repli;
+    });
+  }
+}
+document.addEventListener('DOMContentLoaded', renderFilRetour);
 
 /* Appels API stricts : toute erreur serveur remonte telle quelle (jamais de faux succès). */
 async function fetchJson(url, options) {

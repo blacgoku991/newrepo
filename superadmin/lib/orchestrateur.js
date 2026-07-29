@@ -37,6 +37,57 @@ const enMarche = new Map();
 
 const journal = (msg) => console.log(`[orchestrateur] ${msg}`);
 
+/** Au-delà, un portail tombé repart d'un compteur neuf : ce n'est plus une boucle. */
+const DUREE_STABLE_MS = 10 * 60 * 1000;
+
+/* ---------------------------------------------------------------------------
+   Dernières lignes de chaque portail — pour répondre, depuis le panel, à la
+   seule question qu'on se pose vraiment quand un portail repart en boucle :
+   qu'est-ce qu'il dit avant de tomber ?
+
+   En mémoire uniquement : jamais écrit sur le disque, jamais sauvegardé. Et les
+   adresses e-mail sont masquées avant d'être retenues — le panel n'a pas à
+   connaître les salariés de ses clients, pas même par un message d'erreur.
+   --------------------------------------------------------------------------- */
+const LIGNES_GARDEES = 200;
+const journaux = new Map();
+
+/**
+ * Une ligne qui n'est qu'un long jeton : c'est ainsi qu'un portail annonce le
+ * mot de passe qu'il vient de générer pour son administrateur. Le retenir le
+ * rendrait lisible depuis le panel — et un mot de passe affiché « une seule
+ * fois » n'aurait plus rien d'une seule fois.
+ */
+const JETON_SEUL = /^\s*[A-Za-z0-9_\-+/=.]{12,}\s*$/;
+
+/** Masque ce qui identifierait une personne, ou livrerait un secret. */
+function anonymiser(ligne) {
+  if (JETON_SEUL.test(ligne)) return '[secret masqué]';
+  return ligne
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[adresse masquée]')
+    // Suites de 9 chiffres ou plus : NIR, téléphones, identifiants internes.
+    .replace(/\b\d{9,}\b/g, '[numéro masqué]')
+    // « mot de passe : xxx », « password=xxx » — la valeur ne sert à personne ici.
+    .replace(/((?:mot de passe|password|secret|token|jeton)\s*[:=]\s*)\S+/gi, '$1[masqué]');
+}
+
+function retenir(sousDomaine, donnees, erreur) {
+  let tampon = journaux.get(sousDomaine);
+  if (!tampon) { tampon = []; journaux.set(sousDomaine, tampon); }
+  for (const ligne of String(donnees).split('\n')) {
+    const t = ligne.trimEnd();
+    if (!t) continue;
+    tampon.push({ le: new Date().toISOString(), erreur: !!erreur, texte: anonymiser(t).slice(0, 500) });
+  }
+  if (tampon.length > LIGNES_GARDEES) tampon.splice(0, tampon.length - LIGNES_GARDEES);
+}
+
+/** Dernières lignes retenues pour un portail, de la plus ancienne à la plus récente. */
+function journalDe(sousDomaine, limite = LIGNES_GARDEES) {
+  const t = journaux.get(sousDomaine) || [];
+  return t.slice(-Math.max(1, Math.min(LIGNES_GARDEES, limite)));
+}
+
 /**
  * Port réservé à une société. Fixé une fois pour toutes et mémorisé en base :
  * un port qui change à chaque redémarrage compliquerait tout diagnostic.
@@ -219,18 +270,23 @@ function demarrer(societeId) {
   enMarche.set(sd, fiche);
 
   const prefixe = `[${sd}]`;
-  enfant.stdout.on('data', (d) => process.stdout.write(`${prefixe} ${d}`));
-  enfant.stderr.on('data', (d) => process.stderr.write(`${prefixe} ${d}`));
+  enfant.stdout.on('data', (d) => { process.stdout.write(`${prefixe} ${d}`); retenir(sd, d); });
+  enfant.stderr.on('data', (d) => { process.stderr.write(`${prefixe} ${d}`); retenir(sd, d, true); });
   enfant.on('exit', (code, signal) => {
     enMarche.delete(sd);
     journal(`${sd} arrêtée (code ${code}${signal ? `, signal ${signal}` : ''})`);
+    retenir(sd, `— arrêt (code ${code}${signal ? `, signal ${signal}` : ''})`, code !== 0);
     // Redémarrage automatique en cas de plantage, mais pas d'un arrêt demandé.
     if (!fiche.arretDemande && code !== 0) {
       const attente = Math.min(30000, 2000 * (fiche.redemarrages + 1));
       journal(`${sd} redémarrera dans ${attente / 1000} s`);
       setTimeout(() => {
         const r = demarrer(societeId);
-        if (r.ok && enMarche.get(sd)) enMarche.get(sd).redemarrages = fiche.redemarrages + 1;
+        // Un portail qui a tenu debout un bon moment avant de tomber n'est pas
+        // « en boucle » : sans cette remise à zéro, un incident isolé d'il y a
+        // trois semaines le laissait signalé instable pour toujours.
+        const stable = Date.now() - fiche.depuis > DUREE_STABLE_MS;
+        if (r.ok && enMarche.get(sd)) enMarche.get(sd).redemarrages = stable ? 1 : fiche.redemarrages + 1;
       }, attente).unref();
     }
   });
@@ -295,5 +351,5 @@ function arreterTout() {
 
 module.exports = {
   demarrer, arreter, redemarrer, demarrerTout, arreterTout,
-  portPour, etat, INSTANCES, dossierDe,
+  portPour, etat, journalDe, INSTANCES, dossierDe,
 };

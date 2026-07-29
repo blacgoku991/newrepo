@@ -52,9 +52,7 @@
     location.href = '/connexion';
   });
 
-  // Mention de l'éditeur en pied de page, une fois la marque connue.
-  document.addEventListener('DOMContentLoaded', () => {
-    const m = typeof marqueCourante === 'function' ? marqueCourante() : null;
-    if (m) document.getElementById('refus-pied').textContent = `${m.societe} — ${m.mention}`;
-  });
+  // La mention de l'éditeur est posée par `appliquerMarque()`, une fois la
+  // marque réellement chargée. La remplir ici affichait le libellé neutre :
+  // cette page s'exécutait avant que la requête de marque n'ait abouti.
 })();

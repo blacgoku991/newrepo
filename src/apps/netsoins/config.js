@@ -11,9 +11,10 @@ module.exports = {
   icon: 'heart',
   color: '#0d9488',
   order: 2,
-  // Logo officiel de l'éditeur (repli sur le SVG local /img/netsoins si le
-  // chargement échoue). Le domaine est autorisé dans la CSP (img-src).
-  logo: 'https://adef.netsoins.com/images/orisha_socialcare_teranga.png',
+  // Logo servi par le portail. Il était chargé depuis l'instance NetSoins d'UN
+  // client : tous les autres seraient venus sonner chez lui à chaque page, et
+  // l'éditeur aurait su qui consulte quoi, et quand.
+  logo: '/img/netsoins',
   logoFallback: '/img/netsoins',
   referencePrefix: 'NS',
   // Champs saisis par le robot : non supprimables/masquables via l'éditeur.

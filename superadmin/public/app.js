@@ -104,6 +104,7 @@
       if (b.dataset.vue === 'journal') chargerJournal();
       if (b.dataset.vue === 'cle') chargerCle();
       if (b.dataset.vue === 'sauvegardes') chargerSauvegardes();
+      if (b.dataset.vue === 'operateurs') chargerOperateurs();
     });
   }
 
@@ -201,7 +202,11 @@
             ? `<button class="btn discret" data-instance="arreter" data-sid="${s.id}" type="button">Arrêter</button>
                <button class="btn discret" data-instance="redemarrer" data-sid="${s.id}" type="button">Redémarrer</button>`
             : `<button class="btn discret" data-instance="demarrer" data-sid="${s.id}" type="button">Démarrer</button>`}
+          <button class="btn discret" data-journal="${s.id}" type="button">Journal du portail</button>
           <button class="btn discret" data-archiver="${s.id}" type="button">${s.archivee ? 'Réactiver' : 'Archiver'}</button>
+          ${/* Effacer n'est proposé qu'une fois l'accès déjà fermé : c'est une
+                seconde décision, pas un bouton voisin de « Modifier ». */
+            s.archivee ? `<button class="btn danger" data-supprimer="${s.id}" type="button">Supprimer définitivement</button>` : ''}
         </div>
       </div>`;
     }).join('')}</div>`;
@@ -211,6 +216,8 @@
     for (const b of el('liste').querySelectorAll('[data-modifier]')) b.addEventListener('click', () => fiche(Number(b.dataset.modifier)));
     for (const b of el('liste').querySelectorAll('[data-reglages]')) b.addEventListener('click', () => reglagesSociete(Number(b.dataset.reglages)));
     for (const b of el('liste').querySelectorAll('[data-archiver]')) b.addEventListener('click', () => archiver(Number(b.dataset.archiver)));
+    for (const b of el('liste').querySelectorAll('[data-journal]')) b.addEventListener('click', () => journalPortail(Number(b.dataset.journal)));
+    for (const b of el('liste').querySelectorAll('[data-supprimer]')) b.addEventListener('click', () => supprimerSociete(Number(b.dataset.supprimer)));
     for (const b of el('liste').querySelectorAll('[data-instance]')) {
       b.addEventListener('click', async () => {
         b.disabled = true;
@@ -412,6 +419,65 @@
     } catch (e) { toast(e.message, true); }
   }
 
+  /**
+   * Journal d'un portail — ce qu'il dit avant de tomber.
+   * Les lignes viennent du serveur déjà anonymisées ; on n'y ajoute rien.
+   */
+  async function journalPortail(id) {
+    const s = parc.find((x) => x.id === id);
+    if (!s) return;
+    ouvrir(`<h2>Journal — ${echapper(s.nom)}</h2><p class="aide">Chargement…</p>`, true);
+    let d;
+    try { d = await api(`/api/societes/${id}/journal`); }
+    catch (e) { return toast(e.message, true); }
+    const lignes = d.lignes.length
+      ? d.lignes.map((l) => `<div class="ligne-journal${l.erreur ? ' err' : ''}"><span class="t">${dateHeure(l.le)}</span><span>${echapper(l.texte)}</span></div>`).join('')
+      : `<p class="aide">Aucune ligne retenue. ${d.enMarche ? 'Le portail tourne sans rien signaler.' : 'Le portail n’a pas démarré depuis le lancement de ce serveur.'}</p>`;
+    ouvrir(`
+      <h2>Journal — ${echapper(s.nom)}</h2>
+      <p class="aide">Les ${d.lignes.length} dernières lignes du portail, gardées en mémoire seulement.
+        Les adresses e-mail y sont masquées : ce panel n’a pas à connaître les salariés de vos clients.</p>
+      <div class="journal-portail">${lignes}</div>
+      <div class="pied"><button class="btn discret" id="jp-rafraichir" type="button">Rafraîchir</button>
+        <button class="btn primaire" id="jp-fermer" type="button">Fermer</button></div>`, true);
+    el('jp-fermer').addEventListener('click', fermer);
+    el('jp-rafraichir').addEventListener('click', () => journalPortail(id));
+    const zone = el('modale').querySelector('.journal-portail');
+    if (zone) zone.scrollTop = zone.scrollHeight;   // la dernière ligne d'abord
+  }
+
+  /** Suppression définitive : archivée d'abord, nom retapé, sauvegarde avant. */
+  function supprimerSociete(id) {
+    const s = parc.find((x) => x.id === id);
+    if (!s) return;
+    ouvrir(`
+      <h2>Supprimer ${echapper(s.nom)}</h2>
+      <p class="alerte err">Cette action efface <b>la base du portail</b> — demandes, comptes créés, référents —
+        ainsi que la licence et les réglages. Elle est <b>irréversible</b>.</p>
+      <p class="aide" style="margin-top:12px">Une sauvegarde complète est prise juste avant : c’est le seul moyen de revenir en arrière,
+        et elle restera dans l’onglet « Sauvegardes ».</p>
+      <label class="champ" style="margin-top:16px">Retapez le nom exact de la société pour confirmer
+        <input type="text" id="sup-nom" autocomplete="off" placeholder="${echapper(s.nom)}" /></label>
+      <div class="pied">
+        <button class="btn discret" id="sup-annuler" type="button">Annuler</button>
+        <button class="btn danger" id="sup-ok" type="button">Supprimer définitivement</button>
+      </div>`);
+    el('sup-annuler').addEventListener('click', fermer);
+    el('sup-ok').addEventListener('click', async () => {
+      const b = el('sup-ok');
+      b.disabled = true;
+      try {
+        const r = await api(`/api/societes/${id}`, {
+          method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmation: el('sup-nom').value }),
+        });
+        fermer();
+        toast(`Société supprimée — sauvegarde ${r.sauvegarde}`);
+        charger();
+      } catch (e) { toast(e.message, true); b.disabled = false; }
+    });
+  }
+
   // --- Émission d'une licence -----------------------------------------------
   function emettre(id) {
     const s = parc.find((x) => x.id === id);
@@ -575,8 +641,31 @@
       ? d.sauvegardes.map((s) => `<tr>
           <td data-intitule="Sauvegarde"><code>${echapper(s.nom)}</code></td>
           <td data-intitule="Date">${dateHeure(s.date.replace('T', ' ').slice(0, 19))}</td>
-          <td data-intitule="Taille">${koMo(s.octets)}</td></tr>`).join('')
-      : '<tr><td colspan="3" class="vide">Aucune sauvegarde pour le moment.</td></tr>';
+          <td data-intitule="Taille">${koMo(s.octets)}</td>
+          <td data-intitule="Actions" class="actions-ligne">
+            <a class="btn discret" href="/api/sauvegardes/${encodeURIComponent(s.nom)}" download>Télécharger</a>
+            <button class="btn discret" data-sauv-suppr="${echapper(s.nom)}" type="button">Supprimer</button>
+          </td></tr>`).join('')
+      : '<tr><td colspan="4" class="vide">Aucune sauvegarde pour le moment.</td></tr>';
+    for (const b of el('sauv-lignes').querySelectorAll('[data-sauv-suppr]')) {
+      b.addEventListener('click', async () => {
+        const nom = b.dataset.sauvSuppr;
+        ouvrir(`<h2>Supprimer cette sauvegarde ?</h2>
+          <p class="aide"><code>${echapper(nom)}</code> sera effacée du serveur. Si vous en avez déjà
+            une copie ailleurs, elle n’est pas concernée.</p>
+          <div class="pied"><button class="btn discret" id="ss-annuler" type="button">Annuler</button>
+            <button class="btn danger" id="ss-ok" type="button">Supprimer</button></div>`);
+        el('ss-annuler').addEventListener('click', fermer);
+        el('ss-ok').addEventListener('click', async () => {
+          try {
+            await api(`/api/sauvegardes/${encodeURIComponent(nom)}`, { method: 'DELETE' });
+            fermer();
+            toast('Sauvegarde supprimée');
+            chargerSauvegardes();
+          } catch (e) { toast(e.message, true); }
+        });
+      });
+    }
   }
 
   el('sauv-lancer').addEventListener('click', async () => {
@@ -592,6 +681,94 @@
     } catch (e) { toast(e.message, true); }
     b.disabled = false;
     b.textContent = 'Sauvegarder maintenant';
+  });
+
+  // --- Opérateurs du panel --------------------------------------------------
+
+  /**
+   * Les comptes qui ouvrent ce panel ouvrent tout le parc. Les gérer ici plutôt
+   * qu'en ligne de commande sur le serveur, c'est la seule façon qu'ils soient
+   * réellement gérés : nominatifs, et changés quand quelqu'un s'en va.
+   */
+  async function chargerOperateurs() {
+    let d;
+    try { d = await api('/api/operateurs'); }
+    catch (e) { return toast(e.message, true); }
+    el('op-lignes').innerHTML = d.operateurs.map((o) => `<tr>
+      <td data-intitule="Identifiant"><b>${echapper(o.username)}</b>${o.username === d.moi ? ' <span class="etiq ok">vous</span>' : ''}</td>
+      <td data-intitule="Créé le">${dateHeure(o.creeLe)}</td>
+      <td data-intitule="Dernière connexion">${o.derniereConnexion ? dateHeure(o.derniereConnexion) : '<span class="aide">jamais</span>'}</td>
+      <td data-intitule="Actions" class="actions-ligne">
+        <button class="btn discret" data-op-mdp="${o.id}" data-op-nom="${echapper(o.username)}" type="button">Changer le mot de passe</button>
+        ${o.username === d.moi || d.operateurs.length <= 1 ? ''
+          : `<button class="btn discret" data-op-suppr="${o.id}" data-op-nom="${echapper(o.username)}" type="button">Supprimer</button>`}
+      </td></tr>`).join('');
+
+    for (const b of el('op-lignes').querySelectorAll('[data-op-mdp]')) {
+      b.addEventListener('click', () => motDePasseOperateur(Number(b.dataset.opMdp), b.dataset.opNom, b.dataset.opNom === d.moi));
+    }
+    for (const b of el('op-lignes').querySelectorAll('[data-op-suppr]')) {
+      b.addEventListener('click', () => {
+        ouvrir(`<h2>Supprimer « ${echapper(b.dataset.opNom)} » ?</h2>
+          <p class="aide">Ce compte ne pourra plus ouvrir le panel, et ses sessions en cours seront fermées.</p>
+          <div class="pied"><button class="btn discret" id="os-annuler" type="button">Annuler</button>
+            <button class="btn danger" id="os-ok" type="button">Supprimer</button></div>`);
+        el('os-annuler').addEventListener('click', fermer);
+        el('os-ok').addEventListener('click', async () => {
+          try {
+            await api(`/api/operateurs/${b.dataset.opSuppr}`, { method: 'DELETE' });
+            fermer(); toast('Opérateur supprimé'); chargerOperateurs();
+          } catch (e) { toast(e.message, true); }
+        });
+      });
+    }
+  }
+
+  function motDePasseOperateur(id, nom, cestMoi) {
+    ouvrir(`
+      <h2>Mot de passe — ${echapper(nom)}</h2>
+      <p class="aide">Au moins 12 caractères. Les sessions ouvertes avec ce compte seront fermées${
+        cestMoi ? ' — vous serez donc redirigé vers la connexion' : ''}.</p>
+      <label class="champ" style="margin-top:16px">Nouveau mot de passe
+        <input type="password" id="op-mdp" autocomplete="new-password" /></label>
+      <div class="pied">
+        <button class="btn discret" id="op-annuler" type="button">Annuler</button>
+        <button class="btn primaire" id="op-ok" type="button">Enregistrer</button>
+      </div>`);
+    el('op-annuler').addEventListener('click', fermer);
+    el('op-ok').addEventListener('click', async () => {
+      try {
+        const r = await api(`/api/operateurs/${id}/motdepasse`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: el('op-mdp').value }),
+        });
+        fermer();
+        if (r.seDeconnecte) { location.href = '/login.html'; return; }
+        toast('Mot de passe changé');
+        chargerOperateurs();
+      } catch (e) { toast(e.message, true); }
+    });
+  }
+
+  el('op-nouveau').addEventListener('click', () => {
+    ouvrir(`
+      <h2>Nouvel opérateur</h2>
+      <p class="aide">Un compte par personne : le journal doit pouvoir dire qui a fait quoi.</p>
+      <div class="grille" style="margin-top:16px">
+        <label class="champ">Identifiant<input type="text" id="on-nom" autocomplete="off" placeholder="prenom.nom" /></label>
+        <label class="champ">Mot de passe (12 caractères minimum)<input type="password" id="on-mdp" autocomplete="new-password" /></label>
+      </div>
+      <div class="pied">
+        <button class="btn discret" id="on-annuler" type="button">Annuler</button>
+        <button class="btn primaire" id="on-ok" type="button">Créer</button>
+      </div>`);
+    el('on-annuler').addEventListener('click', fermer);
+    el('on-ok').addEventListener('click', async () => {
+      try {
+        await poster('/api/operateurs', { username: el('on-nom').value, password: el('on-mdp').value });
+        fermer(); toast('Opérateur créé'); chargerOperateurs();
+      } catch (e) { toast(e.message, true); }
+    });
   });
 
   // --- Clé ------------------------------------------------------------------

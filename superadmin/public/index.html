@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Smartfixx — Panel des licences</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27><rect width=%27100%27 height=%27100%27 rx=%2722%27 fill=%27%230d1220%27/><text x=%2750%27 y=%2770%27 font-size=%2756%27 text-anchor=%27middle%27 fill=%27%236b8ff2%27 font-family=%27Arial%27 font-weight=%27bold%27>S</text></svg>" />
   <link rel="stylesheet" href="/app.css" />
 </head>
 <body>
@@ -13,6 +14,7 @@
       <button class="onglet actif" data-vue="parc" type="button">Parc clients</button>
       <button class="onglet" data-vue="journal" type="button">Journal</button>
       <button class="onglet" data-vue="sauvegardes" type="button">Sauvegardes</button>
+      <button class="onglet" data-vue="operateurs" type="button">Opérateurs</button>
       <button class="onglet" data-vue="cle" type="button">Clé de signature</button>
     </nav>
     <div class="droite">
@@ -52,8 +54,22 @@
         <div style="margin-top:16px"><button class="btn primaire" id="sauv-lancer" type="button">Sauvegarder maintenant</button></div>
       </div>
       <div class="tableau" style="margin-top:18px"><table class="donnees">
-        <thead><tr><th>Sauvegarde</th><th>Date</th><th>Taille</th></tr></thead>
-        <tbody id="sauv-lignes"><tr><td colspan="3" class="vide">Chargement…</td></tr></tbody>
+        <thead><tr><th>Sauvegarde</th><th>Date</th><th>Taille</th><th>Actions</th></tr></thead>
+        <tbody id="sauv-lignes"><tr><td colspan="4" class="vide">Chargement…</td></tr></tbody>
+      </table></div>
+    </section>
+
+    <!-- Opérateurs -->
+    <section class="vue" id="vue-operateurs">
+      <div class="carte bloc">
+        <h2>Opérateurs du panel</h2>
+        <p class="aide">Ces comptes ouvrent l'ensemble du parc : toutes les sociétés, toutes les licences, toutes les sauvegardes.
+          Un compte par personne, et supprimé le jour où elle s'en va — c'est ce qui permet au journal de dire qui a fait quoi.</p>
+        <div style="margin-top:16px"><button class="btn primaire" id="op-nouveau" type="button">Nouvel opérateur</button></div>
+      </div>
+      <div class="tableau" style="margin-top:18px"><table class="donnees">
+        <thead><tr><th>Identifiant</th><th>Créé le</th><th>Dernière connexion</th><th>Actions</th></tr></thead>
+        <tbody id="op-lignes"><tr><td colspan="4" class="vide">Chargement…</td></tr></tbody>
       </table></div>
     </section>
 

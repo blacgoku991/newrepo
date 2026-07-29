@@ -15,8 +15,10 @@
  * l'autre, ce qui est décisif avec des données de santé.
  */
 
+const fsp = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 const express = require('express');
 
 const db = require('./lib/db');
@@ -234,6 +236,100 @@ app.post('/api/sauvegardes', exigeSession, limiter('sauvegarde', 6, 60 * 60 * 10
   }
 });
 
+/**
+ * Récupère une sauvegarde, en archive.
+ *
+ * C'est le geste qui donne son sens à la sauvegarde : une copie qui reste sur
+ * le serveur ne protège de rien le jour où le serveur disparaît. L'archive
+ * contient la clé de signature et les bases des clients — le téléchargement est
+ * donc limité, tracé, et l'interface prévient de la chiffrer.
+ */
+app.get('/api/sauvegardes/:nom', exigeSession, limiter('sauvegarde_dl', 20, 60 * 60 * 1000), (req, res) => {
+  const dossier = sauvegarde.dossierDe(req.params.nom);
+  if (!dossier) return res.status(404).json({ error: 'Sauvegarde introuvable' });
+  const nom = path.basename(dossier);
+  db.tracer(req.operateur.username, 'sauvegarde_telechargee', '', nom, ip(req));
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="smartfixx-${nom}.tar.gz"`);
+  // `spawn` avec des arguments séparés, jamais un shell : le nom a beau être
+  // validé, aucune chaîne venue de la requête ne doit pouvoir être interprétée
+  // comme une commande.
+  const tar = spawn('tar', ['-czf', '-', '-C', sauvegarde.CIBLE, nom], { stdio: ['ignore', 'pipe', 'ignore'] });
+  tar.stdout.pipe(res);
+  tar.on('error', () => { if (!res.headersSent) res.status(500).end(); else res.end(); });
+  // Le client ferme l'onglet : on ne laisse pas `tar` tourner dans le vide.
+  res.on('close', () => { try { tar.kill(); } catch { /* déjà terminé */ } });
+});
+
+app.delete('/api/sauvegardes/:nom', exigeSession, (req, res) => {
+  if (!sauvegarde.supprimer(req.params.nom, req.operateur.username)) {
+    return res.status(404).json({ error: 'Sauvegarde introuvable' });
+  }
+  res.json({ ok: true });
+});
+
+// --- Opérateurs du panel -----------------------------------------------------
+
+/**
+ * Les comptes qui ouvrent ce panel ouvrent tout le parc. Ils se géraient
+ * jusqu'ici en ligne de commande sur le serveur — donc, en pratique, pas du
+ * tout : un mot de passe partagé qu'on ne change jamais.
+ *
+ * Deux garde-fous : on ne supprime jamais le dernier opérateur (personne ne
+ * pourrait plus entrer), et on ne se supprime pas soi-même par mégarde.
+ */
+const MDP_MINI = 12;
+
+app.get('/api/operateurs', exigeSession, (req, res) => {
+  res.json({
+    moi: req.operateur.username,
+    operateurs: db.operateurs().map((o) => ({
+      id: o.id, username: o.username, creeLe: o.created_at, derniereConnexion: o.last_login || null,
+    })),
+  });
+});
+
+app.post('/api/operateurs', exigeSession, (req, res) => {
+  const nom = texte(req.body?.username, 40).toLowerCase();
+  const mdp = String(req.body?.password || '');
+  if (!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(nom)) {
+    return res.status(400).json({ error: 'Identifiant : 3 à 40 caractères, lettres, chiffres, point, tiret ou souligné.' });
+  }
+  if (mdp.length < MDP_MINI) return res.status(400).json({ error: `Mot de passe : ${MDP_MINI} caractères au minimum.` });
+  if (db.operateur(nom)) return res.status(409).json({ error: 'Cet identifiant est déjà pris.' });
+  const id = db.creerOperateur(nom, hacher(mdp));
+  db.tracer(req.operateur.username, 'operateur_cree', '', nom, ip(req));
+  res.json({ ok: true, id });
+});
+
+app.put('/api/operateurs/:id/motdepasse', exigeSession, (req, res) => {
+  const cible = db.operateurs().find((o) => o.id === Number(req.params.id));
+  if (!cible) return res.status(404).json({ error: 'Opérateur introuvable' });
+  const mdp = String(req.body?.password || '');
+  if (mdp.length < MDP_MINI) return res.status(400).json({ error: `Mot de passe : ${MDP_MINI} caractères au minimum.` });
+  db.majMotDePasseOperateur(cible.id, hacher(mdp));
+  // Les sessions ouvertes tombent : un mot de passe changé parce qu'il a fuité
+  // ne servirait à rien si le voleur restait connecté.
+  db.fermerSessionsOperateur(cible.id);
+  db.tracer(req.operateur.username, 'operateur_mot_de_passe', '', cible.username, ip(req));
+  res.json({ ok: true, seDeconnecte: cible.username === req.operateur.username });
+});
+
+app.delete('/api/operateurs/:id', exigeSession, (req, res) => {
+  const cible = db.operateurs().find((o) => o.id === Number(req.params.id));
+  if (!cible) return res.status(404).json({ error: 'Opérateur introuvable' });
+  if (cible.username === req.operateur.username) {
+    return res.status(409).json({ error: 'Vous ne pouvez pas supprimer le compte avec lequel vous êtes connecté.' });
+  }
+  if (db.compterOperateurs() <= 1) {
+    return res.status(409).json({ error: 'C’est le dernier opérateur : le supprimer fermerait le panel à tout le monde.' });
+  }
+  db.fermerSessionsOperateur(cible.id);
+  db.supprimerOperateur(cible.id);
+  db.tracer(req.operateur.username, 'operateur_supprime', '', cible.username, ip(req));
+  res.json({ ok: true });
+});
+
 // --- Pilotage des instances --------------------------------------------------
 
 app.post('/api/societes/:id/instance/:action', exigeSession, async (req, res) => {
@@ -249,6 +345,24 @@ app.post('/api/societes/:id/instance/:action', exigeSession, async (req, res) =>
   if (!r.ok) return res.status(409).json({ error: r.raison });
   db.tracer(req.operateur.username, `instance_${action}`, s.nom, s.sous_domaine, ip(req));
   res.json({ ok: true, ...r });
+});
+
+/**
+ * Dernières lignes du portail d'une société.
+ *
+ * Quand un portail repart en boucle, la seule question utile est « qu'est-ce
+ * qu'il dit avant de tomber ? ». Ces lignes vivent en mémoire, jamais sur le
+ * disque, et les adresses e-mail y sont masquées : le panel n'a pas à connaître
+ * les salariés de ses clients, pas même par un message d'erreur.
+ */
+app.get('/api/societes/:id/journal', exigeSession, (req, res) => {
+  const s = db.societe(Number(req.params.id));
+  if (!s) return res.status(404).json({ error: 'Société introuvable' });
+  res.json({
+    societe: { id: s.id, nom: s.nom, sousDomaine: s.sous_domaine },
+    lignes: s.sous_domaine ? orchestrateur.journalDe(s.sous_domaine, Number(req.query.limite) || 200) : [],
+    enMarche: !!(s.sous_domaine && orchestrateur.etat()[s.sous_domaine]),
+  });
 });
 
 app.post('/api/societes', exigeSession, (req, res) => {
@@ -310,6 +424,50 @@ app.post('/api/societes/:id/archiver', exigeSession, (req, res) => {
   else orchestrateur.demarrer(s.id);
   db.tracer(req.operateur.username, archivee ? 'societe_archivee' : 'societe_reactivee', s.nom, '', ip(req));
   res.json({ ok: true });
+});
+
+/**
+ * Efface définitivement une société : registre, licences, réglages, et le
+ * dossier du portail avec sa base.
+ *
+ * Trois verrous, parce que c'est le seul geste du panel qui détruit les données
+ * d'un client :
+ *   1. la société doit être archivée — donc déjà coupée, décision prise ;
+ *   2. il faut retaper son nom exactement, à la manière de GitHub ;
+ *   3. une sauvegarde est prise juste avant, quoi qu'il arrive.
+ */
+app.delete('/api/societes/:id', exigeSession, limiter('suppression', 5, 60 * 60 * 1000), (req, res) => {
+  const s = db.societe(Number(req.params.id));
+  if (!s) return res.status(404).json({ error: 'Société introuvable' });
+  if (!s.archivee) {
+    return res.status(409).json({ error: 'Archivez d’abord la société : la suppression n’efface qu’un accès déjà fermé.' });
+  }
+  if (texte(req.body?.confirmation, 120) !== s.nom) {
+    return res.status(400).json({ error: 'Le nom saisi ne correspond pas à celui de la société.' });
+  }
+
+  // Une sauvegarde d'abord : effacer sur un geste malheureux ne doit pas être
+  // la fin de l'histoire.
+  let sauvee = null;
+  try { sauvee = path.basename(sauvegarde.executer(`${req.operateur.username} (avant suppression)`).dossier); }
+  catch (e) { return res.status(500).json({ error: `Sauvegarde préalable impossible, suppression annulée : ${e.message}` }); }
+
+  if (s.sous_domaine) orchestrateur.arreter(s.sous_domaine);
+  logos.supprimer(s.id);
+  let dossierEfface = false;
+  if (s.sous_domaine) {
+    const dossier = path.join(orchestrateur.INSTANCES, s.sous_domaine);
+    // On ne suit pas un lien symbolique et on ne sort pas du dossier des
+    // instances : le sous-domaine est validé à l'écriture, on le revérifie ici.
+    if (path.dirname(path.resolve(dossier)) === path.resolve(orchestrateur.INSTANCES)) {
+      try { fsp.rmSync(dossier, { recursive: true, force: true }); dossierEfface = true; }
+      catch { /* dossier déjà absent ou verrouillé */ }
+    }
+  }
+  db.supprimerSociete(s.id);
+  db.tracer(req.operateur.username, 'societe_supprimee', s.nom,
+    `${s.sous_domaine || 'sans sous-domaine'} — sauvegarde ${sauvee}`, ip(req));
+  res.json({ ok: true, sauvegarde: sauvee, dossierEfface });
 });
 
 // --- Réglages d'une société --------------------------------------------------

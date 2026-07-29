@@ -16,12 +16,15 @@ const CSP = [
   "default-src 'self'",
   // Aucun script inline dans le projet : script-src reste strict.
   "script-src 'self'",
-  // Styles : fichiers locaux + attributs style inline + Google Fonts.
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  'font-src https://fonts.gstatic.com data:',
-  // Images locales + logos officiels des éditeurs (chargés par le navigateur
-  // du poste ADEF depuis les sites des éditeurs — jamais de script, juste des images).
-  "img-src 'self' data: https://app.bluekango.com https://adef.netsoins.com",
+  // Styles : fichiers locaux + attributs style inline. Aucune origine externe.
+  "style-src 'self' 'unsafe-inline'",
+  // Polices auto-hébergées : rien ne part vers Google. Une page ouverte ne
+  // signale plus l'adresse IP d'un salarié du client à un tiers.
+  "font-src 'self' data:",
+  // Toutes les images viennent du portail — y compris les logos des éditeurs.
+  // Les charger depuis leurs sites annonçait chaque consultation à BlueKanGo et
+  // à Orisha, et pointait vers l'instance NetSoins d'UN client pour tous.
+  "img-src 'self' data:",
   "connect-src 'self'",
   // Le portail ne doit jamais être affiché dans une iframe (clickjacking).
   "frame-ancestors 'none'",

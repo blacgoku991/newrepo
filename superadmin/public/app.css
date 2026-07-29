@@ -161,6 +161,25 @@ table.donnees tr:last-child td { border-bottom: none; }
 .modale h2 { font-size: 1.14rem; margin-bottom: 4px; }
 .modale .pied { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
 
+/* Champ isolé dans une modale (hors grille à deux colonnes). */
+.champ { display: flex; flex-direction: column; gap: 6px; font-size: .85rem; color: var(--texte-2); }
+
+/* Boutons groupés dans une cellule de tableau : ils passent à la ligne plutôt
+   que d'élargir le tableau au-delà de l'écran. */
+.actions-ligne { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.actions-ligne .btn { min-height: 34px; padding: 6px 12px; font-size: .84rem; }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* --- Journal d'un portail ------------------------------------------------- */
+.journal-portail {
+  margin-top: 14px; max-height: 420px; overflow: auto; background: var(--fond);
+  border: 1px solid var(--ligne); border-radius: 10px; padding: 12px 14px;
+  font-family: var(--mono); font-size: .78rem; line-height: 1.55;
+}
+.ligne-journal { display: flex; gap: 12px; overflow-wrap: anywhere; }
+.ligne-journal .t { color: var(--sourdine); flex: none; }
+.ligne-journal.err { color: #f3b6b8; }
+
 /* --- Jeton de licence ----------------------------------------------------- */
 .champ-copie { display: flex; gap: 10px; align-items: stretch; margin: 10px 0; }
 .champ-copie code, .champ-copie textarea {

@@ -106,6 +106,17 @@ function alertes() {
     }
 
     const a = vivante ? activite(s.sousDomaine) : null;
+    // Un portail en marche où personne n'est déclaré est un portail où personne
+    // ne peut entrer : l'accès est fermé par défaut à qui n'est pas dans la
+    // liste. Sans ce signalement, la mise en service échoue en silence et c'est
+    // le client qui découvre le problème.
+    if (a && a.referents === 0) {
+      out.push({
+        gravite: 'danger', societe: s.nom, titre: 'Aucun référent déclaré',
+        detail: 'Le portail tourne mais aucun compte n’est habilité : toute connexion sera refusée. '
+          + 'L’administrateur de la société doit ajouter les référents depuis son administration.',
+      });
+    }
     if (a && a.total >= 10 && a.tauxEchec >= 20) {
       out.push({
         gravite: 'attention', societe: s.nom, titre: 'Beaucoup d’échecs',

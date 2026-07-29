@@ -40,12 +40,15 @@
       </ol>
     </div>
 
+    <!-- Une seule action, et elle mène quelque part. Un second bouton renvoyait
+         vers le suivi des demandes : page fermée elle aussi, qui redirigeait
+         vers la connexion, qui refusait de nouveau — l'utilisateur tournait en
+         rond sans jamais sortir de l'écran de refus. -->
     <div class="refus-actions">
       <button type="button" class="btn btn-primary" id="refus-changer">Essayer avec un autre compte</button>
-      <a class="btn btn-ghost" href="/suivi.html">Suivre une demande existante</a>
     </div>
 
-    <p class="refus-pied" id="refus-pied"></p>
+    <p class="refus-pied" id="refus-pied" data-marque="mention"></p>
   </main>
 
   <script src="/js/common.js"></script>

@@ -55,7 +55,12 @@ function copierBase(source, destination) {
  */
 function executer(par = 'automatique') {
   fs.mkdirSync(CIBLE, { recursive: true, mode: 0o700 });
-  const dossier = path.join(CIBLE, horodatage());
+  // L'horodatage est à la seconde près : deux sauvegardes rapprochées — un clic
+  // manuel puis une suppression de société, par exemple — visaient le même
+  // dossier, et la seconde échouait sur EEXIST. On suffixe plutôt que d'échouer.
+  const base = horodatage();
+  let dossier = path.join(CIBLE, base);
+  for (let n = 2; n < 100 && fs.existsSync(dossier); n += 1) dossier = path.join(CIBLE, `${base}-${n}`);
   fs.mkdirSync(dossier, { mode: 0o700 });
 
   const elements = [];
@@ -156,6 +161,35 @@ function liste() {
 }
 
 /**
+ * Nom de sauvegarde valide.
+ *
+ * Le nom vient de l'interface, donc de l'extérieur. Sans ce filtre, un nom
+ * comme `../../..` ferait sortir du dossier des sauvegardes — pour lire, ou
+ * pour effacer. On n'accepte QUE le format que `horodatage()` produit : rien
+ * d'autre ne peut désigner un chemin.
+ */
+const NOM_VALIDE = /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}(-\d{1,2})?$/;
+
+/** Chemin d'une sauvegarde existante, ou `null`. Seul point d'entrée par nom. */
+function dossierDe(nom) {
+  if (!NOM_VALIDE.test(String(nom || ''))) return null;
+  const p = path.join(CIBLE, nom);
+  // Ceinture et bretelles : on vérifie que le chemin résolu reste bien sous
+  // le dossier des sauvegardes, quoi qu'ait produit la composition.
+  if (path.dirname(path.resolve(p)) !== path.resolve(CIBLE)) return null;
+  return fs.existsSync(p) && fs.statSync(p).isDirectory() ? p : null;
+}
+
+/** Supprime une sauvegarde. Retourne `false` si le nom ne désigne rien. */
+function supprimer(nom, par) {
+  const dossier = dossierDe(nom);
+  if (!dossier) return false;
+  fs.rmSync(dossier, { recursive: true, force: true });
+  db.tracer(par || 'automatique', 'sauvegarde_supprimee', '', nom, '');
+  return true;
+}
+
+/**
  * Programme une sauvegarde quotidienne.
  * Une première est faite au démarrage s'il n'en existe aucune : un parc sans
  * la moindre sauvegarde ne doit pas attendre la nuit.
@@ -183,4 +217,4 @@ function programmer() {
   console.log(`[sauvegarde] quotidienne à ${String(HEURE).padStart(2, '0')} h, ${GARDER} conservées — ${CIBLE}`);
 }
 
-module.exports = { executer, liste, programmer, CIBLE, GARDER };
+module.exports = { executer, liste, programmer, supprimer, dossierDe, CIBLE, GARDER };

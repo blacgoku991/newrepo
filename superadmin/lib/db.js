@@ -157,6 +157,23 @@ module.exports = {
     return db.prepare(`SELECT * FROM societes WHERE id = ?`).get(id);
   },
 
+  /**
+   * Efface une société du registre, avec ses licences et ses réglages.
+   *
+   * Irréversible, et volontairement séparé de l'archivage : archiver ferme
+   * l'accès, effacer supprime la trace. Le journal, lui, n'est pas touché —
+   * c'est ce qui permet de dire plus tard qui a effacé quoi, et quand.
+   * Les données du portail (sa base) sont retirées à part par l'appelant.
+   */
+  supprimerSociete(id) {
+    const effacer = db.transaction((societeId) => {
+      db.prepare(`DELETE FROM licences WHERE societe_id = ?`).run(societeId);
+      db.prepare(`DELETE FROM reglages WHERE societe_id = ?`).run(societeId);
+      db.prepare(`DELETE FROM societes WHERE id = ?`).run(societeId);
+    });
+    effacer(id);
+  },
+
   societeParNom(nom) {
     return db.prepare(`SELECT * FROM societes WHERE nom = ?`).get(nom);
   },

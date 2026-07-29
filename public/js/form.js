@@ -611,7 +611,7 @@
   }
 
   function showConfirmation(references) {
-    document.title = 'Demande envoyée — Algonis';
+    document.title = `Demande envoyée — ${marqueCourante().societe}`;
     const many = references.length > 1;
     content.innerHTML = `
       <div class="panel result">
