@@ -190,19 +190,27 @@ function alertes() {
       });
     }
 
-    // Mise en service incomplète : une seule alerte qui dit ce qui manque,
-    // plutôt qu'une par étape. Elle remplace l'ancienne alerte « aucun référent
-    // déclaré », qui n'était qu'un cas particulier de la même chose.
+    // Mise en service incomplète.
+    //
+    // Sans licence, l'alerte « Aucune licence » ci-dessus dit déjà tout : en
+    // ajouter une seconde ne ferait que remplir le bandeau. Et une mise en
+    // service en cours n'est pas une avarie — c'est le déroulement normal d'un
+    // client qu'on installe. On ne passe au rouge que dans un seul cas : un
+    // portail en marche où personne n'est habilité, donc un portail qui refuse
+    // tout le monde sans que le client comprenne pourquoi.
     const mes = miseEnService(s);
-    if (!mes.prete) {
-      const manque = mes.etapes.filter((e) => !e.fait);
-      const bloquant = manque.some((e) => ['licence', 'referents'].includes(e.cle));
+    if (!mes.prete && s.licence) {
+      const manque = mes.etapes.filter((e) => !e.fait).map((e) => e.libelle.toLowerCase());
+      const personneNePeutEntrer = !!vivante && mes.referents === 0;
       out.push({
-        gravite: bloquant ? 'danger' : 'attention',
+        gravite: personneNePeutEntrer ? 'danger' : 'attention',
         societe: s.nom,
-        titre: `Mise en service : ${mes.faites} étape(s) sur ${mes.total}`,
-        detail: `Il reste : ${manque.map((e) => e.libelle.toLowerCase()).join(', ')}.`
-          + (mes.referents === 0 ? ' Sans référent déclaré, toute connexion est refusée.' : ''),
+        titre: personneNePeutEntrer
+          ? 'Portail ouvert, mais aucun référent'
+          : `Mise en service : ${mes.faites}/${mes.total}`,
+        detail: personneNePeutEntrer
+          ? 'Le portail tourne et refuse tout le monde : aucun compte n’est habilité.'
+          : `Reste à faire : ${manque.join(', ')}.`,
       });
     }
 
