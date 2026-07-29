@@ -252,6 +252,19 @@ async function processOne(request) {
     db.audit('robot', 'echec_creation', request.reference, String(message));
   } finally {
     clearTimeout(watchdogTimer);
+    // Accusé au déposant, dans les deux cas. Un échec qui n'est signalé à
+    // personne se découvre le jour où le salarié n'arrive pas à se connecter —
+    // c'est-à-dire au pire moment, et c'est le portail qu'on accusera.
+    try {
+      const mailer = require('./mailer');
+      const ligne = db.getById(request.id);
+      if (ligne && (ligne.status === 'terminee' || ligne.status === 'echec')) {
+        const envoi = await mailer.notifierDeposant(ligne);
+        if (envoi) log(envoi.sent ? 'Déposant prévenu par e-mail' : 'Accusé au déposant mis en boîte d’envoi');
+      }
+    } catch (e) {
+      log(`Accusé au déposant impossible : ${e.message}`);
+    }
   }
 }
 

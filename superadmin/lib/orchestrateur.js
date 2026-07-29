@@ -232,6 +232,8 @@ function demarrer(societeId) {
   if (s.archivee) return { ok: false, raison: 'Société archivée' };
   const sd = s.sous_domaine;
   if (!sd) return { ok: false, raison: 'Aucun sous-domaine défini' };
+  // Redémarrer, c'est lever l'arrêt : le portail redevient éligible au réveil.
+  arretsExplicites.delete(sd);
   if (enMarche.has(sd)) return { ok: true, port: enMarche.get(sd).port };
 
   const licence = licenceDe(s.id);
@@ -301,8 +303,25 @@ function demarrer(societeId) {
   return { ok: true, port };
 }
 
-/** Arrête l'instance d'une société. */
-function arreter(sousDomaine) {
+/**
+ * Portails arrêtés SUR DEMANDE d'un opérateur.
+ *
+ * La distinction est essentielle depuis la mise en veille : un portail endormi
+ * se réveille à la première visite, alors qu'un portail qu'on a explicitement
+ * arrêté doit le rester. Sans cela, le bouton « Arrêter » du panel ne servait à
+ * rien — le visiteur suivant relançait le portail, et il devenait impossible de
+ * mettre un client hors ligne.
+ */
+const arretsExplicites = new Set();
+
+/**
+ * Arrête l'instance d'une société.
+ * @param {object} [options]
+ * @param {boolean} [options.explicite=true] Arrêt voulu par un opérateur (le
+ *   portail ne se rallumera pas tout seul), par opposition à une mise en veille.
+ */
+function arreter(sousDomaine, { explicite = true } = {}) {
+  if (explicite) arretsExplicites.add(sousDomaine);
   const fiche = enMarche.get(sousDomaine);
   if (!fiche) return { ok: false, raison: 'Instance déjà arrêtée' };
   fiche.arretDemande = true;
@@ -338,11 +357,211 @@ function etat() {
   return out;
 }
 
-/** Démarre toutes les sociétés actives disposant d'une licence. */
+/* ---------------------------------------------------------------------------
+   Mise en veille.
+
+   Un portail au repos consomme 84 Mo à ne rien faire. Or un référent y passe
+   quelques minutes par semaine : sur vingt clients, ce sont 1,7 Go immobilisés
+   pour des processus qui dorment. La même machine tient trente clients éveillés,
+   ou plusieurs centaines si on ne réveille que ceux qu'on visite.
+
+   Deux règles, et elles ne souffrent pas d'exception :
+
+    1. On n'éteint JAMAIS un portail qui a du travail. Une demande en attente,
+       même déposée il y a trois semaines pour une date future, veut dire qu'un
+       robot doit tourner. L'éteindre reviendrait à perdre la demande en silence.
+
+    2. Tout portail est réveillé une fois par jour pour sa maintenance. Les
+       purges de conservation — dont l'effacement des captures d'écran au bout
+       d'un jour — s'exécutent au démarrage de l'instance. Sans ce réveil, un
+       portail peu visité garderait ses captures jusqu'à la prochaine visite, et
+       la durée annoncée aux personnes concernées deviendrait fausse.
+   --------------------------------------------------------------------------- */
+
+/** Minutes d'inactivité avant extinction. `0` désactive la veille. */
+const VEILLE_MINUTES = Math.max(0, Number(process.env.SMARTFIXX_VEILLE_MINUTES ?? 30));
+/** Heure du réveil de maintenance (après la sauvegarde de 3 h). */
+const MAINTENANCE_HEURE = Math.min(23, Math.max(0, Number(process.env.SMARTFIXX_MAINTENANCE_HEURE || 4)));
+/** Au-delà, on renonce à attendre qu'un portail réponde. */
+const DELAI_DEMARRAGE_MS = Number(process.env.SMARTFIXX_DELAI_DEMARRAGE_MS || 20000);
+
+/** Dernière requête reçue par un portail. */
+function toucher(sousDomaine) {
+  const f = enMarche.get(sousDomaine);
+  if (f) f.derniereRequete = Date.now();
+}
+
+/**
+ * Le portail a-t-il des demandes à traiter ?
+ * Lecture seule, et un échec vaut « oui » : dans le doute, on ne coupe pas.
+ */
+function aDuTravail(sousDomaine) {
+  const fichier = path.join(INSTANCES, sousDomaine, 'portail.db');
+  if (!fs.existsSync(fichier)) return false;
+  let conn;
+  try {
+    // Chargé ici plutôt qu'en tête de module : `supervision` dépend déjà de
+    // l'orchestrateur, et une dépendance croisée en tête de fichier rendrait
+    // l'ordre de chargement dépendant de qui appelle qui.
+    const Database = require('better-sqlite3');
+    conn = new Database(fichier, { readonly: true, fileMustExist: true });
+    return conn.prepare(
+      `SELECT COUNT(*) n FROM requests WHERE status IN ('en_attente', 'en_cours')`
+    ).get().n > 0;
+  } catch {
+    return true;
+  } finally {
+    try { if (conn) conn.close(); } catch { /* déjà fermée */ }
+  }
+}
+
+/** Le port répond-il ? */
+function repond(port) {
+  return new Promise((resolve) => {
+    const socket = require('net').connect({ host: '127.0.0.1', port }, () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('error', () => resolve(false));
+    socket.setTimeout(500, () => { socket.destroy(); resolve(false); });
+  });
+}
+
+/**
+ * Garantit qu'un portail est en marche ET qu'il répond.
+ *
+ * Rendre la main dès que le processus est lancé ne suffirait pas : Node met un
+ * instant à ouvrir son port, et la requête du visiteur arriverait sur un port
+ * fermé — une page d'erreur pour un portail qui va parfaitement bien.
+ */
+async function assurerDemarrage(societeId) {
+  const s = db.societe(societeId);
+  if (!s || !s.sous_domaine) return { ok: false, raison: 'Société introuvable' };
+  const existant = enMarche.get(s.sous_domaine);
+  if (existant) {
+    existant.derniereRequete = Date.now();
+    return { ok: true, port: existant.port, deja: true };
+  }
+  // Un portail arrêté par un opérateur ne se rallume pas sur simple visite :
+  // sinon « Arrêter » ne voudrait rien dire, et on ne pourrait plus mettre un
+  // client hors ligne.
+  if (arretsExplicites.has(s.sous_domaine)) {
+    return { ok: false, raison: 'Portail arrêté par un opérateur' };
+  }
+  const r = demarrer(societeId);
+  if (!r.ok) return r;
+  const limite = Date.now() + DELAI_DEMARRAGE_MS;
+  while (Date.now() < limite) {
+    if (await repond(r.port)) {
+      toucher(s.sous_domaine);
+      return { ok: true, port: r.port, reveille: true };
+    }
+    await new Promise((res) => setTimeout(res, 120));
+  }
+  return { ok: false, raison: 'Le portail n’a pas répondu à temps' };
+}
+
+/**
+ * Éteint les portails inactifs qui n'ont rien à traiter.
+ *
+ * `maintenant` est paramétrable pour que le comportement puisse être vérifié
+ * sans attendre réellement le délai d'inactivité : un test qui dort trente
+ * minutes n'est jamais joué.
+ */
+function veiller(maintenant = Date.now()) {
+  if (!VEILLE_MINUTES) return [];
+  const limite = maintenant - VEILLE_MINUTES * 60 * 1000;
+  const endormis = [];
+  for (const [sd, fiche] of [...enMarche]) {
+    if ((fiche.derniereRequete || fiche.depuis) > limite) continue;
+    if (fiche.maintenance) continue;          // réveil de maintenance en cours
+    if (aDuTravail(sd)) continue;             // règle 1 : jamais de travail perdu
+    arreter(sd, { explicite: false });
+    endormis.push(sd);
+  }
+  if (endormis.length) journal(`Mise en veille : ${endormis.join(', ')}`);
+  return endormis;
+}
+
+/**
+ * Réveille chaque portail endormi le temps de ses purges, puis le rendort.
+ * C'est ce qui fait que « les captures sont effacées au bout d'un jour » reste
+ * vrai pour un portail que personne ne visite.
+ */
+/** Portails réveillés simultanément pour la maintenance. */
+const LOT_MAINTENANCE = Math.max(1, Number(process.env.SMARTFIXX_LOT_MAINTENANCE || 5));
+
+async function maintenance() {
+  if (!VEILLE_MINUTES) return [];
+  const aFaire = db.vue().filter((s) => !s.archivee && s.sousDomaine
+    && !enMarche.has(s.sousDomaine) && !arretsExplicites.has(s.sousDomaine));
+  if (!aFaire.length) return [];
+  journal(`Maintenance : ${aFaire.length} portail(s) à réveiller, par lots de ${LOT_MAINTENANCE}`);
+
+  const traites = [];
+  // PAR LOTS, jamais tous ensemble : réveiller cent portails d'un coup, ce sont
+  // huit gigaoctets réclamés au même instant — la machine tomberait en essayant
+  // de faire le ménage.
+  for (let i = 0; i < aFaire.length; i += LOT_MAINTENANCE) {
+    const lot = aFaire.slice(i, i + LOT_MAINTENANCE);
+    const eveilles = [];
+    for (const s of lot) {
+      const r = await assurerDemarrage(s.id);
+      if (!r.ok) continue;
+      const fiche = enMarche.get(s.sousDomaine);
+      if (fiche) fiche.maintenance = true;
+      eveilles.push(s.sousDomaine);
+    }
+    if (!eveilles.length) continue;
+    // Le temps que chaque instance exécute sa purge de démarrage.
+    await new Promise((r) => setTimeout(r, 30000));
+    for (const sd of eveilles) {
+      const fiche = enMarche.get(sd);
+      if (fiche) fiche.maintenance = false;
+      if (!aDuTravail(sd)) arreter(sd, { explicite: false });
+    }
+    traites.push(...eveilles);
+  }
+  journal(`Maintenance terminée : ${traites.length} portail(s) purgé(s)`);
+  return traites;
+}
+
+/** Programme la surveillance de veille et le réveil de maintenance quotidien. */
+function programmerVeille() {
+  if (!VEILLE_MINUTES) {
+    journal('Veille désactivée : tous les portails restent en marche.');
+    return;
+  }
+  setInterval(() => { try { veiller(); } catch (e) { journal(`veille : ${e.message}`); } },
+    60 * 1000).unref();
+  const prochaine = () => {
+    const d = new Date();
+    d.setHours(MAINTENANCE_HEURE, 0, 0, 0);
+    if (d <= new Date()) d.setDate(d.getDate() + 1);
+    return d - new Date();
+  };
+  const poser = () => setTimeout(() => {
+    maintenance().catch((e) => journal(`maintenance : ${e.message}`)).finally(poser);
+  }, prochaine()).unref();
+  poser();
+  journal(`Veille après ${VEILLE_MINUTES} min sans visite ; maintenance à ${String(MAINTENANCE_HEURE).padStart(2, '0')} h.`);
+}
+
+/**
+ * Démarre ce qui doit tourner au lancement du serveur.
+ *
+ * En veille, on ne réveille que les portails qui ont des demandes en attente :
+ * après un redémarrage du serveur, une file ne doit pas rester en plan faute de
+ * visiteur. Les autres attendront le leur.
+ */
 function demarrerTout() {
   const resultats = [];
   for (const s of db.vue()) {
     if (s.archivee || !s.sousDomaine) continue;
+    if (VEILLE_MINUTES && !aDuTravail(s.sousDomaine)) {
+      resultats.push({ societe: s.nom, sousDomaine: s.sousDomaine, ok: true, enVeille: true });
+      continue;
+    }
     const r = demarrer(s.id);
     resultats.push({ societe: s.nom, sousDomaine: s.sousDomaine, ...r });
     if (!r.ok) journal(`${s.nom} non démarrée — ${r.raison}`);
@@ -358,4 +577,7 @@ function arreterTout() {
 module.exports = {
   demarrer, arreter, redemarrer, demarrerTout, arreterTout,
   portPour, etat, journalDe, INSTANCES, dossierDe,
+  assurerDemarrage, toucher, veiller, maintenance, programmerVeille, aDuTravail,
+  arreteExplicitement: (sd) => arretsExplicites.has(sd),
+  VEILLE_MINUTES,
 };

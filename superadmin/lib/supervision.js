@@ -62,6 +62,87 @@ function activite(sousDomaine) {
 }
 
 /**
+ * Où en est la mise en service d'une société.
+ *
+ * Ouvrir un client, ce n'est pas créer une ligne : il faut une licence, un accès
+ * Microsoft 365, les identifiants du compte de service de chaque application,
+ * des référents déclarés et des mentions légales. Trois de ces cinq étapes
+ * dépendent du client. Sans cet écran, on découvre trois semaines plus tard que
+ * personne n'a jamais pu se connecter — et c'est le portail qu'on accuse.
+ *
+ * Lecture seule, et rien que des booléens : on regarde si une clé est posée,
+ * jamais sa valeur.
+ */
+function miseEnService(societe) {
+  const reglages = require('./reglages');
+  const v = reglages.valeurs(societe.id);
+  const etapes = [];
+
+  etapes.push({
+    cle: 'licence', libelle: 'Licence émise',
+    fait: !!(societe.licence && societe.licence.joursRestants >= 0),
+    aQuiDeJouer: 'vous',
+    aide: 'Sans licence valable, le portail refuse de démarrer.',
+  });
+  etapes.push({
+    cle: 'sso', libelle: 'Accès Microsoft 365 configuré',
+    fait: !!(v.tenantId && v.clientId && v.clientSecret),
+    aQuiDeJouer: 'client',
+    aide: 'Inscription à créer dans l’Entra ID de la société, puis les trois identifiants à saisir dans les réglages.',
+  });
+
+  // Les réglages propres à l'instance vivent dans SA base : identifiants
+  // applicatifs, référents, mentions légales.
+  let appsCompletes = false;
+  let referents = 0;
+  let mentions = false;
+  const fichier = societe.sousDomaine
+    ? path.join(orchestrateur.INSTANCES, societe.sousDomaine, 'portail.db') : null;
+  if (fichier && fs.existsSync(fichier)) {
+    let conn;
+    try {
+      conn = new Database(fichier, { readonly: true, fileMustExist: true });
+      const reglage = (cle) => {
+        const l = conn.prepare('SELECT value FROM app_settings WHERE key = ?').get(cle);
+        if (!l) return null;
+        try { return JSON.parse(l.value); } catch { return null; }
+      };
+      const apps = String(v.appsActives || 'bluekango,netsoins').split(',').map((a) => a.trim()).filter(Boolean);
+      appsCompletes = apps.length > 0 && apps.every((a) => {
+        const s = reglage(`secrets_${a}`);
+        // On regarde la PRÉSENCE des clés, jamais leur contenu : elles sont
+        // chiffrées avec la clé de l'instance, et n'ont rien à faire ici.
+        return !!(s && s.url && s.user && s.password);
+      });
+      referents = conn.prepare('SELECT COUNT(*) n FROM referents WHERE active = 1').get().n;
+      const c = reglage('conformite');
+      mentions = !!(c && c.raisonSociale && c.dpoContact && c.hebergeur);
+    } catch { /* base absente ou verrouillée : étapes non faites */ } finally {
+      try { if (conn) conn.close(); } catch { /* déjà fermée */ }
+    }
+  }
+
+  etapes.push({
+    cle: 'applications', libelle: 'Identifiants des applications métiers saisis',
+    fait: appsCompletes, aQuiDeJouer: 'client',
+    aide: 'Le compte de service que le robot emploie pour se connecter à BlueKanGo ou NetSoins, à saisir dans les réglages du portail.',
+  });
+  etapes.push({
+    cle: 'referents', libelle: 'Référents déclarés',
+    fait: referents > 0, aQuiDeJouer: 'client',
+    aide: 'L’accès est fermé par défaut : tant que personne n’est déclaré, toute connexion est refusée.',
+  });
+  etapes.push({
+    cle: 'mentions', libelle: 'Mentions légales renseignées',
+    fait: mentions, aQuiDeJouer: 'client',
+    aide: 'Raison sociale, contact du DPO et hébergeur. Tant qu’elles manquent, la page publique affiche « à compléter ».',
+  });
+
+  const faites = etapes.filter((e) => e.fait).length;
+  return { etapes, faites, total: etapes.length, prete: faites === etapes.length, referents };
+}
+
+/**
  * Points d'attention sur l'ensemble du parc.
  * Rendus par ordre de gravité : ce qu'il faut regarder d'abord vient en tête.
  */
@@ -80,7 +161,11 @@ function alertes() {
         detail: `${vivante.redemarrages} redémarrages — le portail repart en boucle, ses réglages sont probablement en cause.`,
       });
     }
-    if (!vivante && s.licence && s.licence.joursRestants >= 0) {
+    // Un portail éteint n'est une alerte que si la veille est DÉSACTIVÉE :
+    // sinon c'est le fonctionnement normal, il se réveille à la première visite.
+    // Sans cette distinction, le bandeau afficherait une alerte rouge par client
+    // au repos, et plus personne ne le lirait.
+    if (!vivante && !orchestrateur.VEILLE_MINUTES && s.licence && s.licence.joursRestants >= 0) {
       out.push({
         gravite: 'danger',
         societe: s.nom,
@@ -105,18 +190,23 @@ function alertes() {
       });
     }
 
-    const a = vivante ? activite(s.sousDomaine) : null;
-    // Un portail en marche où personne n'est déclaré est un portail où personne
-    // ne peut entrer : l'accès est fermé par défaut à qui n'est pas dans la
-    // liste. Sans ce signalement, la mise en service échoue en silence et c'est
-    // le client qui découvre le problème.
-    if (a && a.referents === 0) {
+    // Mise en service incomplète : une seule alerte qui dit ce qui manque,
+    // plutôt qu'une par étape. Elle remplace l'ancienne alerte « aucun référent
+    // déclaré », qui n'était qu'un cas particulier de la même chose.
+    const mes = miseEnService(s);
+    if (!mes.prete) {
+      const manque = mes.etapes.filter((e) => !e.fait);
+      const bloquant = manque.some((e) => ['licence', 'referents'].includes(e.cle));
       out.push({
-        gravite: 'danger', societe: s.nom, titre: 'Aucun référent déclaré',
-        detail: 'Le portail tourne mais aucun compte n’est habilité : toute connexion sera refusée. '
-          + 'L’administrateur de la société doit ajouter les référents depuis son administration.',
+        gravite: bloquant ? 'danger' : 'attention',
+        societe: s.nom,
+        titre: `Mise en service : ${mes.faites} étape(s) sur ${mes.total}`,
+        detail: `Il reste : ${manque.map((e) => e.libelle.toLowerCase()).join(', ')}.`
+          + (mes.referents === 0 ? ' Sans référent déclaré, toute connexion est refusée.' : ''),
       });
     }
+
+    const a = vivante ? activite(s.sousDomaine) : null;
     if (a && a.total >= 10 && a.tauxEchec >= 20) {
       out.push({
         gravite: 'attention', societe: s.nom, titre: 'Beaucoup d’échecs',
@@ -144,10 +234,13 @@ function parc() {
       instance: vivante
         ? { enMarche: true, port: vivante.port, depuis: vivante.depuis, redemarrages: vivante.redemarrages,
             instable: vivante.redemarrages >= SEUIL_BOUCLE }
-        : { enMarche: false },
+        // Un portail éteint parce qu'il dort n'est pas un portail en panne :
+        // l'interface ne doit pas afficher la même chose dans les deux cas.
+        : { enMarche: false, enVeille: orchestrateur.VEILLE_MINUTES > 0 && !s.archivee },
       activite: s.sousDomaine ? activite(s.sousDomaine) : null,
+      miseEnService: s.archivee ? null : miseEnService(s),
     };
   });
 }
 
-module.exports = { parc, alertes, activite, SEUIL_BOUCLE };
+module.exports = { parc, alertes, activite, miseEnService, SEUIL_BOUCLE };

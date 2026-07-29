@@ -150,7 +150,7 @@ function relayer(req, res, port, h) {
   req.pipe(relais);
 }
 
-const serveur = http.createServer((req, res) => {
+const serveur = http.createServer(async (req, res) => {
   const h = hote(req);
 
   // Le panel n'est servi que sur les hôtes explicitement prévus. Tout autre
@@ -173,10 +173,20 @@ const serveur = http.createServer((req, res) => {
     return pageSimple(res, 403, 'Portail fermé',
       'Ce portail a été fermé. Rapprochez-vous de votre prestataire.');
   }
-  const port = orchestrateur.portPour(sd);
-  if (!port) {
-    return pageSimple(res, 503, 'Portail en cours de démarrage',
-      'Le portail de cette société démarre ou est arrêté. Réessayez dans quelques instants.');
+  // Le portail dort peut-être : on le réveille et on tient la requête le temps
+  // qu'il réponde, plutôt que de renvoyer une erreur à quelqu'un dont le
+  // service fonctionne parfaitement. Deux secondes pour le premier visiteur,
+  // rien pour les suivants.
+  let port = orchestrateur.portPour(sd);
+  if (port) {
+    orchestrateur.toucher(sd);
+  } else {
+    const r = await orchestrateur.assurerDemarrage(societe.id);
+    if (!r.ok) {
+      return pageSimple(res, 503, 'Portail momentanément indisponible',
+        `Le portail de cette société ne démarre pas (${r.raison}). Réessayez dans quelques instants.`);
+    }
+    port = r.port;
   }
   relayer(req, res, port, h);
 });
@@ -203,6 +213,7 @@ serveur.listen(PORT, HOST, () => {
   // Programmée après le démarrage des portails : une sauvegarde n'a d'intérêt
   // que si les bases sont là.
   sauvegarde.programmer();
+  orchestrateur.programmerVeille();
   if (!resultats.length) {
     console.log('  Aucune société enregistrée. Créez-en une depuis le panel.\n');
   } else {

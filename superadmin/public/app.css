@@ -170,6 +170,19 @@ table.donnees tr:last-child td { border-bottom: none; }
 .actions-ligne .btn { min-height: 34px; padding: 6px 12px; font-size: .84rem; }
 a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
+/* --- Mise en service ------------------------------------------------------ */
+.mise-en-service summary { cursor: pointer; color: var(--texte); font-size: .88rem; }
+.mise-en-service summary b { color: var(--alerte); }
+.mise-en-service ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.mise-en-service li { display: flex; gap: 9px; align-items: flex-start; font-size: .84rem; line-height: 1.45; }
+.mise-en-service li .marque { flex: none; width: 14px; }
+.mise-en-service li.faite { color: var(--sourdine); }
+.mise-en-service li.faite .marque { color: var(--ok); }
+.mise-en-service li.a-faire .marque { color: var(--alerte); }
+.mise-en-service .qui { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 20px;
+  font-size: .7rem; background: var(--surface-2); border: 1px solid var(--ligne-2); color: var(--sourdine); }
+.mise-en-service .aide { display: block; color: var(--sourdine); font-size: .78rem; margin-top: 3px; }
+
 /* --- Journal d'un portail ------------------------------------------------- */
 .journal-portail {
   margin-top: 14px; max-height: 420px; overflow: auto; background: var(--fond);

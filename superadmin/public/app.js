@@ -83,6 +83,23 @@
       : d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
+  /**
+   * Où en est la mise en service, en une ligne dépliable.
+   *
+   * Trois des cinq étapes dépendent du client : on distingue donc ce qu'on
+   * attend de lui de ce qui nous revient, sinon on relance la mauvaise personne.
+   */
+  function etapesHtml(mes) {
+    return `<details class="mise-en-service">
+      <summary><b>${mes.faites}/${mes.total}</b> étapes — ${mes.total - mes.faites} à faire</summary>
+      <ul>${mes.etapes.map((e) => `<li class="${e.fait ? 'faite' : 'a-faire'}">
+        <span class="marque">${e.fait ? '✓' : '○'}</span>
+        <span>${echapper(e.libelle)}
+          ${e.fait ? '' : `<span class="qui">${e.aQuiDeJouer === 'client' ? 'côté client' : 'à vous'}</span>
+          <span class="aide">${echapper(e.aide)}</span>`}</span></li>`).join('')}</ul>
+    </details>`;
+  }
+
   /** État d'une licence, en une étiquette. */
   function etatLicence(lic) {
     if (!lic) return { cls: 'neutre', texte: 'Aucune licence' };
@@ -136,7 +153,8 @@
       <div class="kpi"><div class="v">${actives.length}</div><div class="l">Société${actives.length > 1 ? 's' : ''} active${actives.length > 1 ? 's' : ''}</div></div>
       <div class="kpi ok"><div class="v">${avec.length - bientot.length - expirees.length}</div><div class="l">Licence${avec.length - bientot.length - expirees.length > 1 ? 's' : ''} en cours</div></div>
       <div class="kpi attention"><div class="v">${bientot.length}</div><div class="l">À renouveler sous 30 j</div></div>
-      <div class="kpi danger"><div class="v">${expirees.length + sans.length}</div><div class="l">Expirées ou sans licence</div></div>`;
+      <div class="kpi danger"><div class="v">${expirees.length + sans.length}</div><div class="l">Expirées ou sans licence</div></div>
+      <div class="kpi"><div class="v">${parc.filter((s) => s.instance && s.instance.enMarche).length}</div><div class="l">Portails éveillés</div></div>`;
 
     // Points d'attention, du plus grave au moins grave.
     const box = el('alertes');
@@ -186,7 +204,13 @@
             ? (s.instance.instable
                 ? `<span class="etiq danger">Instable (${s.instance.redemarrages} redémarrages)</span>`
                 : `<span class="etiq ok">En marche</span>`)
-            : `<span class="etiq neutre">Arrêté</span>`}</dd>
+            : s.instance && s.instance.enVeille
+              // En veille n'est pas en panne : le portail se réveille à la
+              // première visite. Afficher « arrêté » inquiéterait pour rien.
+              ? `<span class="etiq neutre" title="Se réveille à la première visite">En veille</span>`
+              : `<span class="etiq neutre">Arrêté</span>`}</dd>
+          ${s.miseEnService && !s.miseEnService.prete ? `
+          <dt>Mise en service</dt><dd>${etapesHtml(s.miseEnService)}</dd>` : ''}
           ${s.activite ? `
           <dt>Activité</dt><dd>${s.activite.total} demande(s)${s.activite.semaine ? ` · <b>${s.activite.semaine}</b> cette semaine` : ''}${
             s.activite.echecs ? ` · <span style="color:var(--danger)">${s.activite.echecs} échec(s)</span>` : ''}</dd>

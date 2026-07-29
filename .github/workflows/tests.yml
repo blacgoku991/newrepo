@@ -1,0 +1,62 @@
+name: Tests
+
+# Ces suites vérifient le cloisonnement entre sociétés, la fermeture par défaut
+# du portail, l'absence d'injection et l'effacement complet des données d'une
+# personne. Elles ont attrapé plusieurs failles réelles ; les jouer à la main
+# revenait, en pratique, à ne pas les jouer.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  # Les robots dépendent d'interfaces tierces : une exécution hebdomadaire
+  # signale une dérive avant qu'un client ne la découvre.
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Dépendances
+        # `npm ci` respecte le verrou : on teste ce qui sera déployé, pas une
+        # résolution plus récente qui n'existe que sur ce coureur.
+        run: npm ci
+
+      - name: Chromium pour Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Suites
+        run: npm test
+        env:
+          TESTS_DELAI_MS: 300000
+
+      - name: Captures des tests en échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures
+          path: tests/.sorties/
+          retention-days: 3
+          if-no-files-found: ignore
+
+  dependances:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Six dépendances seulement, mais deux exécutent du code natif
+      # (better-sqlite3, playwright) : une compromission amont serait sérieuse.
+      - name: Vulnérabilités connues
+        run: npm audit --audit-level=high

@@ -15,6 +15,8 @@
 
 const db = require('./db');
 const registry = require('./registry');
+const demarches = require('./demarches');
+const marque = require('./marque');
 const { generateLogin } = require('./automation/identifiants');
 
 function smtpConfigured() {
@@ -88,7 +90,9 @@ function buildMessage(appName, data, reference, storedLogin, credentialLink, typ
     lines.push('Le mot de passe initial vous sera communiqué par votre administrateur.');
   }
   lines.push('');
-  lines.push('Cet e-mail est généré automatiquement par Algonis, le portail de création de comptes ADEF Résidences.');
+  // La marque vient de l'instance : ce texte était en dur, et chaque client
+  // aurait envoyé à ses salariés un e-mail signé du nom d'un autre.
+  lines.push(`Cet e-mail est généré automatiquement par le portail de création de comptes de ${marque.etat().societe}.`);
 
   return {
     subject: isReset
@@ -126,6 +130,61 @@ async function sendCredentials(request, credentialLink = null) {
   return { queuedId: outboxId, sent: smtpConfigured() };
 }
 
+/**
+ * Prévient le déposant que sa demande est traitée.
+ *
+ * Sans cela, le référent dépose puis revient voir, parfois plusieurs fois. Et
+ * surtout : un échec passait inaperçu jusqu'à ce que le salarié se plaigne de ne
+ * pas pouvoir se connecter — c'est-à-dire au pire moment.
+ *
+ * L'e-mail va au DÉPOSANT, jamais au bénéficiaire : c'est le référent qui doit
+ * agir en cas d'échec, et le bénéficiaire reçoit déjà ses identifiants par le
+ * lien sécurisé. Il ne porte aucun identifiant ni mot de passe : ce message
+ * traverse une messagerie ordinaire.
+ */
+async function notifierDeposant(request) {
+  const data = JSON.parse(request.payload);
+  // `sso_email` d'abord : c'est le serveur qui l'a écrit, depuis la session
+  // Microsoft 365. `_demandeur_email` vient du formulaire — le serveur l'écrase
+  // quand le SSO est actif, mais sans SSO il resterait choisi par l'appelant,
+  // et le portail deviendrait un relais pour expédier du courrier n'importe où.
+  const to = String(request.sso_email || data._demandeur_email || '').trim();
+  if (!to) return null;
+  // Le bénéficiaire reçoit ses identifiants par ailleurs : lui envoyer en plus
+  // un accusé de traitement n'apporte rien et double le bruit.
+  if (to.toLowerCase() === String(data.email || '').trim().toLowerCase()) return null;
+
+  const appEntry = registry.get(request.app_id);
+  const appName = appEntry ? appEntry.config.name : request.app_id;
+  const demarche = demarches.get(request.request_type || 'creation');
+  const intitule = demarche ? demarche.label.toLowerCase() : 'demande';
+  const qui = `${data.prenom || ''} ${data.nom || ''}`.trim() || 'le compte concerné';
+  const reussi = request.status === 'terminee';
+
+  const subject = reussi
+    ? `[${request.reference}] ${appName} — ${intitule} effectuée`
+    : `[${request.reference}] ${appName} — ${intitule} en échec`;
+
+  const text = reussi
+    ? `Bonjour,\n\n`
+      + `Votre demande ${request.reference} (${intitule} sur ${appName}) pour ${qui} a été traitée.\n\n`
+      + (request.generated_login ? `Identifiant créé : ${request.generated_login}\n\n` : '')
+      + `${qui} peut récupérer ses identifiants depuis le portail, à la page de suivi.\n`
+      + `Aucun mot de passe ne circule par e-mail.\n\n`
+      + `— ${marque.etat().societe}\n`
+    : `Bonjour,\n\n`
+      + `Votre demande ${request.reference} (${intitule} sur ${appName}) pour ${qui} n'a pas abouti.\n\n`
+      + `Motif : ${request.result_message || 'non précisé'}\n\n`
+      + `Vous pouvez la redéposer depuis le portail après avoir vérifié les informations saisies.\n`
+      + `Si le problème persiste, signalez-le à l'administrateur du portail.\n\n`
+      + `— ${marque.etat().societe}\n`;
+
+  const outboxId = db.createOutbox(request.id, to, subject, text);
+  await deliver(outboxId);
+  db.audit('robot', reussi ? 'notification_succes' : 'notification_echec', request.reference, to);
+  return { queuedId: outboxId, sent: smtpConfigured() };
+}
+
 /** Tente l'envoi SMTP d'un e-mail de la boîte d'envoi (met à jour son statut). */
 async function deliver(outboxId) {
   const mail = db.getOutbox(outboxId);
@@ -154,4 +213,4 @@ async function deliver(outboxId) {
   }
 }
 
-module.exports = { sendCredentials, deliver, smtpConfigured };
+module.exports = { sendCredentials, notifierDeposant, deliver, smtpConfigured };
