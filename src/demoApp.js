@@ -85,7 +85,12 @@ function layout(app, title, body, { activeNav = '' } = {}) {
 }
 
 function renderField(field) {
-  const required = field.required ? 'required' : '';
+  // Un champ conditionnel (`showIf`) n'est obligatoire que lorsque sa condition
+  // est remplie — « date limite d'accès » ne l'est qu'en CDD. La console de
+  // démonstration, elle, affiche tous les champs : les marquer obligatoires
+  // faisait bloquer l'envoi par le navigateur sur une demande en CDI, et le
+  // robot attendait une confirmation qui ne venait jamais.
+  const required = field.required && !field.showIf ? 'required' : '';
   let control;
   switch (field.type) {
     case 'select':
