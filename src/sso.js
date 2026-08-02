@@ -129,6 +129,23 @@ function loginRoute(req, res) {
   url.searchParams.set('nonce', nonce);
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
+
+  /*
+   * Écran Microsoft « Choisir un compte ».
+   *
+   * On ne peut pas l'habiller — il est servi par login.microsoftonline.com, et
+   * c'est ce qui garantit qu'un mot de passe professionnel ne se saisit jamais
+   * sur un domaine tiers. En revanche, on peut souvent l'éviter.
+   *
+   * `domain_hint` envoie la personne directement sur la page de connexion de
+   * SON organisation. Sans lui, quelqu'un déjà connecté avec un compte
+   * personnel ou d'une autre société voit d'abord un sélecteur, puis un refus
+   * sec de Microsoft : « ce compte n'existe pas dans ce client ». C'est le
+   * message le plus décourageant du parcours, et il n'apparaît que faute
+   * d'avoir dit à Microsoft quel annuaire viser.
+   */
+  const domaine = String(process.env.M365_DOMAIN_HINT || '').trim();
+  if (domaine) url.searchParams.set('domain_hint', domaine);
   res.redirect(url.toString());
 }
 
