@@ -34,6 +34,7 @@ const db = require('../../db');
 const comptesProteges = require('../../comptesProteges');
 const config = require('./config');
 const { baseLogin } = require('./login');
+const { motDePasseProvisoire } = require('../../automation/identifiants');
 const { PROFILS_DROIT, ETABLISSEMENTS } = require('./data');
 const BASE_SELECTORS = require('./selectors');
 
@@ -94,12 +95,12 @@ const RESET_STEPS_META = [
 ];
 
 /**
- * Mot de passe provisoire aléatoire posé lors d'une réinitialisation : il est
- * remis au bénéficiaire par lien sécurisé, puis changé à la première connexion.
+ * Mot de passe provisoire posé lors d'une réinitialisation : remis au
+ * bénéficiaire par lien sécurisé, puis changé à la première connexion.
+ * Le point final satisfait l'exigence de caractère spécial de NetSoins.
  */
 function randomProvisionalPassword() {
-  const crypto = require('node:crypto');
-  return `Adefhabitat${crypto.randomInt(1000, 9999)}.`;
+  return motDePasseProvisoire('.');
 }
 
 /** Date ISO (2026-08-25) → format NetSoins (25/08/2026). */

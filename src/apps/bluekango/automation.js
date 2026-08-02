@@ -25,7 +25,7 @@ const db = require('../../db');
 const { getMode } = require('../../automation/helpers');
 const { runScenario } = require('../../automation/engine');
 const { applySelectorPatches, composeSteps } = require('../../automation/scenarioRuntime');
-const { pickUniqueLogin } = require('../../automation/identifiants');
+const { pickUniqueLogin, motDePasseProvisoire } = require('../../automation/identifiants');
 const demo = require('../../automation/demoDriver');
 const comptesProteges = require('../../comptesProteges');
 const config = require('./config');
@@ -62,14 +62,12 @@ function toFrDate(iso) {
 }
 
 /**
- * Mot de passe provisoire (réinitialisation). Simple et lisible, dans le même
- * esprit que le mot de passe par défaut (« Adefresidences2026 ») : un mot avec
- * une majuscule + des chiffres qui CHANGENT à chaque fois — car BlueKanGo
- * refuse de remettre un mot de passe déjà utilisé récemment.
+ * Mot de passe provisoire (réinitialisation) : une majuscule, des minuscules et
+ * des chiffres, DIFFÉRENT à chaque fois — BlueKanGo refuse de reposer un mot de
+ * passe déjà utilisé récemment.
  */
 function randomProvisionalPassword() {
-  const crypto = require('node:crypto');
-  return `Adefresidences${crypto.randomInt(1000, 9999)}`;
+  return motDePasseProvisoire();
 }
 
 /**

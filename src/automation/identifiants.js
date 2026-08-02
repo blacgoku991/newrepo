@@ -58,4 +58,43 @@ function pickUniqueLogin(prenom, nom, isTaken) {
   return generateLogin(prenom, nom) + '-' + Date.now().toString().slice(-5);
 }
 
-module.exports = { normalize, generateLogin, candidateLogins, pickUniqueLogin };
+
+/* ---------------------------------------------------------------------------
+   Mot de passe provisoire d'une réinitialisation.
+
+   Il était construit sur un mot fixe suivi de quatre chiffres — le nom du
+   client, écrit en clair dans ce fichier. Deux défauts, tous deux sérieux :
+
+    - NEUF MILLE possibilités seulement, et le préfixe est public puisqu'il est
+      dans le code. Un mot de passe qui ouvre une application de santé se
+      devinait donc en quelques secondes.
+    - Le nom d'un client se retrouvait dans les mots de passe de tous les
+      autres, ce qui n'a aucun sens en hébergement mutualisé.
+
+   La forme est conservée — une majuscule, des minuscules, des chiffres, et un
+   symbole optionnel — parce que c'est elle qui satisfait les règles de
+   complexité des applications métiers. Seul le contenu devient imprévisible.
+   L'alphabet exclut les caractères qu'on confond en les recopiant ou en les
+   dictant au téléphone : I, l, O, 0, 1.
+   --------------------------------------------------------------------------- */
+
+const CONSONNES = 'bcdfghjkmnpqrstvwxz';
+const VOYELLES = 'aeuy';
+
+/**
+ * Mot de passe provisoire : lisible, dictable, et imprévisible.
+ * @param {string} [suffixe] Symbole final exigé par certaines applications.
+ */
+function motDePasseProvisoire(suffixe = '') {
+  const crypto = require('node:crypto');
+  const tire = (alphabet) => alphabet[crypto.randomInt(alphabet.length)];
+  // Syllabes alternées : se lit et se dicte, contrairement à une suite de
+  // caractères tirés au hasard qu'il faut épeler lettre à lettre.
+  let mot = '';
+  for (let i = 0; i < 5; i += 1) mot += tire(CONSONNES) + tire(VOYELLES);
+  return mot.charAt(0).toUpperCase() + mot.slice(1)
+    + crypto.randomInt(1000, 10000)
+    + suffixe;
+}
+
+module.exports = { normalize, generateLogin, candidateLogins, pickUniqueLogin, motDePasseProvisoire };
