@@ -1370,5 +1370,45 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Portail démarré : http://localhost:${PORT}`);
+  annoncerPorteEntree();
   worker.start();
 });
+
+/**
+ * Dit à voix haute qui peut entrer, et pourquoi.
+ *
+ * Sans cette ligne, un portail dont le SSO n'est pas actif se comporte
+ * exactement comme un portail bien configuré : il démarre sans rien signaler,
+ * puis affiche « Accès non autorisé » à la première visite. On cherche alors du
+ * côté du navigateur, des cookies, de la base — partout sauf là où est le
+ * problème. Trois lignes au démarrage évitent une heure de tâtonnement.
+ */
+function annoncerPorteEntree() {
+  const cles = ['M365_TENANT_ID', 'M365_CLIENT_ID', 'M365_CLIENT_SECRET'];
+  const manquantes = cles.filter((c) => !process.env[c]);
+  const desactive = String(process.env.SSO_REQUIRED || 'true') === 'false';
+
+  if (sso.required()) {
+    const nb = db.listReferents().filter((r) => r.active).length;
+    console.log(`  Connexion   : Microsoft 365 (mode « ${habilitation.mode()} »)`);
+    console.log(`  Référents   : ${nb} déclaré(s)`);
+    if (!nb && habilitation.mode() === 'liste') {
+      console.warn('  ⚠ Aucun référent déclaré : toute connexion sera refusée.');
+      console.warn(`    Déclarez-en un depuis http://localhost:${PORT}/login.html, onglet « Référents ».`);
+    }
+    console.log(`  Retour SSO  : ${process.env.M365_REDIRECT_URI || `http://localhost:${PORT}/auth/sso/callback`}`);
+    console.log('                (cette adresse doit être déclarée à l’identique dans Entra ID)');
+    return;
+  }
+
+  console.warn('\n  ⚠ SSO Microsoft 365 INACTIF — personne ne pourra accéder à « Mon espace ».');
+  if (manquantes.length) {
+    console.warn(`    Variable(s) absente(s) : ${manquantes.join(', ')}`);
+    console.warn('    Le fichier .env est-il bien à la racine du projet, et nommé « .env » ?');
+    console.warn('    (sous Windows, le Bloc-notes ajoute parfois « .txt » sans le dire)');
+  } else if (desactive) {
+    console.warn('    SSO_REQUIRED=false — le SSO est explicitement désactivé.');
+  }
+  console.warn('    L’administration reste accessible : '
+    + `http://localhost:${PORT}/login.html\n`);
+}
