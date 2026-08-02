@@ -114,6 +114,12 @@ module.exports = {
     // la liste des intervenants, sous les onglets, est le seul qui filtre la
     // liste. On reste donc cantonné au panneau de la liste (`#content_ajax`) —
     // sans ce cadrage, c'est le champ du bandeau qui est rempli.
+    // Panneau de la liste : tout le repérage de la recherche y est cantonné.
+    panneau: '#content_ajax',
+    // Voie principale, relevée au codegen : le champ porte le libellé
+    // accessible « Recherche ». Il n'est PAS de type `search` — le viser par
+    // son type laissait la recherche à vide et listait tout l'établissement.
+    searchRole: 'textbox:Recherche',
     search: '#content_ajax input[type="search"]',
     // Repli si le panneau change d'identifiant : le champ de la liste vient
     // APRÈS celui du bandeau dans la page, d'où le dernier et non le premier.
@@ -121,7 +127,7 @@ module.exports = {
     // Le champ se valide par le bouton (loupe) placé juste après lui. Ce bouton
     // n'a AUCUN libellé accessible : on le repère par sa position relative au
     // champ, puis, s'il n'en est pas frère, dans la barre d'outils de la liste.
-    searchSubmit: '#content_ajax input[type="search"] ~ button',
+    searchSubmit: '#content_ajax input[type="search"] ~ button, #content_ajax input[type="text"] ~ button',
     searchSubmitAlt: '#content_ajax button',
     resultat: (texte) => `text=${JSON.stringify(texte)}`,
     ficheIntervenant: 'text="Fiche intervenant"',

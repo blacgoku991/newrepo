@@ -82,6 +82,24 @@ function L(scope, selector) {
   return m ? scope.getByRole(m[1], { name: m[2] }) : scope.locator(selector);
 }
 
+/**
+ * Clique la première correspondance réellement visible d'un locator.
+ * Renvoie `true` si un clic a abouti, `false` si aucune ne répond — au
+ * lieu d'attendre 30 s sur une ligne masquée par la liste.
+ */
+async function cliquerPremierVisible(locator) {
+  const n = await locator.count().catch(() => 0);
+  for (let i = 0; i < Math.min(n, 5); i += 1) {
+    const cible = locator.nth(i);
+    if (!(await cible.isVisible().catch(() => false))) continue;
+    try {
+      await cible.click({ timeout: 5000 });
+      return true;
+    } catch { /* candidat suivant */ }
+  }
+  return false;
+}
+
 /** Étapes de la réinitialisation de mot de passe (éditeur de scénario). */
 const RESET_STEPS_META = [
   { id: 'ouverture', label: 'Ouverture de NetSoins', critical: true, selectorKeys: [] },
@@ -89,7 +107,7 @@ const RESET_STEPS_META = [
   { id: 'otp', label: 'Double authentification (code par e-mail)', critical: true, selectorKeys: ['login.otpInput', 'login.otpSubmit', 'closePopup'] },
   { id: 'liste', label: 'Ouverture de la liste des intervenants', critical: true, selectorKeys: ['menu.administratif', 'menu.intervenant', 'menu.intervenantsListe'] },
   { id: 'etablissement', label: "Bascule sur l'etablissement", critical: true, selectorKeys: ['liste.etablissementOpen'] },
-  { id: 'recherche', label: "Recherche de l'intervenant", critical: true, selectorKeys: ['liste.search', 'liste.ficheIntervenant'] },
+  { id: 'recherche', label: "Recherche de l'intervenant", critical: true, selectorKeys: ['liste.panneau', 'liste.searchRole', 'liste.search', 'liste.ficheIntervenant'] },
   { id: 'motdepasse', label: 'Saisie du nouveau mot de passe', critical: true, selectorKeys: ['motDePasse.modeOpen', 'motDePasse.modeDefinir', 'motDePasse.password', 'motDePasse.passwordConfirm'] },
   { id: 'enregistrement', label: 'Enregistrement de la fiche', critical: true, selectorKeys: ['save'] },
 ];
@@ -718,11 +736,14 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
         // de la page, celui du bandeau venant toujours en premier.
         let search = null;
         let ouSaisi = '';
-        for (const [voie, sel, quel] of [
-          ['le champ de la liste', S.liste.search, 'first'],
-          ['le dernier champ de la page', S.liste.searchAlt, 'last'],
+        for (const [voie, ou] of [
+          // Le champ de la liste n'est pas de type `search` : il se repère par
+          // son libellé accessible « Recherche », dans le panneau de la liste.
+          ['le champ « Recherche » de la liste', () => L(page.locator(S.liste.panneau), S.liste.searchRole).first()],
+          ['le champ de la liste', () => L(page, S.liste.search).first()],
+          ['le dernier champ de la page', () => L(page, S.liste.searchAlt).last()],
         ]) {
-          const champ = L(page, sel)[quel]();
+          const champ = ou();
           try {
             await champ.waitFor({ state: 'visible', timeout: 3000 });
             search = champ;
@@ -811,7 +832,12 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
             // Plusieurs candidats : on ne devine pas lequel est le bon.
             if (n > 1) { ambigu = Math.max(ambigu, n); continue; }
           }
-          await piste.ou.last().click();
+          // La liste garde des copies masquées de ses lignes : cliquer la
+          // dernière correspondance à l'aveugle bloquait 30 s sur un élément
+          // invisible. On prend la première réellement cliquable, et un échec
+          // fait passer à la piste suivante au lieu de tuer la demande.
+          const clic = await cliquerPremierVisible(piste.ou);
+          if (!clic) continue;
           ouverte = piste.quoi;
           break;
         }
