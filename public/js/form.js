@@ -594,9 +594,17 @@
           current = idx >= 0 ? idx : 0;
           render();
           showErrors(err.body.fields);
-          if (sent) alert(sent.trim());
+          if (sent) await dialogue({ titre: 'Demande partiellement enregistrée', message: sent.trim(), ton: 'info' });
         } else {
-          alert(`Erreur sur ${who} : ${err.message}.${sent}`);
+          // Le message du serveur se suffit à lui-même : il dit ce qui bloque
+          // et, quand c'est utile, ce qu'il faut faire. On ne le paraphrase pas.
+          await dialogue({
+            titre: `Demande non enregistrée — ${who}`,
+            message: err.message,
+            detail: sent.trim() || '',
+            ton: 'erreur',
+            bouton: 'Corriger',
+          });
         }
         return;
       }

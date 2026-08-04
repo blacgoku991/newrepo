@@ -358,6 +358,50 @@ function renderInfoCookies() {
 }
 document.addEventListener('DOMContentLoaded', renderInfoCookies);
 
+/* ---------------------------------------------------------------------------
+   Boîte de dialogue du portail.
+
+   Remplace `alert()`, qui affiche « localhost:3000 indique » suivi du message :
+   une fenêtre grise du navigateur, sans rapport avec le reste du site, qui
+   donne l'impression que quelque chose a cassé. Or ces messages disent souvent
+   une chose importante — « vous n'êtes pas référent de cet établissement » —
+   et méritent d'être lus, pas expédiés.
+
+   Volontairement modale : elle prend le focus, se ferme par Échap, par le
+   bouton ou en cliquant à côté, et rend le focus à l'élément qui l'a ouverte.
+   --------------------------------------------------------------------------- */
+
+function dialogue({ titre, message, detail, ton = 'info', bouton = 'J’ai compris' }) {
+  return new Promise((resolve) => {
+    const ouvrant = document.activeElement;
+    const fond = document.createElement('div');
+    fond.className = 'dlg-fond';
+    fond.innerHTML = `
+      <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlg-titre">
+        <div class="dlg-ic ${escapeHtml(ton)}">${icon(ton === 'erreur' ? 'x' : ton === 'ok' ? 'check' : 'flag')}</div>
+        <h2 id="dlg-titre">${escapeHtml(titre)}</h2>
+        <p>${escapeHtml(message)}</p>
+        ${detail ? `<p class="dlg-detail">${escapeHtml(detail)}</p>` : ''}
+        <button type="button" class="btn btn-primary btn-block" data-role="ok">${escapeHtml(bouton)}</button>
+      </div>`;
+    document.body.appendChild(fond);
+
+    const fermer = () => {
+      document.removeEventListener('keydown', surTouche);
+      fond.remove();
+      // Rendre le focus évite de renvoyer l'utilisateur en haut de page.
+      if (ouvrant && typeof ouvrant.focus === 'function') ouvrant.focus();
+      resolve();
+    };
+    const surTouche = (e) => { if (e.key === 'Escape') fermer(); };
+    document.addEventListener('keydown', surTouche);
+    fond.addEventListener('click', (e) => { if (e.target === fond) fermer(); });
+    const ok = fond.querySelector('[data-role="ok"]');
+    ok.addEventListener('click', fermer);
+    ok.focus();
+  });
+}
+
 /* Appels API stricts : toute erreur serveur remonte telle quelle (jamais de faux succès). */
 async function fetchJson(url, options) {
   const res = await fetch(url, options);

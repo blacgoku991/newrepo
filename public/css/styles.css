@@ -131,6 +131,35 @@ a:hover { text-decoration: underline; }
 }
 
 /* --------------------------------------------------------------------------
+   Boîte de dialogue du portail — remplace l'alerte grise du navigateur.
+   -------------------------------------------------------------------------- */
+.dlg-fond {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px;
+  background: rgba(4,7,18,.72); backdrop-filter: blur(3px);
+  animation: dlg-apparait .14s ease-out;
+}
+.dlg {
+  width: 100%; max-width: 430px; text-align: center;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: 30px 28px 24px;
+  animation: dlg-monte .18s cubic-bezier(.2,.9,.3,1);
+}
+.dlg-ic { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; margin: 0 auto 16px; }
+.dlg-ic svg { width: 22px; height: 22px; }
+.dlg-ic.erreur { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger-line); }
+.dlg-ic.info { background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-line); }
+.dlg-ic.ok { background: var(--ok-soft); color: var(--ok); border: 1px solid var(--ok-line); }
+.dlg h2 { font-size: 1.1rem; color: #fff; }
+.dlg p { color: var(--text); font-size: .93rem; line-height: 1.6; margin-top: 10px; }
+.dlg .dlg-detail { color: var(--muted); font-size: .86rem; }
+.dlg .btn { margin-top: 22px; }
+@keyframes dlg-apparait { from { opacity: 0; } }
+@keyframes dlg-monte { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) {
+  .dlg-fond, .dlg { animation: none; }
+}
+
+/* --------------------------------------------------------------------------
    Information cookies — un bandeau discret, affiché une seule fois. Ce n'est
    pas une demande de consentement : il n'y a rien à refuser.
    -------------------------------------------------------------------------- */
