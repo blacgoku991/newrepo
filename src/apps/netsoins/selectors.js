@@ -112,12 +112,24 @@ module.exports = {
     // ATTENTION : la page porte DEUX champs de recherche. Celui du bandeau
     // NETParamètres, tout en haut, cherche dans toute l'application ; celui de
     // la liste des intervenants, sous les onglets, est le seul qui filtre la
-    // liste. On reste donc cantonné au panneau de la liste (`#content_ajax`) —
-    // sans ce cadrage, c'est le champ du bandeau qui est rempli.
-    search: '#content_ajax input[type="search"]',
-    // Repli si le panneau change d'identifiant : le champ de la liste vient
-    // APRÈS celui du bandeau dans la page, d'où le dernier et non le premier.
+    // liste.
+    //
+    // Le sélecteur `input[type="search"]` ne matchait pas toujours (le champ
+    // n'est pas nécessairement typé « search » selon l'écran), et le robot
+    // retombait alors sur un repérage à l'aveugle dans la liste NON filtrée —
+    // qui pouvait ouvrir la fiche d'un autre intervenant. Un relevé Playwright
+    // sur l'instance réelle montre que ce champ porte un nom accessible unique
+    // sur toute la page, « Recherche » (son `placeholder`) : `role=textbox`
+    // avec ce nom identifie donc SANS AMBIGUÏTÉ le bon champ, quelle que soit
+    // sa balise exacte — le champ du bandeau ne porte pas ce nom.
+    search: 'textbox:Recherche',
+    // Replis si le nom accessible venait à changer : on retombe sur le type
+    // « search ». `searchAlt` est appliqué DÉJÀ CADRÉ sur `#content_ajax` par
+    // l'appelant (ne pas répéter le cadrage ici, sous peine de chercher
+    // `#content_ajax` imbriqué dans lui-même — aucun résultat). `searchAlt2`
+    // est le seul appliqué sans cadrage, sur toute la page.
     searchAlt: 'input[type="search"]',
+    searchAlt2: 'input[type="search"]',
     // Le champ se valide par le bouton (loupe) placé juste après lui. Ce bouton
     // n'a AUCUN libellé accessible : on le repère par sa position relative au
     // champ, puis, s'il n'en est pas frère, dans la barre d'outils de la liste.

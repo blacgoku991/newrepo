@@ -714,15 +714,19 @@ function buildOuvrirFicheSteps({ S, ctx, data, identifiant }) {
         // au champ ; Entrée n'est qu'un repli si ce bouton reste introuvable.
         // Le champ visé est celui de la LISTE, pas celui du bandeau de
         // NETParamètres qui cherche dans toute l'application : remplir ce
-        // dernier ne filtre rien. En dernier recours on prend le DERNIER champ
-        // de la page, celui du bandeau venant toujours en premier.
+        // dernier ne filtre rien — d'où le cadrage sur `#content_ajax` pour les
+        // deux premières voies, la troisième restant en dernier recours sur
+        // toute la page (le champ du bandeau venant toujours en premier, on y
+        // prend le DERNIER champ).
+        const panneau = page.locator('#content_ajax');
         let search = null;
         let ouSaisi = '';
-        for (const [voie, sel, quel] of [
-          ['le champ de la liste', S.liste.search, 'first'],
-          ['le dernier champ de la page', S.liste.searchAlt, 'last'],
+        for (const [voie, portee, sel, quel] of [
+          ['le champ « Recherche » de la liste', panneau, S.liste.search, 'first'],
+          ['le champ de type recherche de la liste', panneau, S.liste.searchAlt, 'first'],
+          ['le dernier champ de la page', page, S.liste.searchAlt2, 'last'],
         ]) {
-          const champ = L(page, sel)[quel]();
+          const champ = L(portee, sel)[quel]();
           try {
             await champ.waitFor({ state: 'visible', timeout: 3000 });
             search = champ;
