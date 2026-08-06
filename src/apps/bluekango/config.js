@@ -8,6 +8,19 @@
  * clique « Dupliquer » (le nouveau compte hérite ainsi des mêmes droits),
  * puis saisit l'identité et les identifiants de connexion.
  *
+ * ⚠️ CR de réunion Adef Résidences / Algonis du 4 août 2026 : la duplication
+ * est explicitement pointée comme à éviter (« peut entraîner la reprise de
+ * droits inadaptés au nouvel utilisateur »). Adef demande à minima les champs
+ * Exécutant participant, Fonction Adef Résidences (établissement ou siège) et
+ * Site/Service pour attribuer les droits correctement — à terme via une
+ * matrice d'habilitation (droits déduits du profil + fonction + site), encore
+ * à l'étude côté Adef. `exécutant_participant` et `site_service` ci-dessous
+ * sont donc, pour l'instant, capturés dans le formulaire (traçabilité, aide à
+ * la création manuelle si besoin) mais PAS saisis par le robot : la stratégie
+ * de duplication n'a pas été changée, faute d'un relevé Playwright réel des
+ * écrans concernés (mêmes garde-fous que pour NetSoins : pas de sélecteur
+ * deviné sur un robot en production).
+ *
  * Les valeurs des établissements sont les vraies valeurs du select
  * #change_etab de BlueKanGo : aucune table de conversion nécessaire.
  */
@@ -161,6 +174,22 @@ module.exports = {
               'PSYCHOLOGUE',
             ],
             help: 'Telle qu’elle apparaît dans BlueKanGo. Le robot duplique un utilisateur de l’établissement ayant cette fonction : le nouveau compte hérite des mêmes droits.',
+          },
+          {
+            name: 'executant_participant',
+            label: 'Exécutant participant',
+            type: 'text',
+            required: false,
+            placeholder: 'Ex. : Infirmier coordinateur',
+            help: 'Demandé par Adef Résidences (CR du 4 août 2026) pour fiabiliser l’attribution des droits. Non encore saisi par le robot (voir remarque en tête de fichier) : reportez cette information manuellement dans BlueKanGo si besoin.',
+          },
+          {
+            name: 'site_service',
+            label: 'Site / Service',
+            type: 'text',
+            required: false,
+            placeholder: 'Ex. : Unité protégée, Service de soins…',
+            help: 'Demandé par Adef Résidences (CR du 4 août 2026). Non encore saisi par le robot.',
           },
           {
             name: 'commentaire',

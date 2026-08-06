@@ -66,7 +66,7 @@ setTimeout(async () => {
   probe(espaceLambda.referent === null && !espaceLambda.accounts, 'non-référent : aucun compte listé');
   r = await fetch(`${B}/api/apps/netsoins/requests`, {
     method: 'POST', headers: json(cookie(jetonLambda)),
-    body: JSON.stringify({ nom: 'X', prenom: 'Y', sexe: 'masculin', email: 'x@a.fr', etablissement: '778', categorie_personnel: 'Aide à domicile', profil_droit: '44410', type_contrat: 'cdi' }),
+    body: JSON.stringify({ nom: 'X', prenom: 'Y', sexe: 'masculin', email: 'x@a.fr', etablissement: '778', categorie_personnel: 'Aide soignant/e (AS)', profil_droit: '44410', type_contrat: 'cdi' }),
   });
   probe(r.status === 403, 'non-référent : dépôt refusé', `HTTP ${r.status}`);
   r = await fetch(`${B}/api/apps/bluekango/requests?type=reset`, {
@@ -93,13 +93,13 @@ setTimeout(async () => {
   // Pollution de prototype
   await fetch(`${B}/api/apps/netsoins/requests`, {
     method: 'POST', headers: json(cookie(jetonRef)),
-    body: '{"__proto__":{"pollue":"oui"},"constructor":{"prototype":{"pollue2":"oui"}},"nom":"X","prenom":"Y","sexe":"masculin","email":"x@a.fr","etablissement":"778","categorie_personnel":"Aide à domicile","profil_droit":"44410","type_contrat":"cdi"}',
+    body: '{"__proto__":{"pollue":"oui"},"constructor":{"prototype":{"pollue2":"oui"}},"nom":"X","prenom":"Y","sexe":"masculin","email":"x@a.fr","etablissement":"778","categorie_personnel":"Aide soignant/e (AS)","profil_droit":"44410","type_contrat":"cdi"}',
   });
   probe({}.pollue === undefined && {}.pollue2 === undefined, 'pollution de prototype par le corps JSON');
   // Champ hors schéma conservé ?
   const dep = await fetch(`${B}/api/apps/netsoins/requests`, {
     method: 'POST', headers: json(cookie(jetonRef)),
-    body: JSON.stringify({ nom: 'X', prenom: 'Y', sexe: 'masculin', email: 'x@a.fr', etablissement: '778', categorie_personnel: 'Aide à domicile', profil_droit: '44410', type_contrat: 'cdi', admin: true, request_type: 'creation', payload: 'pirate' }),
+    body: JSON.stringify({ nom: 'X', prenom: 'Y', sexe: 'masculin', email: 'x@a.fr', etablissement: '778', categorie_personnel: 'Aide soignant/e (AS)', profil_droit: '44410', type_contrat: 'cdi', admin: true, request_type: 'creation', payload: 'pirate' }),
   });
   const depJson = await dep.json().catch(() => ({}));
   if (depJson.reference) {
@@ -121,7 +121,7 @@ setTimeout(async () => {
   probe(!!r.headers.get('referrer-policy'), 'Referrer-Policy', r.headers.get('referrer-policy'));
   r = await fetch(`${B}/api/apps/netsoins/requests`, {
     method: 'POST', headers: json({ ...cookie(jetonRef), Origin: 'https://pirate.example' }),
-    body: JSON.stringify({ nom: 'X', prenom: 'Y', sexe: 'masculin', email: 'x@a.fr', etablissement: '778', categorie_personnel: 'Aide à domicile', profil_droit: '44410', type_contrat: 'cdi' }),
+    body: JSON.stringify({ nom: 'X', prenom: 'Y', sexe: 'masculin', email: 'x@a.fr', etablissement: '778', categorie_personnel: 'Aide soignant/e (AS)', profil_droit: '44410', type_contrat: 'cdi' }),
   });
   probe(r.status === 403, 'POST depuis une origine étrangère (CSRF)', `HTTP ${r.status}`);
   r = await fetch(`${B}/api/espace/me`, { headers: { ...cookie(jetonRef), Origin: 'https://pirate.example' } });

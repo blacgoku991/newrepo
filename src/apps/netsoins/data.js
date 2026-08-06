@@ -13,6 +13,25 @@
  *
  * Généré depuis les listes fournies ; ne pas éditer à la main sans reprendre la
  * source (les identifiants doivent rester strictement identiques à NetSoins).
+ *
+ * Mise à jour du 06/08/2026 (matrice « Profil et etablissements.xlsx » fournie
+ * par Adef Résidences, jointe au CR de réunion du 4 août 2026) :
+ *  - ETABLISSEMENTS : ajout de « La Maison de la Roselière » (782, EHPAD
+ *    Champagnole), absent de la liste précédente. Recoupé par le numéro
+ *    d'établissement Teranga = `value`, déjà utilisé par l'app.
+ *  - CATEGORIES_PERSONNEL : réduit de 263 à 142 entrées, ne conservant que les
+ *    catégories marquées « Concerné » dans la matrice (les catégories hors
+ *    périmètre Adef — cultes, justice, immobilier, restauration... — ont été
+ *    retirées du formulaire). Aucun identifiant technique affecté (value =
+ *    libellé, recherché par texte).
+ *  - PROFILS_DROIT : PAS mis à jour. La matrice liste 78 profils dont 18 sont
+ *    absents des 62 actuels (HAND - *, FV - *, RA - Assistante de direction),
+ *    mais elle ne fournit pas l'identifiant technique NetSoins (attribut
+ *    `data` de la case à cocher) nécessaire au robot — seul le libellé.
+ *    Ajouter ces 18 profils à l'aveugle casserait le clic du robot. Il faut un
+ *    relevé Playwright codegen sur l'écran « Profil de droits » de la vraie
+ *    instance (comme cela a été fait pour le champ de recherche NetSoins) ou
+ *    un export NetSoins incluant les identifiants.
  */
 
 const ETABLISSEMENTS = [
@@ -32,18 +51,8 @@ const ETABLISSEMENTS = [
     "group": "EHPAD"
   },
   {
-    "value": "692",
-    "label": "La Maison de la Chataigneraie - 91310 LEUVILLE SUR ORGE",
-    "group": "EHPAD"
-  },
-  {
     "value": "708",
     "label": "La Maison de l'Amandier - 71380 ST MARCEL",
-    "group": "EHPAD"
-  },
-  {
-    "value": "712",
-    "label": "La Maison de la Vallée des Fleurs - 93240 STAINS",
     "group": "EHPAD"
   },
   {
@@ -64,6 +73,21 @@ const ETABLISSEMENTS = [
   {
     "value": "728",
     "label": "La Maison de l’Osier Pourpre - 52000 CHAUMONT",
+    "group": "EHPAD"
+  },
+  {
+    "value": "692",
+    "label": "La Maison de la Chataigneraie - 91310 LEUVILLE SUR ORGE",
+    "group": "EHPAD"
+  },
+  {
+    "value": "782",
+    "label": "La Maison de la Roselière - 39302 CHAMPAGNOLE CEDEX",
+    "group": "EHPAD"
+  },
+  {
+    "value": "712",
+    "label": "La Maison de la Vallée des Fleurs - 93240 STAINS",
     "group": "EHPAD"
   },
   {
@@ -232,13 +256,13 @@ const ETABLISSEMENTS = [
     "group": "EHPAD"
   },
   {
-    "value": "695",
-    "label": "La Maison de la Forêt des Charmes - 86800 ST JULIEN L ARS",
+    "value": "702",
+    "label": "La Maison de l'Alisier - 93380 PIERREFITTE SUR SEINE",
     "group": "FAM/MAS"
   },
   {
-    "value": "702",
-    "label": "La Maison de l'Alisier - 93380 PIERREFITTE SUR SEINE",
+    "value": "695",
+    "label": "La Maison de la Forêt des Charmes - 86800 ST JULIEN L ARS",
     "group": "FAM/MAS"
   },
   {
@@ -566,18 +590,8 @@ const PROFILS_DROIT = [
 
 const CATEGORIES_PERSONNEL = [
   {
-    "value": "Aide à domicile",
-    "label": "Aide à domicile",
-    "group": "Auxiliaires médicaux - AS"
-  },
-  {
     "value": "Aide soignant/e (AS)",
     "label": "Aide soignant/e (AS)",
-    "group": "Auxiliaires médicaux - AS"
-  },
-  {
-    "value": "Aide soignant/e (AS) à domicile",
-    "label": "Aide soignant/e (AS) à domicile",
     "group": "Auxiliaires médicaux - AS"
   },
   {
@@ -591,23 +605,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Auxiliaires médicaux - AS"
   },
   {
-    "value": "Assistant de soins en gérontologie (ASG) Référent/e",
-    "label": "Assistant de soins en gérontologie (ASG) Référent/e",
-    "group": "Auxiliaires médicaux - AS"
-  },
-  {
-    "value": "Auxiliaire de puériculture",
-    "label": "Auxiliaire de puériculture",
-    "group": "Auxiliaires médicaux - AS"
-  },
-  {
     "value": "Cadre de santé",
     "label": "Cadre de santé",
-    "group": "Auxiliaires médicaux - IDE"
-  },
-  {
-    "value": "Cadre supérieur de santé",
-    "label": "Cadre supérieur de santé",
     "group": "Auxiliaires médicaux - IDE"
   },
   {
@@ -646,23 +645,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Auxiliaires médicaux - IDE"
   },
   {
-    "value": "Infirmier/ère puéricultrice",
-    "label": "Infirmier/ère puéricultrice",
-    "group": "Auxiliaires médicaux - IDE"
-  },
-  {
     "value": "Infirmier/ère référent/te",
     "label": "Infirmier/ère référent/te",
-    "group": "Auxiliaires médicaux - IDE"
-  },
-  {
-    "value": "Responsable des soins",
-    "label": "Responsable des soins",
-    "group": "Auxiliaires médicaux - IDE"
-  },
-  {
-    "value": "Responsable des soins et de l'accompagnement",
-    "label": "Responsable des soins et de l'accompagnement",
     "group": "Auxiliaires médicaux - IDE"
   },
   {
@@ -711,11 +695,6 @@ const CATEGORIES_PERSONNEL = [
     "group": "Auxiliaires médicaux - Paramédical"
   },
   {
-    "value": "Ambulance - Taxi - VSL",
-    "label": "Ambulance - Taxi - VSL",
-    "group": "Auxiliaires médicaux - Transport"
-  },
-  {
     "value": "Accompagnant éducatif et social (AES)",
     "label": "Accompagnant éducatif et social (AES)",
     "group": "Hors CSP - AS"
@@ -723,11 +702,6 @@ const CATEGORIES_PERSONNEL = [
   {
     "value": "Accompagnant éducatif et social (AES) Référent/e",
     "label": "Accompagnant éducatif et social (AES) Référent/e",
-    "group": "Hors CSP - AS"
-  },
-  {
-    "value": "Accompagnement, soins et services à la personne",
-    "label": "Accompagnement, soins et services à la personne",
     "group": "Hors CSP - AS"
   },
   {
@@ -743,11 +717,6 @@ const CATEGORIES_PERSONNEL = [
   {
     "value": "Agent des services hospitaliers (ASH)",
     "label": "Agent des services hospitaliers (ASH)",
-    "group": "Hors CSP - AS"
-  },
-  {
-    "value": "Agent des services logistiques (ASL)",
-    "label": "Agent des services logistiques (ASL)",
     "group": "Hors CSP - AS"
   },
   {
@@ -771,11 +740,6 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - AS"
   },
   {
-    "value": "Auxiliaire d'accompagnement",
-    "label": "Auxiliaire d'accompagnement",
-    "group": "Hors CSP - AS"
-  },
-  {
     "value": "Auxiliaire de vie",
     "label": "Auxiliaire de vie",
     "group": "Hors CSP - AS"
@@ -788,11 +752,6 @@ const CATEGORIES_PERSONNEL = [
   {
     "value": "Adjoint de direction",
     "label": "Adjoint de direction",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Adjoint/e de coordination",
-    "label": "Adjoint/e de coordination",
     "group": "Hors CSP - Administratif"
   },
   {
@@ -816,33 +775,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Administratif"
   },
   {
-    "value": "Aide comptable",
-    "label": "Aide comptable",
-    "group": "Hors CSP - Administratif"
-  },
-  {
     "value": "Assistant de direction",
     "label": "Assistant de direction",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Assistant/e Médico-Administrative (AMA)",
-    "label": "Assistant/e Médico-Administrative (AMA)",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Assistant/e qualité",
-    "label": "Assistant/e qualité",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Assistant/e Ressources Humaines",
-    "label": "Assistant/e Ressources Humaines",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Avocat/e",
-    "label": "Avocat/e",
     "group": "Hors CSP - Administratif"
   },
   {
@@ -851,33 +785,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Administratif"
   },
   {
-    "value": "Comptable",
-    "label": "Comptable",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Concierge",
-    "label": "Concierge",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Coordinateur/trice de la plateforme de répit",
-    "label": "Coordinateur/trice de la plateforme de répit",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Coordinateur/trice de parcours",
-    "label": "Coordinateur/trice de parcours",
-    "group": "Hors CSP - Administratif"
-  },
-  {
     "value": "Coordinateur/trice de projets",
     "label": "Coordinateur/trice de projets",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Coordinateur/trice de service de soutien à domicile",
-    "label": "Coordinateur/trice de service de soutien à domicile",
     "group": "Hors CSP - Administratif"
   },
   {
@@ -896,68 +805,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Administratif"
   },
   {
-    "value": "Greffier",
-    "label": "Greffier",
-    "group": "Hors CSP - Administratif"
-  },
-  {
     "value": "Informaticien/ne",
     "label": "Informaticien/ne",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Juge des enfants",
-    "label": "Juge des enfants",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Juriste",
-    "label": "Juriste",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Maître/tresse de maison",
-    "label": "Maître/tresse de maison",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Mandataire judiciaire",
-    "label": "Mandataire judiciaire",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Notaire",
-    "label": "Notaire",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Qualiticien/ne",
-    "label": "Qualiticien/ne",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Responsable accueil de jour",
-    "label": "Responsable accueil de jour",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Responsable administratif",
-    "label": "Responsable administratif",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Responsable Qualité",
-    "label": "Responsable Qualité",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Responsable relations familles",
-    "label": "Responsable relations familles",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Responsable Ressources Humaines",
-    "label": "Responsable Ressources Humaines",
     "group": "Hors CSP - Administratif"
   },
   {
@@ -971,36 +820,6 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Administratif"
   },
   {
-    "value": "Surveillant pénitentiaire",
-    "label": "Surveillant pénitentiaire",
-    "group": "Hors CSP - Administratif"
-  },
-  {
-    "value": "Agent de cuisine",
-    "label": "Agent de cuisine",
-    "group": "Hors CSP - Cuisine"
-  },
-  {
-    "value": "Cuisinier/ère",
-    "label": "Cuisinier/ère",
-    "group": "Hors CSP - Cuisine"
-  },
-  {
-    "value": "Responsable cuisine",
-    "label": "Responsable cuisine",
-    "group": "Hors CSP - Cuisine"
-  },
-  {
-    "value": "Second de cuisine",
-    "label": "Second de cuisine",
-    "group": "Hors CSP - Cuisine"
-  },
-  {
-    "value": "Serveur/euse",
-    "label": "Serveur/euse",
-    "group": "Hors CSP - Cuisine"
-  },
-  {
     "value": "Agent d'atelier",
     "label": "Agent d'atelier",
     "group": "Hors CSP - Entretien"
@@ -1011,89 +830,9 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Entretien"
   },
   {
-    "value": "Agent d'entretien qualifié/e (AEQ)",
-    "label": "Agent d'entretien qualifié/e (AEQ)",
-    "group": "Hors CSP - Entretien"
-  },
-  {
-    "value": "Aide-ménagère",
-    "label": "Aide-ménagère",
-    "group": "Hors CSP - Entretien"
-  },
-  {
-    "value": "Responsable atelier",
-    "label": "Responsable atelier",
-    "group": "Hors CSP - Entretien"
-  },
-  {
-    "value": "Responsable buanderie",
-    "label": "Responsable buanderie",
-    "group": "Hors CSP - Entretien"
-  },
-  {
-    "value": "Coiffeur/feuse",
-    "label": "Coiffeur/feuse",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Esthéticien/ne",
-    "label": "Esthéticien/ne",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Fournisseur",
-    "label": "Fournisseur",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Hôpital - Clinique",
-    "label": "Hôpital - Clinique",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Laboratoire d'analyses",
-    "label": "Laboratoire d'analyses",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Masseur/se",
-    "label": "Masseur/se",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
     "value": "Opticien/ne",
     "label": "Opticien/ne",
     "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Pompes funèbres",
-    "label": "Pompes funèbres",
-    "group": "Hors CSP - Établissement externe"
-  },
-  {
-    "value": "Agence immobilière solidaire",
-    "label": "Agence immobilière solidaire",
-    "group": "Hors CSP - Hébergement"
-  },
-  {
-    "value": "Bailleur",
-    "label": "Bailleur",
-    "group": "Hors CSP - Hébergement"
-  },
-  {
-    "value": "Bailleur social",
-    "label": "Bailleur social",
-    "group": "Hors CSP - Hébergement"
-  },
-  {
-    "value": "Gestionnaire",
-    "label": "Gestionnaire",
-    "group": "Hors CSP - Hébergement"
-  },
-  {
-    "value": "Propriétaire solidaire",
-    "label": "Propriétaire solidaire",
-    "group": "Hors CSP - Hébergement"
   },
   {
     "value": "Agent hôtelier/ère",
@@ -1111,18 +850,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Médical"
   },
   {
-    "value": "Accompagnant en gérontologie",
-    "label": "Accompagnant en gérontologie",
-    "group": "Hors CSP - Paramédical"
-  },
-  {
     "value": "Art-thérapeute",
     "label": "Art-thérapeute",
-    "group": "Hors CSP - Paramédical"
-  },
-  {
-    "value": "Brancardier/ère",
-    "label": "Brancardier/ère",
     "group": "Hors CSP - Paramédical"
   },
   {
@@ -1176,11 +905,6 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Paramédical"
   },
   {
-    "value": "Prothésiste",
-    "label": "Prothésiste",
-    "group": "Hors CSP - Paramédical"
-  },
-  {
     "value": "Psychogérontologue",
     "label": "Psychogérontologue",
     "group": "Hors CSP - Paramédical"
@@ -1188,11 +912,6 @@ const CATEGORIES_PERSONNEL = [
   {
     "value": "Psychologue",
     "label": "Psychologue",
-    "group": "Hors CSP - Paramédical"
-  },
-  {
-    "value": "Référent Rééducateur",
-    "label": "Référent Rééducateur",
     "group": "Hors CSP - Paramédical"
   },
   {
@@ -1216,153 +935,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Paramédical"
   },
   {
-    "value": "Abbé",
-    "label": "Abbé",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Aumônier",
-    "label": "Aumônier",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Curé",
-    "label": "Curé",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Ecclésiastique",
-    "label": "Ecclésiastique",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Evêque",
-    "label": "Evêque",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Frère religieux",
-    "label": "Frère religieux",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Imam",
-    "label": "Imam",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Membre de l'armée du salut",
-    "label": "Membre de l'armée du salut",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Ministre du culte",
-    "label": "Ministre du culte",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Moine",
-    "label": "Moine",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Moniale",
-    "label": "Moniale",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Pasteur",
-    "label": "Pasteur",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Pope",
-    "label": "Pope",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Prêtre",
-    "label": "Prêtre",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Rabbin",
-    "label": "Rabbin",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Recteur (clergé)",
-    "label": "Recteur (clergé)",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Religieuse enseignante",
-    "label": "Religieuse enseignante",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Religieuse garde-malade",
-    "label": "Religieuse garde-malade",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Religieuse hospitalière",
-    "label": "Religieuse hospitalière",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Religieuse infirmière",
-    "label": "Religieuse infirmière",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Séminariste",
-    "label": "Séminariste",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Soeur religieuse",
-    "label": "Soeur religieuse",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Supérieur d'un ordre religieux",
-    "label": "Supérieur d'un ordre religieux",
-    "group": "Hors CSP - Religieux"
-  },
-  {
-    "value": "Véhicule de l'établissement",
-    "label": "Véhicule de l'établissement",
-    "group": "Hors CSP - Transport"
-  },
-  {
-    "value": "Accompagnant d'élèves en situation de handicap",
-    "label": "Accompagnant d'élèves en situation de handicap",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Agent social",
-    "label": "Agent social",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Assistant/e de service social",
-    "label": "Assistant/e de service social",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Assistant/e familial",
-    "label": "Assistant/e familial",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
     "value": "Assistant/e social",
     "label": "Assistant/e social",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Assistant socio-éducatif (ASE)",
-    "label": "Assistant socio-éducatif (ASE)",
     "group": "Hors CSP - Travailleur social"
   },
   {
@@ -1376,28 +950,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Travailleur social"
   },
   {
-    "value": "Cadre socio-éducatif",
-    "label": "Cadre socio-éducatif",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Cadre supérieur socio-éducatif",
-    "label": "Cadre supérieur socio-éducatif",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Chargé d'insertion",
-    "label": "Chargé d'insertion",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
     "value": "Chef de service",
     "label": "Chef de service",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Codeur LPC",
-    "label": "Codeur LPC",
     "group": "Hors CSP - Travailleur social"
   },
   {
@@ -1406,33 +960,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Travailleur social"
   },
   {
-    "value": "Conseiller/ère en insertion sociale et professionnelle",
-    "label": "Conseiller/ère en insertion sociale et professionnelle",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Conseiller pénitentiaire d'insertion et de probation (CPIP)",
-    "label": "Conseiller pénitentiaire d'insertion et de probation (CPIP)",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Délégué/e à la tutelle",
-    "label": "Délégué/e à la tutelle",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
     "value": "Éducateur/trice",
     "label": "Éducateur/trice",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Éducateur/trice de jeunes enfants",
-    "label": "Éducateur/trice de jeunes enfants",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Éducateur/trice scolaire",
-    "label": "Éducateur/trice scolaire",
     "group": "Hors CSP - Travailleur social"
   },
   {
@@ -1446,108 +975,8 @@ const CATEGORIES_PERSONNEL = [
     "group": "Hors CSP - Travailleur social"
   },
   {
-    "value": "Éducateur/trice spécialisé/e en protection de l'enfance",
-    "label": "Éducateur/trice spécialisé/e en protection de l'enfance",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Éducateur/trice technique spécialisé/e",
-    "label": "Éducateur/trice technique spécialisé/e",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Enseignant/e",
-    "label": "Enseignant/e",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Enseignant/e spécialisé/e",
-    "label": "Enseignant/e spécialisé/e",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Formateur/trice",
-    "label": "Formateur/trice",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Instructeur/trice en locomotion",
-    "label": "Instructeur/trice en locomotion",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Interface de communication",
-    "label": "Interface de communication",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Interprète",
-    "label": "Interprète",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Interprète en langue des signes français",
-    "label": "Interprète en langue des signes français",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Intervenant/e social/e",
-    "label": "Intervenant/e social/e",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Médiateur/trice familial",
-    "label": "Médiateur/trice familial",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Médiateur/trice pair-aidant",
-    "label": "Médiateur/trice pair-aidant",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Moniteur d'atelier",
-    "label": "Moniteur d'atelier",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
     "value": "Moniteur éducateur",
     "label": "Moniteur éducateur",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Professeur/e CAPEJS",
-    "label": "Professeur/e CAPEJS",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Professeur/e de français langue étrangère",
-    "label": "Professeur/e de français langue étrangère",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Responsable de service territorial enfance et famille",
-    "label": "Responsable de service territorial enfance et famille",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Responsable unité",
-    "label": "Responsable unité",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Technicien/ne-coordinateur/trice de l'aide psychosociale aux aidants (TCAPSA)",
-    "label": "Technicien/ne-coordinateur/trice de l'aide psychosociale aux aidants (TCAPSA)",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Technicien/ne de l'intervention sociale et familiale",
-    "label": "Technicien/ne de l'intervention sociale et familiale",
-    "group": "Hors CSP - Travailleur social"
-  },
-  {
-    "value": "Transcripteur/trice-adaptateur/trice",
-    "label": "Transcripteur/trice-adaptateur/trice",
     "group": "Hors CSP - Travailleur social"
   },
   {
@@ -1868,16 +1297,6 @@ const CATEGORIES_PERSONNEL = [
   {
     "value": "Médecin - Vasculaire",
     "label": "Médecin - Vasculaire",
-    "group": "Professions médicales - Médical"
-  },
-  {
-    "value": "Radiothérapeute",
-    "label": "Radiothérapeute",
-    "group": "Professions médicales - Médical"
-  },
-  {
-    "value": "Sage-femme",
-    "label": "Sage-femme",
     "group": "Professions médicales - Médical"
   }
 ];

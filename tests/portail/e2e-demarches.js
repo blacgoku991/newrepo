@@ -26,7 +26,7 @@ const hdr = { 'Content-Type': 'application/json', Cookie: `portal_sso=${token}` 
 const CAS = [
   ['création', '', {
     nom: 'MARTIN', prenom: 'Paul', sexe: 'masculin', email: 'p@adef.fr',
-    etablissement: '778', categorie_personnel: 'Aide à domicile',
+    etablissement: '778', categorie_personnel: 'Aide soignant/e (AS)',
     profil_droit: '44410', type_contrat: 'cdi',
   }],
   ['reset mot de passe', '?type=reset', { identifiant: 'MARTIN PAUL', etablissement: '778' }],
